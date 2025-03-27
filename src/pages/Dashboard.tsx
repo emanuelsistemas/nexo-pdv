@@ -30,6 +30,8 @@ function Dashboard() {
   const [companyName, setCompanyName] = useState('');
   const [currentPath, setCurrentPath] = useState<string[]>([]);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragEnabled, setDragEnabled] = useState(false);
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [showCompanyPanel, setShowCompanyPanel] = useState(false);
   const [companyRegistrationStatus, setCompanyRegistrationStatus] = useState<'N' | 'S'>('N');
@@ -113,6 +115,11 @@ function Dashboard() {
       setCurrentFolder(location.state.openFolder);
     }
 
+    const handleMouseUp = () => {
+      setDragEnabled(false);
+      setIsDragging(false);
+    };
+
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setShowUserMenu(false);
@@ -122,9 +129,11 @@ function Dashboard() {
       }
     };
 
+    window.addEventListener('mouseup', handleMouseUp);
     document.addEventListener('mousedown', handleClickOutside);
 
     return () => {
+      window.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [location]);
@@ -152,6 +161,8 @@ function Dashboard() {
   };
 
   const handleLayoutChange = (newLayout: GridItem[]) => {
+    if (!dragEnabled && !isDragging) return;
+    
     const updatedLayout = layout.map((item: GridItem) => {
       const newPos = newLayout.find((l: GridItem) => l.i === item.i);
       if (!newPos) return item;
@@ -170,6 +181,8 @@ function Dashboard() {
   };
 
   const handleItemClick = (item: GridItem) => {
+    if (isDragging) return;
+    
     setSelectedItem(item.i);
     
     if (item.type === 'app') {
@@ -442,8 +455,9 @@ function Dashboard() {
             width={getGridWidth()}
             margin={[24, 24]}
             onLayoutChange={handleLayoutChange}
-            isDraggable={false}
+            isDraggable={dragEnabled}
             isResizable={false}
+            draggableHandle=".drag-handle"
             containerPadding={[12, 12]}
             compactType="vertical"
             preventCollision={false}
@@ -451,12 +465,12 @@ function Dashboard() {
             {organizedLayout.map((item) => (
               <div 
                 key={item.i} 
-                className={`bg-slate-800 rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer group ${
+                className={`bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors cursor-pointer group border border-slate-700 ${
                   selectedItem === item.i ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
                 }`}
                 onClick={() => handleItemClick(item)}
               >
-                <div className="flex items-center gap-3 p-4">
+                <div className={`flex items-center gap-3 p-4 drag-handle ${isDragging ? 'dragging' : ''}`}>
                   {item.icon}
                   <span className="text-slate-200 truncate">{item.title}</span>
                 </div>
