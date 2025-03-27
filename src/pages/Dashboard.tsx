@@ -177,7 +177,21 @@ function Dashboard() {
     });
 
     setLayout(updatedLayout);
-    localStorage.setItem('gridLayout', JSON.stringify(updatedLayout));
+    
+    // Salvar apenas as propriedades necessárias para evitar estruturas circulares
+    const simplifiedLayout = updatedLayout.map(({ i, x, y, w, h, type, title, parent }: {
+      i: string;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      type: 'app' | 'folder' | 'file';
+      title: string;
+      parent?: string;
+    }) => ({
+      i, x, y, w, h, type, title, parent
+    }));
+    localStorage.setItem('gridLayout', JSON.stringify(simplifiedLayout));
   };
 
   const handleItemClick = (item: GridItem) => {
