@@ -163,35 +163,50 @@ function Dashboard() {
   const handleLayoutChange = (newLayout: GridItem[]) => {
     if (!dragEnabled && !isDragging) return;
     
-    const updatedLayout = layout.map((item: GridItem) => {
-      const newPos = newLayout.find((l: GridItem) => l.i === item.i);
-      if (!newPos) return item;
+    try {
+      // Cria um layout simplificado antes de processar
+      const processedNewLayout = newLayout.map((item: any) => ({
+        i: item.i,
+        x: item.x,
+        y: item.y,
+        w: item.w,
+        h: item.h
+      }));
       
-      return {
-        ...item,
-        x: newPos.x,
-        y: newPos.y,
-        w: newPos.w,
-        h: newPos.h,
-      };
-    });
-
-    setLayout(updatedLayout);
-    
-    // Salvar apenas as propriedades necessárias para evitar estruturas circulares
-    const simplifiedLayout = updatedLayout.map(({ i, x, y, w, h, type, title, parent }: {
-      i: string;
-      x: number;
-      y: number;
-      w: number;
-      h: number;
-      type: 'app' | 'folder' | 'file';
-      title: string;
-      parent?: string;
-    }) => ({
-      i, x, y, w, h, type, title, parent
-    }));
-    localStorage.setItem('gridLayout', JSON.stringify(simplifiedLayout));
+      const updatedLayout = layout.map((item: GridItem) => {
+        const newPos = processedNewLayout.find(l => l.i === item.i);
+        if (!newPos) return item;
+        
+        return {
+          ...item,
+          x: newPos.x,
+          y: newPos.y,
+          w: newPos.w,
+          h: newPos.h,
+        };
+      });
+  
+      setLayout(updatedLayout);
+      
+      // Cria uma versão simplificada para o localStorage
+      const storageLayout = updatedLayout.map((item: GridItem) => {
+        // Extrair apenas as propriedades necessárias
+        return {
+          i: item.i,
+          x: item.x,
+          y: item.y,
+          w: item.w,
+          h: item.h,
+          type: item.type,
+          title: item.title,
+          parent: item.parent
+        };
+      });
+      
+      localStorage.setItem('gridLayout', JSON.stringify(storageLayout));
+    } catch (error) {
+      console.error('Erro ao processar layout:', error);
+    }
   };
 
   const handleItemClick = (item: GridItem) => {
