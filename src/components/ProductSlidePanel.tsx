@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Package, Archive, Calculator, Shuffle } from 'lucide-react';
+import { X as XMarkIcon, Loader2, Package, Archive, Calculator, Shuffle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 
@@ -21,6 +21,7 @@ interface ProductSlidePanelProps {
     pis: string;
     cofins: string;
     ncm: string;
+    cfop: string;
     status: 'active' | 'inactive';
   } | null;
 }
@@ -52,6 +53,7 @@ interface ProductFormData {
   pis: string;
   cofins: string;
   ncm: string;
+  cfop: string;
   status: 'active' | 'inactive';
 }
 
@@ -80,10 +82,11 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     cost_price: '',
     profit_margin: '',
     selling_price: '',
-    cst: 'Tributado',
+    cst: 'Substituicao Tributaria', // Definido para corresponder ao CFOP 5405
     pis: '49- Outras operacoes de saida',
     cofins: '49- Outras operacoes de saida',
     ncm: '',
+    cfop: '5405',
     status: 'active'
   });
 
@@ -94,6 +97,18 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     data: new Date().toISOString().split('T')[0],
     observacao: ''
   });
+
+  useEffect(() => {
+    // Quando o componente for montado ou quando o formData.cfop mudar,
+    // atualizar o CST para manter a coerência
+    const cstValue = formData.cfop === '5405' ? 'Substituicao Tributaria' : 'Tributado';
+    if (formData.cst !== cstValue) {
+      setFormData(prev => ({
+        ...prev,
+        cst: cstValue
+      }));
+    }
+  }, [formData.cfop]);
 
   useEffect(() => {
     if (isOpen) {
@@ -112,6 +127,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
           pis: productToEdit.pis,
           cofins: productToEdit.cofins,
           ncm: productToEdit.ncm,
+          cfop: productToEdit.cfop,
           status: productToEdit.status
         });
       }
@@ -192,6 +208,17 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     if (name === 'barcode') {
       setBarcodeError(null);
     }
+
+    // Lógica para definir automaticamente o CST com base no CFOP
+    if (name === 'cfop') {
+      const cstValue = value === '5405' ? 'Substituicao Tributaria' : 'Tributado';
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: value,
+        cst: cstValue 
+      }));
+      return;
+    }
     
     if (name === 'cost_price') {
       // Aceitar vírgulas e pontos como separador decimal
@@ -251,6 +278,10 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         
         return newData;
       });
+    } else if (name === 'ncm') {
+      // Permitir apenas números e pontos
+      const validValue = value.replace(/[^0-9.]/g, '');
+      setFormData(prev => ({ ...prev, [name]: validValue }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -320,6 +351,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         pis: formData.pis,
         cofins: formData.cofins,
         ncm: formData.ncm,
+        cfop: formData.cfop,
         status: formData.status
       };
 
@@ -539,6 +571,13 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     }
   };
 
+  const handleSetDefaultNCM = () => {
+    setFormData(prev => ({
+      ...prev,
+      ncm: '22021000'
+    }));
+  };
+
   const panelClasses = `fixed right-0 top-0 h-full w-full md:w-[600px] bg-slate-800 shadow-xl transform transition-transform duration-300 ease-in-out ${
     isOpen ? 'translate-x-0' : 'translate-x-full'
   }`;
@@ -576,17 +615,24 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
       <div className={`${panelClasses} z-50`}>
         <div className="h-full flex flex-col">
           <div className="p-6 border-b border-slate-700 flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-slate-200">
+            <h2 className="text-2xl font-bold text-slate-200">
               {productToEdit ? 'Editar Produto' : 'Novo Produto'}
             </h2>
             <button
               onClick={onClose}
               className="text-slate-400 hover:text-slate-200"
             >
-              <X size={24} />
+              <XMarkIcon className="h-6 w-6" />
             </button>
           </div>
-
+          
+          {formData.name && (
+            <div className="py-0 border-b border-slate-700">
+              <div className="px-4 py-2 bg-slate-900 text-slate-200 font-semibold text-3xl w-full">
+                {formData.name}
+              </div>
+            </div>
+          )}
           <div className="border-b border-slate-700">
             <div className="flex">
               <button
@@ -949,67 +995,93 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
               {currentTab === 'impostos' && (
                 <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">
-                      CST *
-                    </label>
-                    <select
-                      name="cst"
-                      value={formData.cst}
-                      onChange={handleChange}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    >
-                      <option value="Tributado">Tributado</option>
-                      <option value="Substituicao Tributaria">Substituição Tributária</option>
-                      <option value="Outras">Outras</option>
-                    </select>
+                  {/* Primeira linha: CFOP e CST */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        CFOP *
+                      </label>
+                      <select
+                        name="cfop"
+                        value={formData.cfop}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      >
+                        <option value="5405">5405</option>
+                        <option value="5102">5102</option>
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        CST *
+                      </label>
+                      <input
+                        type="text"
+                        name="cst"
+                        value={formData.cst}
+                        readOnly
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">
-                      PIS *
-                    </label>
-                    <select
-                      name="pis"
-                      value={formData.pis}
-                      onChange={handleChange}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    >
-                      <option value="49- Outras operacoes de saida">49- Outras operações de saída</option>
-                      <option value="99 - Outras saidas">99 - Outras saídas</option>
-                    </select>
+                  {/* Segunda linha: PIS e COFINS */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        PIS *
+                      </label>
+                      <select
+                        name="pis"
+                        value={formData.pis}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      >
+                        <option value="49- Outras operacoes de saida">49- Outras operações de saída</option>
+                        <option value="99 - Outras saidas">99 - Outras saídas</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        COFINS *
+                      </label>
+                      <select
+                        name="cofins"
+                        value={formData.cofins}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      >
+                        <option value="49- Outras operacoes de saida">49- Outras operações de saída</option>
+                        <option value="99 - Outras saidas">99 - Outras saídas</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">
-                      COFINS *
-                    </label>
-                    <select
-                      name="cofins"
-                      value={formData.cofins}
-                      onChange={handleChange}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    >
-                      <option value="49- Outras operacoes de saida">49- Outras operações de saída</option>
-                      <option value="99 - Outras saidas">99 - Outras saídas</option>
-                    </select>
-                  </div>
-
-                  <div>
+                  {/* NCM em linha separada */}
+                  <div className="relative">
                     <label className="block text-sm font-medium text-slate-300 mb-1">
                       NCM *
                     </label>
-                    <input
-                      type="text"
-                      name="ncm"
-                      value={formData.ncm}
-                      onChange={handleChange}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="ncm"
+                        value={formData.ncm}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSetDefaultNCM}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-blue-500 transition-colors"
+                        title="Preencher NCM padrão"
+                      >
+                        <Shuffle size={18} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
