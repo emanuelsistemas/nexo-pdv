@@ -1,24 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Loader2, Package, Archive, Calculator } from 'lucide-react';
+import { toast } from 'react-toastify';
+import { supabase } from '../lib/supabase';
 
 interface ProductSlidePanelProps {
   isOpen: boolean;
   onClose: () => void;
+  productToEdit?: {
+    id: string;
+    code: string;
+    barcode: string | null;
+    name: string;
+    unit_id: string;
+    group_id: string | null;
+    cost_price: number;
+    profit_margin: number;
+    selling_price: number;
+    stock: number;
+    cst: string;
+    pis: string;
+    cofins: string;
+    ncm: string;
+    status: 'active' | 'inactive';
+  } | null;
+}
+
+interface Unit {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  is_system?: boolean;
+}
+
+interface Group {
+  id: string;
+  name: string;
+  description: string | null;
 }
 
 interface ProductFormData {
-  codigo: string;
-  codigoBarras: string;
-  nome: string;
-  unidade: string;
-  grupo: string;
-  precoCusto: string;
-  margemLucro: string;
-  precoVenda: string;
-  cst: 'Tributado' | 'Substituicao Tributaria' | 'Outras';
-  pis: '49- Outras operacoes de saida' | '99 - Outras saidas';
-  cofins: '49- Outras operacoes de saida' | '99 - Outras saidas';
+  code: string;
+  barcode: string;
+  name: string;
+  unit_id: string;
+  group_id: string;
+  cost_price: string;
+  profit_margin: string;
+  selling_price: string;
+  cst: string;
+  pis: string;
+  cofins: string;
   ncm: string;
+  status: 'active' | 'inactive';
 }
 
 type MovimentacaoEstoque = {
@@ -28,22 +62,26 @@ type MovimentacaoEstoque = {
   observacao: string;
 };
 
-export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
+export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSlidePanelProps) {
   const [currentTab, setCurrentTab] = useState<'produto' | 'estoque' | 'impostos'>('produto');
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [formData, setFormData] = useState<ProductFormData>({
-    codigo: '',
-    codigoBarras: '',
-    nome: '',
-    unidade: '',
-    grupo: '',
-    precoCusto: '',
-    margemLucro: '',
-    precoVenda: '',
+    code: '',
+    barcode: '',
+    name: '',
+    unit_id: '',
+    group_id: '',
+    cost_price: '',
+    profit_margin: '',
+    selling_price: '',
     cst: 'Tributado',
     pis: '49- Outras operacoes de saida',
     cofins: '49- Outras operacoes de saida',
-    ncm: ''
+    ncm: '',
+    status: 'active'
   });
 
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoEstoque[]>([]);
@@ -54,22 +92,108 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
     observacao: ''
   });
 
+  useEffect(() => {
+    if (isOpen) {
+      loadUnitsAndGroups();
+      if (productToEdit) {
+        setFormData({
+          code: productToEdit.code,
+          barcode: productToEdit.barcode || '',
+          name: productToEdit.name,
+          unit_id: productToEdit.unit_id,
+          group_id: productToEdit.group_id || '',
+          cost_price: productToEdit.cost_price.toString(),
+          profit_margin: productToEdit.profit_margin.toString(),
+          selling_price: productToEdit.selling_price.toString(),
+          cst: productToEdit.cst,
+          pis: productToEdit.pis,
+          cofins: productToEdit.cofins,
+          ncm: productToEdit.ncm,
+          status: productToEdit.status
+        });
+      }
+    }
+  }, [isOpen, productToEdit]);
+
+  const loadUnitsAndGroups = async () => {
+    try {
+      setLoadingData(true);
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      // Load system units
+      const { data: systemUnits, error: systemUnitsError } = await supabase
+        .from('system_units')
+        .select('*')
+        .order('name');
+
+      if (systemUnitsError) throw systemUnitsError;
+
+      // Load company units
+      const { data: companyUnits, error: companyUnitsError } = await supabase
+        .from('product_units')
+        .select('*')
+        .eq('company_id', profile.company_id)
+        .order('name');
+
+      if (companyUnitsError) throw companyUnitsError;
+
+      // Combine and mark system units
+      const allUnits = [
+        ...systemUnits.map(unit => ({ ...unit, is_system: true })),
+        ...companyUnits.map(unit => ({ ...unit, is_system: false }))
+      ];
+
+      setUnits(allUnits);
+
+      // Load groups
+      const { data: groups, error: groupsError } = await supabase
+        .from('product_groups')
+        .select('*')
+        .eq('company_id', profile.company_id)
+        .order('name');
+
+      if (groupsError) throw groupsError;
+
+      setGroups(groups || []);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+      toast.error('Erro ao carregar unidades e grupos');
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
-    if (name === 'precoCusto' || name === 'margemLucro') {
+    if (name === 'cost_price' || name === 'profit_margin') {
       const numericValue = value.replace(/[^0-9.]/g, '');
       
       setFormData(prev => {
         const newData = { ...prev, [name]: numericValue };
         
         // Calcula o preço de venda quando o preço de custo ou margem mudam
-        if (newData.precoCusto && newData.margemLucro) {
-          const custo = parseFloat(newData.precoCusto);
-          const margem = parseFloat(newData.margemLucro);
+        if (newData.cost_price && newData.profit_margin) {
+          const custo = parseFloat(newData.cost_price);
+          const margem = parseFloat(newData.profit_margin);
           if (!isNaN(custo) && !isNaN(margem)) {
             const precoVenda = custo * (1 + margem / 100);
-            newData.precoVenda = precoVenda.toFixed(2);
+            newData.selling_price = precoVenda.toFixed(2);
           }
         }
         
@@ -104,13 +228,66 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     try {
       setLoading(true);
-      // Implementar lógica de salvamento
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulação
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      const productData = {
+        company_id: profile.company_id,
+        code: formData.code,
+        barcode: formData.barcode || null,
+        name: formData.name,
+        unit_id: formData.unit_id,
+        group_id: formData.group_id || null,
+        cost_price: parseFloat(formData.cost_price),
+        profit_margin: parseFloat(formData.profit_margin),
+        selling_price: parseFloat(formData.selling_price),
+        cst: formData.cst,
+        pis: formData.pis,
+        cofins: formData.cofins,
+        ncm: formData.ncm,
+        status: formData.status
+      };
+
+      if (productToEdit) {
+        const { error: updateError } = await supabase
+          .from('products')
+          .update(productData)
+          .eq('id', productToEdit.id);
+
+        if (updateError) throw updateError;
+
+        toast.success('Produto atualizado com sucesso!');
+      } else {
+        const { error: insertError } = await supabase
+          .from('products')
+          .insert([productData]);
+
+        if (insertError) throw insertError;
+
+        toast.success('Produto cadastrado com sucesso!');
+      }
+
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao salvar produto:', error);
+      toast.error('Erro ao salvar produto');
     } finally {
       setLoading(false);
     }
@@ -119,6 +296,27 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
   const panelClasses = `fixed right-0 top-0 h-full w-full md:w-[600px] bg-slate-800 shadow-xl transform transition-transform duration-300 ease-in-out ${
     isOpen ? 'translate-x-0' : 'translate-x-full'
   }`;
+
+  if (loadingData) {
+    return (
+      <>
+        {isOpen && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 transition-opacity z-40"
+            onClick={onClose}
+          />
+        )}
+        <div className={`${panelClasses} z-50`}>
+          <div className="h-full flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4 text-slate-400">
+              <Loader2 size={40} className="animate-spin" />
+              <span>Carregando...</span>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -133,7 +331,7 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
         <div className="h-full flex flex-col">
           <div className="p-6 border-b border-slate-700 flex items-center justify-between">
             <h2 className="text-xl font-semibold text-slate-200">
-              Novo Produto
+              {productToEdit ? 'Editar Produto' : 'Novo Produto'}
             </h2>
             <button
               onClick={onClose}
@@ -185,6 +383,22 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
             <form onSubmit={handleSubmit} className="space-y-6">
               {currentTab === 'produto' && (
                 <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Status *
+                    </label>
+                    <select
+                      name="status"
+                      value={formData.status}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="active">Ativo</option>
+                      <option value="inactive">Inativo</option>
+                    </select>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
@@ -192,8 +406,8 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
                       </label>
                       <input
                         type="text"
-                        name="codigo"
-                        value={formData.codigo}
+                        name="code"
+                        value={formData.code}
                         onChange={handleChange}
                         className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         required
@@ -205,8 +419,8 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
                       </label>
                       <input
                         type="text"
-                        name="codigoBarras"
-                        value={formData.codigoBarras}
+                        name="barcode"
+                        value={formData.barcode}
                         onChange={handleChange}
                         className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
@@ -219,8 +433,8 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
                     </label>
                     <input
                       type="text"
-                      name="nome"
-                      value={formData.nome}
+                      name="name"
+                      value={formData.name}
                       onChange={handleChange}
                       className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
@@ -233,34 +447,55 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
                         Unidade *
                       </label>
                       <select
-                        name="unidade"
-                        value={formData.unidade}
+                        name="unit_id"
+                        value={formData.unit_id}
                         onChange={handleChange}
                         className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         required
                       >
                         <option value="">Selecione</option>
-                        <option value="UN">Unidade</option>
-                        <option value="KG">Quilograma</option>
-                        <option value="L">Litro</option>
-                        <option value="CX">Caixa</option>
+                        {units.length > 0 && (
+                          <>
+                            <optgroup label="Unidades do Sistema">
+                              {units
+                                .filter(unit => unit.is_system)
+                                .map(unit => (
+                                  <option key={unit.id} value={unit.id}>
+                                    {unit.code} - {unit.name}
+                                  </option>
+                                ))
+                              }
+                            </optgroup>
+                            <optgroup label="Unidades da Empresa">
+                              {units
+                                .filter(unit => !unit.is_system)
+                                .map(unit => (
+                                  <option key={unit.id} value={unit.id}>
+                                    {unit.code} - {unit.name}
+                                  </option>
+                                ))
+                              }
+                            </optgroup>
+                          </>
+                        )}
                       </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Grupo *
+                        Grupo
                       </label>
                       <select
-                        name="grupo"
-                        value={formData.grupo}
+                        name="group_id"
+                        value={formData.group_id}
                         onChange={handleChange}
                         className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
                       >
                         <option value="">Selecione</option>
-                        <option value="bebidas">Bebidas</option>
-                        <option value="alimentos">Alimentos</option>
-                        <option value="limpeza">Limpeza</option>
+                        {groups.map(group => (
+                          <option key={group.id} value={group.id}>
+                            {group.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -276,8 +511,8 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
                         </span>
                         <input
                           type="text"
-                          name="precoCusto"
-                          value={formData.precoCusto}
+                          name="cost_price"
+                          value={formData.cost_price}
                           onChange={handleChange}
                           className="w-full pl-9 pr-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           required
@@ -291,8 +526,8 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
                       <div className="relative">
                         <input
                           type="text"
-                          name="margemLucro"
-                          value={formData.margemLucro}
+                          name="profit_margin"
+                          value={formData.profit_margin}
                           onChange={handleChange}
                           className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           required
@@ -312,8 +547,8 @@ export function ProductSlidePanel({ isOpen, onClose }: ProductSlidePanelProps) {
                         </span>
                         <input
                           type="text"
-                          name="precoVenda"
-                          value={formData.precoVenda}
+                          name="selling_price"
+                          value={formData.selling_price}
                           readOnly
                           className="w-full pl-9 pr-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />

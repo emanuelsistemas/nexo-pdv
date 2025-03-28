@@ -1,8 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Plus, Package, Calendar, Filter, X, ChevronLeft, ChevronRight, MoreVertical, Edit, Trash2, ArrowUpDown, Tag } from 'lucide-react';
+import { Search, Plus, Package, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, ArrowUpDown, Tag, Loader2 } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { ProductSlidePanel } from '../components/ProductSlidePanel';
+import { supabase } from '../lib/supabase';
+import { toast } from 'react-toastify';
+
+interface Product {
+  id: string;
+  code: string;
+  name: string;
+  barcode: string | null;
+  unit_id: string;
+  group_id: string | null;
+  cost_price: number;
+  profit_margin: number;
+  selling_price: number;
+  stock: number;
+  cst: string;
+  pis: string;
+  cofins: string;
+  ncm: string;
+  status: 'active' | 'inactive';
+  created_at: string;
+  // Joined fields
+  unit_name?: string;
+  group_name?: string;
+}
 
 export default function Produtos() {
   const navigate = useNavigate();
@@ -12,86 +36,178 @@ export default function Produtos() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedGroup, setSelectedGroup] = useState('all');
   const [showProductPanel, setShowProductPanel] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
 
-  // Mock data for demonstration
-  const produtos = [
-    {
-      id: '1',
-      codigo: 'P001',
-      nome: 'Coca-Cola 2L',
-      grupo: 'Bebidas',
-      unidade: 'UN',
-      preco_custo: 5.50,
-      preco_venda: 8.99,
-      estoque: 150,
-      status: 'active'
-    },
-    {
-      id: '2',
-      codigo: 'P002',
-      nome: 'Pão Francês',
-      grupo: 'Padaria',
-      unidade: 'KG',
-      preco_custo: 0.45,
-      preco_venda: 0.75,
-      estoque: 50,
-      status: 'active'
-    },
-    {
-      id: '3',
-      codigo: 'P003',
-      nome: 'Cerveja Heineken 350ml',
-      grupo: 'Bebidas',
-      unidade: 'UN',
-      preco_custo: 3.50,
-      preco_venda: 6.99,
-      estoque: 240,
-      status: 'inactive'
-    },
-    {
-      id: '4',
-      codigo: 'P004',
-      nome: 'Arroz 5kg',
-      grupo: 'Mercearia',
-      unidade: 'UN',
-      preco_custo: 15.50,
-      preco_venda: 22.90,
-      estoque: 80,
-      status: 'active'
-    }
-  ];
+  useEffect(() => {
+    loadProducts();
+    loadGroups();
+  }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-500/10 text-green-500';
-      case 'inactive':
-        return 'bg-red-500/10 text-red-400';
-      default:
-        return 'bg-slate-500/10 text-slate-500';
+  const loadGroups = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      const { data: groups, error } = await supabase
+        .from('product_groups')
+        .select('id, name')
+        .eq('company_id', profile.company_id)
+        .order('name');
+
+      if (error) throw error;
+
+      setGroups(groups || []);
+    } catch (error) {
+      console.error('Erro ao carregar grupos:', error);
+      toast.error('Erro ao carregar grupos');
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'Ativo';
-      case 'inactive':
-        return 'Inativo';
-      default:
-        return status;
+  const loadProducts = async () => {
+    try {
+      setLoading(true);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      // First, get all products
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('company_id', profile.company_id)
+        .order('created_at', { ascending: false });
+
+      if (productsError) throw productsError;
+
+      // Then, get unit names for all products
+      const unitIds = [...new Set(productsData.map(p => p.unit_id))];
+      const { data: unitsData, error: unitsError } = await supabase
+        .from('product_units')
+        .select('id, name')
+        .in('id', unitIds);
+
+      if (unitsError) throw unitsError;
+
+      // Create a map of unit IDs to names
+      const unitMap = new Map(unitsData.map(u => [u.id, u.name]));
+
+      // Get group names for all products
+      const groupIds = [...new Set(productsData.map(p => p.group_id).filter(Boolean))];
+      const { data: groupsData, error: groupsError } = await supabase
+        .from('product_groups')
+        .select('id, name')
+        .in('id', groupIds);
+
+      if (groupsError) throw groupsError;
+
+      // Create a map of group IDs to names
+      const groupMap = new Map(groupsData.map(g => [g.id, g.name]));
+
+      // Transform the data to include unit_name and group_name
+      const transformedData = productsData.map(product => ({
+        ...product,
+        unit_name: unitMap.get(product.unit_id) || '-',
+        group_name: product.group_id ? groupMap.get(product.group_id) : '-'
+      }));
+
+      setProducts(transformedData);
+    } catch (error: any) {
+      console.error('Erro ao carregar produtos:', error);
+      toast.error('Erro ao carregar produtos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setProductToEdit(product);
+    setShowProductPanel(true);
+  };
+
+  const handleDeleteClick = (product: Product) => {
+    setProductToDelete(product);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!productToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', productToDelete.id);
+
+      if (error) throw error;
+
+      toast.success('Produto excluído com sucesso!');
+      loadProducts();
+    } catch (error: any) {
+      console.error('Erro ao excluir produto:', error);
+      toast.error('Erro ao excluir produto');
+    } finally {
+      setShowDeleteConfirm(false);
+      setProductToDelete(null);
     }
   };
 
   const handleClose = () => {
-    // Verifica se há um estado de navegação e redireciona de acordo
-    if (location.state && location.state.from === 'produtos-folder') {
-      // Navega de volta para o Dashboard com a pasta de produtos aberta
+    if (location.state?.from === 'produtos-folder') {
       navigate('/dashboard', { state: { openFolder: 'produtos' } });
     } else {
-      // Caso contrário, volta para o dashboard normal
       navigate('/dashboard');
     }
+  };
+
+  const filteredProducts = products.filter(product => {
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch = 
+      product.code.toLowerCase().includes(searchLower) ||
+      product.name.toLowerCase().includes(searchLower) ||
+      (product.barcode && product.barcode.toLowerCase().includes(searchLower));
+
+    const matchesStatus = selectedStatus === 'all' || product.status === selectedStatus;
+    const matchesGroup = selectedGroup === 'all' || product.group_id === selectedGroup;
+
+    return matchesSearch && matchesStatus && matchesGroup;
+  });
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
   };
 
   return (
@@ -138,7 +254,10 @@ export default function Produtos() {
                 <span>Filtros</span>
               </button>
               <button
-                onClick={() => setShowProductPanel(true)}
+                onClick={() => {
+                  setProductToEdit(null);
+                  setShowProductPanel(true);
+                }}
                 className="flex items-center gap-2 px-3 py-2 bg-blue-500 rounded-lg text-white hover:bg-blue-400 transition-colors"
               >
                 <Plus size={20} />
@@ -174,9 +293,9 @@ export default function Produtos() {
                     className="w-full px-4 py-2 bg-slate-700 rounded-lg text-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   >
                     <option value="all">Todos</option>
-                    <option value="bebidas">Bebidas</option>
-                    <option value="padaria">Padaria</option>
-                    <option value="mercearia">Mercearia</option>
+                    {groups.map(group => (
+                      <option key={group.id} value={group.id}>{group.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -219,38 +338,75 @@ export default function Produtos() {
                 </tr>
               </thead>
               <tbody>
-                {produtos.map((produto) => (
-                  <tr key={produto.id} className="border-b border-slate-700 hover:bg-slate-700/50">
-                    <td className="p-4 text-slate-200">{produto.codigo}</td>
-                    <td className="p-4 text-slate-200">{produto.nome}</td>
-                    <td className="p-4 text-slate-200">{produto.grupo}</td>
-                    <td className="p-4 text-slate-200">{produto.unidade}</td>
-                    <td className="p-4 text-slate-200 text-right">R$ {produto.preco_custo.toFixed(2)}</td>
-                    <td className="p-4 text-slate-200 text-right">R$ {produto.preco_venda.toFixed(2)}</td>
-                    <td className="p-4 text-slate-200 text-right">{produto.estoque}</td>
-                    <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(produto.status)}`}>
-                        {getStatusText(produto.status)}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button className="p-1 text-slate-400 hover:text-slate-200">
-                          <ArrowUpDown size={16} />
-                        </button>
-                        <button className="p-1 text-slate-400 hover:text-slate-200">
-                          <Tag size={16} />
-                        </button>
-                        <button className="p-1 text-slate-400 hover:text-slate-200">
-                          <Edit size={16} />
-                        </button>
-                        <button className="p-1 text-red-400 hover:text-red-300">
-                          <Trash2 size={16} />
-                        </button>
+                {loading ? (
+                  <tr>
+                    <td colSpan={9} className="p-4 text-center">
+                      <div className="flex items-center justify-center text-slate-400">
+                        <Loader2 size={24} className="animate-spin mr-2" />
+                        <span>Carregando produtos...</span>
                       </div>
                     </td>
                   </tr>
-                ))}
+                ) : filteredProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-4 text-center text-slate-400">
+                      Nenhum produto encontrado
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProducts.map((product) => (
+                    <tr key={product.id} className="border-b border-slate-700 hover:bg-slate-700/50">
+                      <td className="p-4 text-slate-200">{product.code}</td>
+                      <td className="p-4 text-slate-200">{product.name}</td>
+                      <td className="p-4 text-slate-200">{product.group_name || '-'}</td>
+                      <td className="p-4 text-slate-200">{product.unit_name}</td>
+                      <td className="p-4 text-slate-200 text-right">{formatCurrency(product.cost_price)}</td>
+                      <td className="p-4 text-slate-200 text-right">{formatCurrency(product.selling_price)}</td>
+                      <td className="p-4 text-slate-200 text-right">{product.stock}</td>
+                      <td className="p-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          product.status === 'active'
+                            ? 'bg-green-500/10 text-green-500'
+                            : 'bg-red-500/10 text-red-400'
+                        }`}>
+                          {product.status === 'active' ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {}}
+                            className="p-1 text-slate-400 hover:text-slate-200"
+                            title="Movimentar estoque"
+                          >
+                            <ArrowUpDown size={16} />
+                          </button>
+                          <button
+                            onClick={() => {}}
+                            className="p-1 text-slate-400 hover:text-slate-200"
+                            title="Etiquetas"
+                          >
+                            <Tag size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleEditProduct(product)}
+                            className="p-1 text-slate-400 hover:text-slate-200"
+                            title="Editar"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(product)}
+                            className="p-1 text-red-400 hover:text-red-300"
+                            title="Excluir"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -259,7 +415,7 @@ export default function Produtos() {
           <div className="p-4 border-t border-slate-700">
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-400">
-                Mostrando 1-4 de 4 resultados
+                Mostrando {filteredProducts.length} produto(s)
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -283,8 +439,52 @@ export default function Produtos() {
       {/* Product Form Panel */}
       <ProductSlidePanel
         isOpen={showProductPanel}
-        onClose={() => setShowProductPanel(false)}
+        onClose={() => {
+          setShowProductPanel(false);
+          setProductToEdit(null);
+          loadProducts();
+        }}
+        productToEdit={productToEdit}
       />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" />
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-lg shadow-lg border border-slate-700 p-6 w-full max-w-[400px]">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-200">
+                  Confirmar Exclusão
+                </h3>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="text-slate-400 hover:text-slate-200"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-slate-300 mb-6">
+                Tem certeza que deseja excluir este produto?
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="px-4 py-2 text-sm font-medium text-slate-200 hover:text-slate-100 hover:bg-slate-700 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  className="px-4 py-2 text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
