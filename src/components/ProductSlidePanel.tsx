@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Package, Archive, Calculator } from 'lucide-react';
+import { X, Loader2, Package, Archive, Calculator, Shuffle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 
@@ -66,6 +66,9 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
   const [currentTab, setCurrentTab] = useState<'produto' | 'estoque' | 'impostos'>('produto');
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+  const [loadingNextCode, setLoadingNextCode] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [barcodeError, setBarcodeError] = useState<string | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [formData, setFormData] = useState<ProductFormData>({
@@ -181,19 +184,68 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
-    if (name === 'cost_price' || name === 'profit_margin') {
-      const numericValue = value.replace(/[^0-9.]/g, '');
+    // Limpar erros quando o usuário edita os campos
+    if (name === 'code') {
+      setCodeError(null);
+    }
+    
+    if (name === 'barcode') {
+      setBarcodeError(null);
+    }
+    
+    if (name === 'cost_price') {
+      // Aceitar vírgulas e pontos como separador decimal
+      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
       
       setFormData(prev => {
         const newData = { ...prev, [name]: numericValue };
         
-        // Calcula o preço de venda quando o preço de custo ou margem mudam
+        // Calcular o preço de venda quando o preço de custo muda
         if (newData.cost_price && newData.profit_margin) {
           const custo = parseFloat(newData.cost_price);
           const margem = parseFloat(newData.profit_margin);
           if (!isNaN(custo) && !isNaN(margem)) {
             const precoVenda = custo * (1 + margem / 100);
             newData.selling_price = precoVenda.toFixed(2);
+          }
+        }
+        
+        return newData;
+      });
+    } else if (name === 'profit_margin') {
+      // Aceitar vírgulas e pontos como separador decimal
+      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      
+      setFormData(prev => {
+        const newData = { ...prev, [name]: numericValue };
+        
+        // Calcular o preço de venda quando a margem muda
+        if (newData.cost_price && newData.profit_margin) {
+          const custo = parseFloat(newData.cost_price);
+          const margem = parseFloat(newData.profit_margin);
+          if (!isNaN(custo) && !isNaN(margem)) {
+            const precoVenda = custo * (1 + margem / 100);
+            newData.selling_price = precoVenda.toFixed(2);
+          }
+        }
+        
+        return newData;
+      });
+    } else if (name === 'selling_price') {
+      // Aceitar vírgulas e pontos como separador decimal
+      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      
+      setFormData(prev => {
+        const newData = { ...prev, [name]: numericValue };
+        
+        // Calcular a margem quando o preço de venda muda
+        if (newData.cost_price && newData.selling_price) {
+          const custo = parseFloat(newData.cost_price);
+          const venda = parseFloat(newData.selling_price);
+          
+          if (!isNaN(custo) && !isNaN(venda) && custo > 0) {
+            const margem = ((venda / custo) - 1) * 100;
+            newData.profit_margin = margem.toFixed(2);
           }
         }
         
@@ -228,6 +280,12 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Verificar se há erros antes de enviar
+    if (codeError || barcodeError) {
+      toast.error('Por favor, corrija os erros antes de salvar');
+      return;
+    }
     
     try {
       setLoading(true);
@@ -290,6 +348,194 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
       toast.error('Erro ao salvar produto');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getNextAvailableCode = async () => {
+    try {
+      setLoadingNextCode(true);
+      
+      // Obter o usuário atual
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Obter o ID da empresa do usuário
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      // Buscar todos os códigos de produtos existentes
+      const { data, error } = await supabase
+        .from('products')
+        .select('code')
+        .eq('company_id', profile.company_id)
+        .order('code', { ascending: true });
+
+      if (error) throw error;
+
+      // Se não houver produtos, começar com 1
+      if (!data || data.length === 0) {
+        setFormData(prev => ({ ...prev, code: '1' }));
+        toast.success('Código gerado com sucesso!');
+        return;
+      }
+
+      // Extrair e converter todos os códigos para números
+      const existingCodes = data
+        .map(item => parseInt(item.code.replace(/\D/g, '')))
+        .filter(code => !isNaN(code))
+        .sort((a, b) => a - b);
+
+      // Encontrar o primeiro "buraco" na sequência
+      let nextCode = 1;
+      for (const code of existingCodes) {
+        if (code > nextCode) {
+          // Encontramos um buraco na sequência
+          break;
+        }
+        nextCode = code + 1;
+      }
+
+      // Atualizar o formulário com o novo código
+      setFormData(prev => ({ ...prev, code: nextCode.toString() }));
+      toast.success('Código gerado com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao gerar código:', error);
+      toast.error('Erro ao gerar código automático');
+    } finally {
+      setLoadingNextCode(false);
+    }
+  };
+
+  const validateCode = async (code: string) => {
+    if (!code.trim()) return;
+    
+    try {
+      // Obter o usuário atual
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Obter o ID da empresa do usuário
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      // Verificar se o código já existe
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, code')
+        .eq('company_id', profile.company_id)
+        .eq('code', code);
+
+      if (error) throw error;
+
+      // Se estiver editando um produto, ignorar o próprio produto na validação
+      if (data && data.length > 0) {
+        if (productToEdit && data.some(item => item.id === productToEdit.id)) {
+          // É o mesmo produto, então não há problema
+          setCodeError(null);
+        } else {
+          // Código já existe em outro produto
+          setCodeError('Este código já está em uso por outro produto');
+        }
+      } else {
+        // Código não existe, está disponível
+        setCodeError(null);
+      }
+    } catch (error: any) {
+      console.error('Erro ao validar código:', error);
+    }
+  };
+
+  const validateBarcode = async (barcode: string) => {
+    if (!barcode.trim()) return; // Código de barras vazio é permitido
+    
+    try {
+      // Obter o usuário atual
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Obter o ID da empresa do usuário
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      // Verificar se o código de barras já existe
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, barcode')
+        .eq('company_id', profile.company_id)
+        .eq('barcode', barcode)
+        .not('barcode', 'is', null); // Ignorar produtos sem código de barras
+
+      if (error) throw error;
+
+      // Se estiver editando um produto, ignorar o próprio produto na validação
+      if (data && data.length > 0) {
+        if (productToEdit && data.some(item => item.id === productToEdit.id)) {
+          // É o mesmo produto, então não há problema
+          setBarcodeError(null);
+        } else {
+          // Código de barras já existe em outro produto
+          setBarcodeError('Este código de barras já está em uso por outro produto');
+        }
+      } else {
+        // Código de barras não existe, está disponível
+        setBarcodeError(null);
+      }
+    } catch (error: any) {
+      console.error('Erro ao validar código de barras:', error);
+    }
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    if (name === 'code') {
+      validateCode(value);
+    } else if (name === 'barcode') {
+      validateBarcode(value);
+    }
+  };
+
+  const handlePriceBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    if (value) {
+      // Converter para número e formatar com 2 casas decimais
+      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      const formattedValue = parseFloat(numericValue).toFixed(2);
+      
+      if (!isNaN(parseFloat(formattedValue))) {
+        setFormData(prev => ({ ...prev, [name]: formattedValue }));
+      }
     }
   };
 
@@ -404,14 +650,35 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                       <label className="block text-sm font-medium text-slate-300 mb-1">
                         Código *
                       </label>
-                      <input
-                        type="text"
-                        name="code"
-                        value={formData.code}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
+                      <div className="relative">
+                        <input
+                          type="text"
+                          name="code"
+                          value={formData.code}
+                          onChange={handleChange}
+                          onBlur={handleBlur}
+                          className={`w-full px-4 py-2 rounded-lg bg-slate-900 border ${
+                            codeError ? 'border-red-500' : 'border-slate-700'
+                          } text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10`}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={getNextAvailableCode}
+                          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-blue-400 transition-colors"
+                          title="Gerar próximo código disponível"
+                          disabled={loadingNextCode}
+                        >
+                          {loadingNextCode ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : (
+                            <Shuffle size={18} />
+                          )}
+                        </button>
+                      </div>
+                      {codeError && (
+                        <p className="mt-1 text-sm text-red-500">{codeError}</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
@@ -422,8 +689,14 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                         name="barcode"
                         value={formData.barcode}
                         onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onBlur={handleBlur}
+                        className={`w-full px-4 py-2 rounded-lg bg-slate-900 border ${
+                          barcodeError ? 'border-red-500' : 'border-slate-700'
+                        } text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                       />
+                      {barcodeError && (
+                        <p className="mt-1 text-sm text-red-500">{barcodeError}</p>
+                      )}
                     </div>
                   </div>
 
@@ -503,7 +776,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Preço de Custo *
+                        Preço de Custo (R$) *
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -512,8 +785,9 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                         <input
                           type="text"
                           name="cost_price"
-                          value={formData.cost_price}
+                          value={formData.cost_price.replace('.', ',')}
                           onChange={handleChange}
+                          onBlur={handlePriceBlur}
                           className="w-full pl-9 pr-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           required
                         />
@@ -523,23 +797,18 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                       <label className="block text-sm font-medium text-slate-300 mb-1">
                         Margem de Lucro (%) *
                       </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          name="profit_margin"
-                          value={formData.profit_margin}
-                          onChange={handleChange}
-                          className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          required
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                          %
-                        </span>
-                      </div>
+                      <input
+                        type="text"
+                        name="profit_margin"
+                        value={formData.profit_margin.replace('.', ',')}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Preço de Venda
+                        Preço de Venda (R$) *
                       </label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
@@ -548,9 +817,11 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                         <input
                           type="text"
                           name="selling_price"
-                          value={formData.selling_price}
-                          readOnly
+                          value={formData.selling_price.replace('.', ',')}
+                          onChange={handleChange}
+                          onBlur={handlePriceBlur}
                           className="w-full pl-9 pr-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required
                         />
                       </div>
                     </div>
