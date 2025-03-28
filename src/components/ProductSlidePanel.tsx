@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X as XMarkIcon, Loader2, Package, Archive, Calculator, Shuffle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
@@ -9,8 +9,8 @@ interface ProductSlidePanelProps {
   productToEdit?: {
     id: string;
     code: string;
-    barcode: string | null;
     name: string;
+    barcode: string | null;
     unit_id: string;
     group_id: string | null;
     cost_price: number;
@@ -49,6 +49,7 @@ interface ProductFormData {
   cost_price: string;
   profit_margin: string;
   selling_price: string;
+  stock: string;
   cst: string;
   pis: string;
   cofins: string;
@@ -57,12 +58,14 @@ interface ProductFormData {
   status: 'active' | 'inactive';
 }
 
-type MovimentacaoEstoque = {
-  tipo: 'entrada' | 'saida';
-  quantidade: number;
-  data: string;
-  observacao: string;
-};
+interface StockMovement {
+  id: string;
+  type: 'entrada' | 'saida';
+  quantity: number;
+  date: string;
+  observation: string;
+  created_at: string;
+}
 
 export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSlidePanelProps) {
   const [currentTab, setCurrentTab] = useState<'produto' | 'estoque' | 'impostos'>('produto');
@@ -73,6 +76,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
   const [barcodeError, setBarcodeError] = useState<string | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [formData, setFormData] = useState<ProductFormData>({
     code: '',
     barcode: '',
@@ -82,7 +86,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     cost_price: '',
     profit_margin: '',
     selling_price: '',
-    cst: 'Substituicao Tributaria', // Definido para corresponder ao CFOP 5405
+    stock: '0',
+    cst: 'Substituicao Tributaria',
     pis: '49- Outras operacoes de saida',
     cofins: '49- Outras operacoes de saida',
     ncm: '',
@@ -90,17 +95,23 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     status: 'active'
   });
 
-  const [movimentacoes, setMovimentacoes] = useState<MovimentacaoEstoque[]>([]);
-  const [novaMovimentacao, setNovaMovimentacao] = useState<MovimentacaoEstoque>({
-    tipo: 'entrada',
-    quantidade: 0,
-    data: new Date().toISOString().split('T')[0],
-    observacao: ''
+  const [movimentacoes, setMovimentacoes] = useState<StockMovement[]>([]);
+  const [novaMovimentacao, setNovaMovimentacao] = useState<StockMovement>({
+    id: '',
+    type: 'entrada',
+    quantity: 0,
+    date: new Date().toISOString().split('T')[0],
+    observation: '',
+    created_at: new Date().toISOString()
   });
 
   useEffect(() => {
-    // Quando o componente for montado ou quando o formData.cfop mudar,
-    // atualizar o CST para manter a coerência
+    if (isOpen && !productToEdit && currentTab === 'estoque') {
+      setCurrentTab('produto');
+    }
+  }, [isOpen, productToEdit]);
+
+  useEffect(() => {
     const cstValue = formData.cfop === '5405' ? 'Substituicao Tributaria' : 'Tributado';
     if (formData.cst !== cstValue) {
       setFormData(prev => ({
@@ -123,6 +134,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
           cost_price: productToEdit.cost_price.toString(),
           profit_margin: productToEdit.profit_margin.toString(),
           selling_price: productToEdit.selling_price.toString(),
+          stock: productToEdit.stock.toString(),
           cst: productToEdit.cst,
           pis: productToEdit.pis,
           cofins: productToEdit.cofins,
@@ -130,9 +142,68 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
           cfop: productToEdit.cfop,
           status: productToEdit.status
         });
+        loadStockMovements(productToEdit.id);
+      } else {
+        setFormData({
+          code: '',
+          barcode: '',
+          name: '',
+          unit_id: '',
+          group_id: '',
+          cost_price: '',
+          profit_margin: '',
+          selling_price: '',
+          stock: '0',
+          cst: 'Substituicao Tributaria',
+          pis: '49- Outras operacoes de saida',
+          cofins: '49- Outras operacoes de saida',
+          ncm: '',
+          cfop: '5405',
+          status: 'active'
+        });
+        setMovimentacoes([]);
       }
     }
   }, [isOpen, productToEdit]);
+
+  useEffect(() => {
+    const unit = units.find(u => u.id === formData.unit_id);
+    setSelectedUnit(unit || null);
+  }, [formData.unit_id, units]);
+
+  const loadStockMovements = async (productId: string) => {
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      const { data: movements, error: movementsError } = await supabase
+        .from('product_stock_movements')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('company_id', profile.company_id)
+        .order('date', { ascending: false });
+
+      if (movementsError) throw movementsError;
+
+      setMovimentacoes(movements || []);
+    } catch (error) {
+      console.error('Erro ao carregar movimentações:', error);
+      toast.error('Erro ao carregar movimentações de estoque');
+    }
+  };
 
   const loadUnitsAndGroups = async () => {
     try {
@@ -154,7 +225,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         throw new Error('Empresa não encontrada');
       }
 
-      // Load system units
       const { data: systemUnits, error: systemUnitsError } = await supabase
         .from('system_units')
         .select('*')
@@ -162,7 +232,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
       if (systemUnitsError) throw systemUnitsError;
 
-      // Load company units
       const { data: companyUnits, error: companyUnitsError } = await supabase
         .from('product_units')
         .select('*')
@@ -171,7 +240,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
       if (companyUnitsError) throw companyUnitsError;
 
-      // Combine and mark system units
       const allUnits = [
         ...systemUnits.map(unit => ({ ...unit, is_system: true })),
         ...companyUnits.map(unit => ({ ...unit, is_system: false }))
@@ -179,7 +247,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
       setUnits(allUnits);
 
-      // Load groups
       const { data: groups, error: groupsError } = await supabase
         .from('product_groups')
         .select('*')
@@ -200,7 +267,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
-    // Limpar erros quando o usuário edita os campos
     if (name === 'code') {
       setCodeError(null);
     }
@@ -209,7 +275,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
       setBarcodeError(null);
     }
 
-    // Lógica para definir automaticamente o CST com base no CFOP
     if (name === 'cfop') {
       const cstValue = value === '5405' ? 'Substituicao Tributaria' : 'Tributado';
       setFormData(prev => ({ 
@@ -221,13 +286,11 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     }
     
     if (name === 'cost_price') {
-      // Aceitar vírgulas e pontos como separador decimal
       const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
       
       setFormData(prev => {
         const newData = { ...prev, [name]: numericValue };
         
-        // Calcular o preço de venda quando o preço de custo muda
         if (newData.cost_price && newData.profit_margin) {
           const custo = parseFloat(newData.cost_price);
           const margem = parseFloat(newData.profit_margin);
@@ -240,13 +303,11 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         return newData;
       });
     } else if (name === 'profit_margin') {
-      // Aceitar vírgulas e pontos como separador decimal
       const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
       
       setFormData(prev => {
         const newData = { ...prev, [name]: numericValue };
         
-        // Calcular o preço de venda quando a margem muda
         if (newData.cost_price && newData.profit_margin) {
           const custo = parseFloat(newData.cost_price);
           const margem = parseFloat(newData.profit_margin);
@@ -259,13 +320,11 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         return newData;
       });
     } else if (name === 'selling_price') {
-      // Aceitar vírgulas e pontos como separador decimal
       const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
       
       setFormData(prev => {
         const newData = { ...prev, [name]: numericValue };
         
-        // Calcular a margem quando o preço de venda muda
         if (newData.cost_price && newData.selling_price) {
           const custo = parseFloat(newData.cost_price);
           const venda = parseFloat(newData.selling_price);
@@ -279,9 +338,17 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         return newData;
       });
     } else if (name === 'ncm') {
-      // Permitir apenas números e pontos
       const validValue = value.replace(/[^0-9.]/g, '');
       setFormData(prev => ({ ...prev, [name]: validValue }));
+    } else if (name === 'stock' && !productToEdit) {
+      let numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      
+      // Only force integer values for non-KG units
+      if (selectedUnit && selectedUnit.code !== 'KG') {
+        numericValue = String(Math.floor(parseFloat(numericValue) || 0));
+      }
+      
+      setFormData(prev => ({ ...prev, [name]: numericValue }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -289,30 +356,109 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
   const handleMovimentacaoChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setNovaMovimentacao(prev => ({
-      ...prev,
-      [name]: name === 'quantidade' ? parseFloat(value) || 0 : value
-    }));
+    
+    if (name === 'quantity') {
+      let numericValue = parseFloat(value) || 0;
+      
+      // Only force integer values for non-KG units
+      if (selectedUnit && selectedUnit.code !== 'KG') {
+        numericValue = Math.floor(numericValue);
+      }
+      
+      setNovaMovimentacao(prev => ({
+        ...prev,
+        [name]: numericValue
+      }));
+    } else {
+      setNovaMovimentacao(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
-  const handleAddMovimentacao = () => {
-    if (novaMovimentacao.quantidade <= 0) {
+  const handleAddMovimentacao = async () => {
+    if (novaMovimentacao.quantity <= 0) {
       return;
     }
 
-    setMovimentacoes(prev => [...prev, novaMovimentacao]);
-    setNovaMovimentacao({
-      tipo: 'entrada',
-      quantidade: 0,
-      data: new Date().toISOString().split('T')[0],
-      observacao: ''
-    });
+    try {
+      if (!productToEdit) {
+        toast.error('É necessário salvar o produto antes de adicionar movimentações');
+        return;
+      }
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      const { data: movement, error: movementError } = await supabase
+        .from('product_stock_movements')
+        .insert({
+          product_id: productToEdit.id,
+          company_id: profile.company_id,
+          type: novaMovimentacao.type,
+          quantity: novaMovimentacao.quantity,
+          date: novaMovimentacao.date,
+          observation: novaMovimentacao.observation,
+          created_by: user.id
+        })
+        .select()
+        .single();
+
+      if (movementError) throw movementError;
+
+      const newStock = novaMovimentacao.type === 'entrada' 
+        ? productToEdit.stock + novaMovimentacao.quantity
+        : productToEdit.stock - novaMovimentacao.quantity;
+
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ stock: newStock })
+        .eq('id', productToEdit.id);
+
+      if (updateError) throw updateError;
+
+      toast.success('Movimentação de estoque registrada com sucesso!');
+      
+      await loadStockMovements(productToEdit.id);
+
+      setNovaMovimentacao({
+        id: '',
+        type: 'entrada',
+        quantity: 0,
+        date: new Date().toISOString().split('T')[0],
+        observation: '',
+        created_at: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('Erro ao registrar movimentação:', error);
+      toast.error('Erro ao registrar movimentação de estoque');
+    }
+  };
+
+  const calculateTotalBalance = () => {
+    return movimentacoes.reduce((total, mov) => {
+      return total + (mov.type === 'entrada' ? mov.quantity : -mov.quantity);
+    }, 0);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Verificar se há erros antes de enviar
     if (codeError || barcodeError) {
       toast.error('Por favor, corrija os erros antes de salvar');
       return;
@@ -347,6 +493,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         cost_price: parseFloat(formData.cost_price),
         profit_margin: parseFloat(formData.profit_margin),
         selling_price: parseFloat(formData.selling_price),
+        stock: 0,
         cst: formData.cst,
         pis: formData.pis,
         cofins: formData.cofins,
@@ -365,11 +512,37 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
         toast.success('Produto atualizado com sucesso!');
       } else {
-        const { error: insertError } = await supabase
+        const { data: newProduct, error: insertError } = await supabase
           .from('products')
-          .insert([productData]);
+          .insert([productData])
+          .select()
+          .single();
 
         if (insertError) throw insertError;
+
+        const initialStock = parseFloat(formData.stock);
+        if (initialStock > 0) {
+          const { error: movementError } = await supabase
+            .from('product_stock_movements')
+            .insert({
+              product_id: newProduct.id,
+              company_id: profile.company_id,
+              type: 'entrada',
+              quantity: initialStock,
+              date: new Date().toISOString(),
+              observation: 'Estoque inicial',
+              created_by: user.id
+            });
+
+          if (movementError) throw movementError;
+
+          const { error: updateError } = await supabase
+            .from('products')
+            .update({ stock: initialStock })
+            .eq('id', newProduct.id);
+
+          if (updateError) throw updateError;
+        }
 
         toast.success('Produto cadastrado com sucesso!');
       }
@@ -387,14 +560,12 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     try {
       setLoadingNextCode(true);
       
-      // Obter o usuário atual
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
         throw new Error('Usuário não autenticado');
       }
 
-      // Obter o ID da empresa do usuário
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('company_id')
@@ -405,7 +576,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         throw new Error('Empresa não encontrada');
       }
 
-      // Buscar todos os códigos de produtos existentes
       const { data, error } = await supabase
         .from('products')
         .select('code')
@@ -414,30 +584,25 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
       if (error) throw error;
 
-      // Se não houver produtos, começar com 1
       if (!data || data.length === 0) {
         setFormData(prev => ({ ...prev, code: '1' }));
         toast.success('Código gerado com sucesso!');
         return;
       }
 
-      // Extrair e converter todos os códigos para números
       const existingCodes = data
         .map(item => parseInt(item.code.replace(/\D/g, '')))
         .filter(code => !isNaN(code))
         .sort((a, b) => a - b);
 
-      // Encontrar o primeiro "buraco" na sequência
       let nextCode = 1;
       for (const code of existingCodes) {
         if (code > nextCode) {
-          // Encontramos um buraco na sequência
           break;
         }
         nextCode = code + 1;
       }
 
-      // Atualizar o formulário com o novo código
       setFormData(prev => ({ ...prev, code: nextCode.toString() }));
       toast.success('Código gerado com sucesso!');
     } catch (error: any) {
@@ -452,14 +617,12 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     if (!code.trim()) return;
     
     try {
-      // Obter o usuário atual
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
         throw new Error('Usuário não autenticado');
       }
 
-      // Obter o ID da empresa do usuário
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('company_id')
@@ -470,7 +633,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         throw new Error('Empresa não encontrada');
       }
 
-      // Verificar se o código já existe
       const { data, error } = await supabase
         .from('products')
         .select('id, code')
@@ -479,17 +641,13 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
       if (error) throw error;
 
-      // Se estiver editando um produto, ignorar o próprio produto na validação
       if (data && data.length > 0) {
         if (productToEdit && data.some(item => item.id === productToEdit.id)) {
-          // É o mesmo produto, então não há problema
           setCodeError(null);
         } else {
-          // Código já existe em outro produto
           setCodeError('Este código já está em uso por outro produto');
         }
       } else {
-        // Código não existe, está disponível
         setCodeError(null);
       }
     } catch (error: any) {
@@ -498,17 +656,15 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
   };
 
   const validateBarcode = async (barcode: string) => {
-    if (!barcode.trim()) return; // Código de barras vazio é permitido
+    if (!barcode.trim()) return;
     
     try {
-      // Obter o usuário atual
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
         throw new Error('Usuário não autenticado');
       }
 
-      // Obter o ID da empresa do usuário
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('company_id')
@@ -519,27 +675,22 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         throw new Error('Empresa não encontrada');
       }
 
-      // Verificar se o código de barras já existe
       const { data, error } = await supabase
         .from('products')
         .select('id, barcode')
         .eq('company_id', profile.company_id)
         .eq('barcode', barcode)
-        .not('barcode', 'is', null); // Ignorar produtos sem código de barras
+        .not('barcode', 'is', null);
 
       if (error) throw error;
 
-      // Se estiver editando um produto, ignorar o próprio produto na validação
       if (data && data.length > 0) {
         if (productToEdit && data.some(item => item.id === productToEdit.id)) {
-          // É o mesmo produto, então não há problema
           setBarcodeError(null);
         } else {
-          // Código de barras já existe em outro produto
           setBarcodeError('Este código de barras já está em uso por outro produto');
         }
       } else {
-        // Código de barras não existe, está disponível
         setBarcodeError(null);
       }
     } catch (error: any) {
@@ -561,7 +712,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     const { name, value } = e.target;
     
     if (value) {
-      // Converter para número e formatar com 2 casas decimais
       const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
       const formattedValue = parseFloat(numericValue).toFixed(2);
       
@@ -633,6 +783,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
               </div>
             </div>
           )}
+
           <div className="border-b border-slate-700">
             <div className="flex">
               <button
@@ -646,17 +797,19 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                 <Package size={20} />
                 Produto
               </button>
-              <button
-                onClick={() => setCurrentTab('estoque')}
-                className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
-                  currentTab === 'estoque'
-                    ? 'text-blue-400 border-b-2 border-blue-400'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Archive size={20} />
-                Estoque
-              </button>
+              {productToEdit && (
+                <button
+                  onClick={() => setCurrentTab('estoque')}
+                  className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
+                    currentTab === 'estoque'
+                      ? 'text-blue-400 border-b-2 border-blue-400'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Archive size={20} />
+                  Estoque
+                </button>
+              )}
               <button
                 onClick={() => setCurrentTab('impostos')}
                 className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
@@ -712,7 +865,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                           type="button"
                           onClick={getNextAvailableCode}
                           className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-blue-400 transition-colors"
-                          title="Gerar próximo código disponível"
+                          title="Gerar pró
+                          ximo código disponível"
                           disabled={loadingNextCode}
                         >
                           {loadingNextCode ? (
@@ -748,7 +902,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">
-                      Nome do Produto *
+                      Nome *
                     </label>
                     <input
                       type="text"
@@ -760,84 +914,59 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Unidade *
-                      </label>
-                      <select
-                        name="unit_id"
-                        value={formData.unit_id}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      >
-                        <option value="">Selecione</option>
-                        {units.length > 0 && (
-                          <>
-                            <optgroup label="Unidades do Sistema">
-                              {units
-                                .filter(unit => unit.is_system)
-                                .map(unit => (
-                                  <option key={unit.id} value={unit.id}>
-                                    {unit.code} - {unit.name}
-                                  </option>
-                                ))
-                              }
-                            </optgroup>
-                            <optgroup label="Unidades da Empresa">
-                              {units
-                                .filter(unit => !unit.is_system)
-                                .map(unit => (
-                                  <option key={unit.id} value={unit.id}>
-                                    {unit.code} - {unit.name}
-                                  </option>
-                                ))
-                              }
-                            </optgroup>
-                          </>
-                        )}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Grupo
-                      </label>
-                      <select
-                        name="group_id"
-                        value={formData.group_id}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">Selecione</option>
-                        {groups.map(group => (
-                          <option key={group.id} value={group.id}>
-                            {group.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Unidade de Medida *
+                    </label>
+                    <select
+                      name="unit_id"
+                      value={formData.unit_id}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Selecione uma unidade</option>
+                      {units.map(unit => (
+                        <option key={unit.id} value={unit.id}>
+                          {unit.code} - {unit.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Grupo
+                    </label>
+                    <select
+                      name="group_id"
+                      value={formData.group_id}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Selecione um grupo</option>
+                      {groups.map(group => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Preço de Custo (R$) *
+                        Preço de Custo *
                       </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                          R$
-                        </span>
-                        <input
-                          type="text"
-                          name="cost_price"
-                          value={formData.cost_price.replace('.', ',')}
-                          onChange={handleChange}
-                          onBlur={handlePriceBlur}
-                          className="w-full pl-9 pr-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          required
-                        />
-                      </div>
+                      <input
+                        type="text"
+                        name="cost_price"
+                        value={formData.cost_price}
+                        onChange={handleChange}
+                        onBlur={handlePriceBlur}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
@@ -846,49 +975,66 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                       <input
                         type="text"
                         name="profit_margin"
-                        value={formData.profit_margin.replace('.', ',')}
+                        value={formData.profit_margin}
                         onChange={handleChange}
+                        onBlur={handlePriceBlur}
                         className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         required
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Preço de Venda (R$) *
+                        Preço de Venda *
                       </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                          R$
-                        </span>
-                        <input
-                          type="text"
-                          name="selling_price"
-                          value={formData.selling_price.replace('.', ',')}
-                          onChange={handleChange}
-                          onBlur={handlePriceBlur}
-                          className="w-full pl-9 pr-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          required
-                        />
-                      </div>
+                      <input
+                        type="text"
+                        name="selling_price"
+                        value={formData.selling_price}
+                        onChange={handleChange}
+                        onBlur={handlePriceBlur}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
                     </div>
                   </div>
+
+                  {!productToEdit && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        Estoque Inicial
+                      </label>
+                      <input
+                        type="number"
+                        name="stock"
+                        value={formData.stock}
+                        onChange={handleChange}
+                        disabled={!formData.unit_id}
+                        min="0"
+                        step={selectedUnit?.code === 'KG' ? '0.001' : '1'}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                      />
+                      {!formData.unit_id && (
+                        <p className="mt-1 text-sm text-slate-400">
+                          Selecione uma unidade de medida para informar o estoque inicial
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
 
-              {currentTab === 'estoque' && (
+              {currentTab === 'estoque' && productToEdit && (
                 <div className="space-y-6">
                   <div className="bg-slate-900 rounded-lg border border-slate-700 p-4">
-                    <h3 className="text-lg font-medium text-slate-200 mb-4">
-                      Nova Movimentação
-                    </h3>
+                    <h3 className="text-lg font-medium text-slate-200 mb-4">Nova Movimentação</h3>
                     <div className="grid grid-cols-2 gap-4 mb-4">
                       <div>
                         <label className="block text-sm font-medium text-slate-300 mb-1">
                           Tipo *
                         </label>
                         <select
-                          name="tipo"
-                          value={novaMovimentacao.tipo}
+                          name="type"
+                          value={novaMovimentacao.type}
                           onChange={handleMovimentacaoChange}
                           className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
@@ -902,43 +1048,47 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                         </label>
                         <input
                           type="number"
-                          name="quantidade"
-                          value={novaMovimentacao.quantidade}
+                          name="quantity"
+                          value={novaMovimentacao.quantity}
                           onChange={handleMovimentacaoChange}
-                          min="0"
-                          step="1"
+                          min="0.001"
+                          step={selectedUnit?.code === 'KG' ? '0.001' : '1'}
+                          className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder={selectedUnit?.code === 'KG' ? 'Digite o peso em quilogramas' : 'Digite a quantidade em unidades inteiras'}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">
+                          Data *
+                        </label>
+                        <input
+                          type="date"
+                          name="date"
+                          value={novaMovimentacao.date}
+                          onChange={handleMovimentacaoChange}
                           className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                       </div>
                     </div>
                     <div className="mb-4">
                       <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Data *
-                      </label>
-                      <input
-                        type="date"
-                        name="data"
-                        value={novaMovimentacao.data}
-                        onChange={handleMovimentacaoChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
                         Observação
                       </label>
                       <textarea
-                        name="observacao"
-                        value={novaMovimentacao.observacao}
+                        name="observation"
+                        value={novaMovimentacao.observation}
                         onChange={handleMovimentacaoChange}
-                        rows={3}
+                        rows={2}
                         className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={handleAddMovimentacao}
-                      className="w-full bg-blue-500 hover:bg-blue-400 text-white py-2 px-4 rounded-lg transition-colors"
+                      disabled={novaMovimentacao.quantity <= 0}
+                      className="w-full bg-blue-500 hover:bg-blue-400 text-white py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Adicionar Movimentação
                     </button>
@@ -949,6 +1099,11 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                       <h3 className="text-lg font-medium text-slate-200">
                         Histórico de Movimentações
                       </h3>
+                      <p className="text-sm text-slate-400 mt-1">
+                        Saldo total: <span className={`font-medium ${calculateTotalBalance() >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {calculateTotalBalance().toFixed(3)}
+                        </span>
+                      </p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full">
@@ -961,28 +1116,32 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                           </tr>
                         </thead>
                         <tbody>
-                          {movimentacoes.map((mov, index) => (
-                            <tr key={index} className="border-b border-slate-700">
+                          {movimentacoes.map((mov) => (
+                            <tr key={mov.id} className="border-b border-slate-700">
                               <td className="p-4 text-slate-200">
-                                {new Date(mov.data).toLocaleDateString('pt-BR')}
+                                {new Date(mov.date).toLocaleDateString('pt-BR')}
                               </td>
                               <td className="p-4">
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  mov.tipo === 'entrada'
-                                    ? 'bg-green-500/10 text-green-500'
+                                  mov.type === 'entrada' 
+                                    ? 'bg-green-500/10 text-green-500' 
                                     : 'bg-red-500/10 text-red-400'
                                 }`}>
-                                  {mov.tipo === 'entrada' ? 'Entrada' : 'Saída'}
+                                  {mov.type === 'entrada' ? 'Entrada' : 'Saída'}
                                 </span>
                               </td>
-                              <td className="p-4 text-right text-slate-200">{mov.quantidade}</td>
-                              <td className="p-4 text-slate-200">{mov.observacao}</td>
+                              <td className="p-4 text-right">
+                                <span className={mov.type === 'entrada' ? 'text-green-400' : 'text-red-400'}>
+                                  {mov.type === 'entrada' ? '+' : '-'}{mov.quantity.toFixed(3)}
+                                </span>
+                              </td>
+                              <td className="p-4 text-slate-200">{mov.observation}</td>
                             </tr>
                           ))}
                           {movimentacoes.length === 0 && (
                             <tr>
                               <td colSpan={4} className="p-4 text-center text-slate-400">
-                                Nenhuma movimentação registrada
+                                Nenhuma movimentação encontrada
                               </td>
                             </tr>
                           )}
@@ -994,74 +1153,70 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
               )}
 
               {currentTab === 'impostos' && (
-                <div className="space-y-6">
-                  {/* Primeira linha: CFOP e CST */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        CFOP *
-                      </label>
-                      <select
-                        name="cfop"
-                        value={formData.cfop}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      >
-                        <option value="5405">5405</option>
-                        <option value="5102">5102</option>
-                      </select>
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        CST *
-                      </label>
-                      <input
-                        type="text"
-                        name="cst"
-                        value={formData.cst}
-                        readOnly
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      CFOP *
+                    </label>
+                    <select
+                      name="cfop"
+                      value={formData.cfop}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="5405">5405 - Venda de mercadoria adquirida ou recebida de terceiros</option>
+                      <option value="5102">5102 - Venda de mercadoria adquirida ou recebida de terceiros</option>
+                    </select>
                   </div>
 
-                  {/* Segunda linha: PIS e COFINS */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        PIS *
-                      </label>
-                      <select
-                        name="pis"
-                        value={formData.pis}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      >
-                        <option value="49- Outras operacoes de saida">49- Outras operações de saída</option>
-                        <option value="99 - Outras saidas">99 - Outras saídas</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        COFINS *
-                      </label>
-                      <select
-                        name="cofins"
-                        value={formData.cofins}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      >
-                        <option value="49- Outras operacoes de saida">49- Outras operações de saída</option>
-                        <option value="99 - Outras saidas">99 - Outras saídas</option>
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      CST *
+                    </label>
+                    <input
+                      type="text"
+                      name="cst"
+                      value={formData.cst}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled
+                    />
+                    <p className="mt-1 text-sm text-slate-400">
+                      O CST é definido automaticamente com base no CFOP selecionado
+                    </p>
                   </div>
 
-                  {/* NCM em linha separada */}
-                  <div className="relative">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      PIS *
+                    </label>
+                    <select
+                      name="pis"
+                      value={formData.pis}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="49- Outras operacoes de saida">49- Outras operacoes de saida</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      COFINS *
+                    </label>
+                    <select
+                      name="cofins"
+                      value={formData.cofins}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="49- Outras operacoes de saida">49- Outras operacoes de saida</option>
+                    </select>
+                  </div>
+
+                  <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">
                       NCM *
                     </label>
@@ -1071,19 +1226,21 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                         name="ncm"
                         value={formData.ncm}
                         onChange={handleChange}
+                        maxLength={8}
                         className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-10"
+                        required
                       />
                       <button
                         type="button"
                         onClick={handleSetDefaultNCM}
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-blue-500 transition-colors"
-                        title="Preencher NCM padrão"
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-blue-400 transition-colors"
+                        title="Usar NCM padrão"
                       >
                         <Shuffle size={18} />
                       </button>
                     </div>
                   </div>
-                </div>
+                </>
               )}
             </form>
           </div>
