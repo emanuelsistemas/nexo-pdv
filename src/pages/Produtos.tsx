@@ -25,6 +25,7 @@ interface Product {
   created_at: string;
   // Joined fields
   unit_name?: string;
+  unit_code?: string;
   group_name?: string;
 }
 
@@ -101,7 +102,7 @@ export default function Produtos() {
         throw new Error('Empresa não encontrada');
       }
 
-      // First, get all products
+      // First get all products
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('*')
@@ -110,36 +111,49 @@ export default function Produtos() {
 
       if (productsError) throw productsError;
 
-      // Then, get unit names for all products
-      const unitIds = [...new Set(productsData.map(p => p.unit_id))];
-      const { data: unitsData, error: unitsError } = await supabase
-        .from('product_units')
-        .select('id, name')
-        .in('id', unitIds);
+      // Get all unique unit IDs (excluding null values)
+      const unitIds = [...new Set(productsData.map(p => p.unit_id).filter(Boolean))];
+      
+      let unitMap = new Map();
+      if (unitIds.length > 0) {
+        // Get unit data for all products
+        const { data: unitsData, error: unitsError } = await supabase
+          .from('product_units')
+          .select('id, name, code')
+          .in('id', unitIds);
 
-      if (unitsError) throw unitsError;
+        if (unitsError) throw unitsError;
 
-      // Create a map of unit IDs to names
-      const unitMap = new Map(unitsData.map(u => [u.id, u.name]));
+        // Create a map of unit IDs to unit data
+        unitMap = new Map(unitsData.map(u => [u.id, { name: u.name, code: u.code }]));
+      }
 
-      // Get group names for all products
+      // Get all unique group IDs (excluding null values)
       const groupIds = [...new Set(productsData.map(p => p.group_id).filter(Boolean))];
-      const { data: groupsData, error: groupsError } = await supabase
-        .from('product_groups')
-        .select('id, name')
-        .in('id', groupIds);
+      let groupMap = new Map();
+      
+      if (groupIds.length > 0) {
+        const { data: groupsData, error: groupsError } = await supabase
+          .from('product_groups')
+          .select('id, name')
+          .in('id', groupIds);
 
-      if (groupsError) throw groupsError;
+        if (groupsError) throw groupsError;
 
-      // Create a map of group IDs to names
-      const groupMap = new Map(groupsData.map(g => [g.id, g.name]));
+        // Create a map of group IDs to names
+        groupMap = new Map(groupsData.map(g => [g.id, g.name]));
+      }
 
-      // Transform the data to include unit_name and group_name
-      const transformedData = productsData.map(product => ({
-        ...product,
-        unit_name: unitMap.get(product.unit_id) || '-',
-        group_name: product.group_id ? groupMap.get(product.group_id) : '-'
-      }));
+      // Transform the data to include unit and group information
+      const transformedData = productsData.map(product => {
+        const unit = unitMap.get(product.unit_id);
+        return {
+          ...product,
+          unit_name: unit?.name || '-',
+          unit_code: unit?.code || '-',
+          group_name: product.group_id ? groupMap.get(product.group_id) : '-'
+        };
+      });
 
       setProducts(transformedData);
     } catch (error: any) {
@@ -164,12 +178,21 @@ export default function Produtos() {
     if (!productToDelete) return;
 
     try {
-      const { error } = await supabase
+      // First delete all stock movements for this product
+      const { error: movementsError } = await supabase
+        .from('product_stock_movements')
+        .delete()
+        .eq('product_id', productToDelete.id);
+
+      if (movementsError) throw movementsError;
+
+      // Then delete the product
+      const { error: productError } = await supabase
         .from('products')
         .delete()
         .eq('id', productToDelete.id);
 
-      if (error) throw error;
+      if (productError) throw productError;
 
       toast.success('Produto excluído com sucesso!');
       loadProducts();
@@ -358,11 +381,13 @@ export default function Produtos() {
                     <tr key={product.id} className="border-b border-slate-700 hover:bg-slate-700/50">
                       <td className="p-4 text-slate-200">{product.code}</td>
                       <td className="p-4 text-slate-200">{product.name}</td>
-                      <td className="p-4 text-slate-200">{product.group_name || '-'}</td>
-                      <td className="p-4 text-slate-200">{product.unit_name}</td>
+                      <td className="p-4 text-slate-200">{product.group_name}</td>
+                      <td className="p-4 text-slate-200">{product.unit_code}</td>
                       <td className="p-4 text-slate-200 text-right">{formatCurrency(product.cost_price)}</td>
                       <td className="p-4 text-slate-200 text-right">{formatCurrency(product.selling_price)}</td>
-                      <td className="p-4 text-slate-200 text-right">{product.stock}</td>
+                      <td className="p-4 text-slate-200 text-right">
+                        {product.unit_code === 'KG' ? product.stock.toFixed(3) : product.stock.toFixed(0)}
+                      </td>
                       <td className="p-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           product.status === 'active'

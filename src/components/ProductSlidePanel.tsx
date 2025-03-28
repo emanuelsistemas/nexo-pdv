@@ -58,15 +58,6 @@ interface ProductFormData {
   status: 'active' | 'inactive';
 }
 
-interface StockMovement {
-  id: string;
-  type: 'entrada' | 'saida';
-  quantity: number;
-  date: string;
-  observation: string;
-  created_at: string;
-}
-
 export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSlidePanelProps) {
   const [currentTab, setCurrentTab] = useState<'produto' | 'estoque' | 'impostos'>('produto');
   const [loading, setLoading] = useState(false);
@@ -95,32 +86,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     status: 'active'
   });
 
-  const [movimentacoes, setMovimentacoes] = useState<StockMovement[]>([]);
-  const [novaMovimentacao, setNovaMovimentacao] = useState<StockMovement>({
-    id: '',
-    type: 'entrada',
-    quantity: 0,
-    date: new Date().toISOString().split('T')[0],
-    observation: '',
-    created_at: new Date().toISOString()
-  });
-
-  useEffect(() => {
-    if (isOpen && !productToEdit && currentTab === 'estoque') {
-      setCurrentTab('produto');
-    }
-  }, [isOpen, productToEdit]);
-
-  useEffect(() => {
-    const cstValue = formData.cfop === '5405' ? 'Substituicao Tributaria' : 'Tributado';
-    if (formData.cst !== cstValue) {
-      setFormData(prev => ({
-        ...prev,
-        cst: cstValue
-      }));
-    }
-  }, [formData.cfop]);
-
   useEffect(() => {
     if (isOpen) {
       loadUnitsAndGroups();
@@ -142,7 +107,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
           cfop: productToEdit.cfop,
           status: productToEdit.status
         });
-        loadStockMovements(productToEdit.id);
       } else {
         setFormData({
           code: '',
@@ -161,7 +125,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
           cfop: '5405',
           status: 'active'
         });
-        setMovimentacoes([]);
       }
     }
   }, [isOpen, productToEdit]);
@@ -170,40 +133,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     const unit = units.find(u => u.id === formData.unit_id);
     setSelectedUnit(unit || null);
   }, [formData.unit_id, units]);
-
-  const loadStockMovements = async (productId: string) => {
-    try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        throw new Error('Usuário não autenticado');
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError || !profile?.company_id) {
-        throw new Error('Empresa não encontrada');
-      }
-
-      const { data: movements, error: movementsError } = await supabase
-        .from('product_stock_movements')
-        .select('*')
-        .eq('product_id', productId)
-        .eq('company_id', profile.company_id)
-        .order('date', { ascending: false });
-
-      if (movementsError) throw movementsError;
-
-      setMovimentacoes(movements || []);
-    } catch (error) {
-      console.error('Erro ao carregar movimentações:', error);
-      toast.error('Erro ao carregar movimentações de estoque');
-    }
-  };
 
   const loadUnitsAndGroups = async () => {
     try {
@@ -225,6 +154,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         throw new Error('Empresa não encontrada');
       }
 
+      // First, get system units
       const { data: systemUnits, error: systemUnitsError } = await supabase
         .from('system_units')
         .select('*')
@@ -232,6 +162,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
       if (systemUnitsError) throw systemUnitsError;
 
+      // Then, get company units
       const { data: companyUnits, error: companyUnitsError } = await supabase
         .from('product_units')
         .select('*')
@@ -240,6 +171,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
       if (companyUnitsError) throw companyUnitsError;
 
+      // Combine and mark system units
       const allUnits = [
         ...systemUnits.map(unit => ({ ...unit, is_system: true })),
         ...companyUnits.map(unit => ({ ...unit, is_system: false }))
@@ -247,6 +179,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
       setUnits(allUnits);
 
+      // Get groups
       const { data: groups, error: groupsError } = await supabase
         .from('product_groups')
         .select('*')
@@ -264,203 +197,23 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    
-    if (name === 'code') {
-      setCodeError(null);
-    }
-    
-    if (name === 'barcode') {
-      setBarcodeError(null);
-    }
-
-    if (name === 'cfop') {
-      const cstValue = value === '5405' ? 'Substituicao Tributaria' : 'Tributado';
-      setFormData(prev => ({ 
-        ...prev, 
-        [name]: value,
-        cst: cstValue 
-      }));
-      return;
-    }
-    
-    if (name === 'cost_price') {
-      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
-      
-      setFormData(prev => {
-        const newData = { ...prev, [name]: numericValue };
-        
-        if (newData.cost_price && newData.profit_margin) {
-          const custo = parseFloat(newData.cost_price);
-          const margem = parseFloat(newData.profit_margin);
-          if (!isNaN(custo) && !isNaN(margem)) {
-            const precoVenda = custo * (1 + margem / 100);
-            newData.selling_price = precoVenda.toFixed(2);
-          }
-        }
-        
-        return newData;
-      });
-    } else if (name === 'profit_margin') {
-      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
-      
-      setFormData(prev => {
-        const newData = { ...prev, [name]: numericValue };
-        
-        if (newData.cost_price && newData.profit_margin) {
-          const custo = parseFloat(newData.cost_price);
-          const margem = parseFloat(newData.profit_margin);
-          if (!isNaN(custo) && !isNaN(margem)) {
-            const precoVenda = custo * (1 + margem / 100);
-            newData.selling_price = precoVenda.toFixed(2);
-          }
-        }
-        
-        return newData;
-      });
-    } else if (name === 'selling_price') {
-      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
-      
-      setFormData(prev => {
-        const newData = { ...prev, [name]: numericValue };
-        
-        if (newData.cost_price && newData.selling_price) {
-          const custo = parseFloat(newData.cost_price);
-          const venda = parseFloat(newData.selling_price);
-          
-          if (!isNaN(custo) && !isNaN(venda) && custo > 0) {
-            const margem = ((venda / custo) - 1) * 100;
-            newData.profit_margin = margem.toFixed(2);
-          }
-        }
-        
-        return newData;
-      });
-    } else if (name === 'ncm') {
-      const validValue = value.replace(/[^0-9.]/g, '');
-      setFormData(prev => ({ ...prev, [name]: validValue }));
-    } else if (name === 'stock' && !productToEdit) {
-      let numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
-      
-      // Only force integer values for non-KG units
-      if (selectedUnit && selectedUnit.code !== 'KG') {
-        numericValue = String(Math.floor(parseFloat(numericValue) || 0));
-      }
-      
-      setFormData(prev => ({ ...prev, [name]: numericValue }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
-  };
-
-  const handleMovimentacaoChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    
-    if (name === 'quantity') {
-      let numericValue = parseFloat(value) || 0;
-      
-      // Only force integer values for non-KG units
-      if (selectedUnit && selectedUnit.code !== 'KG') {
-        numericValue = Math.floor(numericValue);
-      }
-      
-      setNovaMovimentacao(prev => ({
-        ...prev,
-        [name]: numericValue
-      }));
-    } else {
-      setNovaMovimentacao(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
-  };
-
-  const handleAddMovimentacao = async () => {
-    if (novaMovimentacao.quantity <= 0) {
-      return;
-    }
-
-    try {
-      if (!productToEdit) {
-        toast.error('É necessário salvar o produto antes de adicionar movimentações');
-        return;
-      }
-
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        throw new Error('Usuário não autenticado');
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError || !profile?.company_id) {
-        throw new Error('Empresa não encontrada');
-      }
-
-      const { data: movement, error: movementError } = await supabase
-        .from('product_stock_movements')
-        .insert({
-          product_id: productToEdit.id,
-          company_id: profile.company_id,
-          type: novaMovimentacao.type,
-          quantity: novaMovimentacao.quantity,
-          date: novaMovimentacao.date,
-          observation: novaMovimentacao.observation,
-          created_by: user.id
-        })
-        .select()
-        .single();
-
-      if (movementError) throw movementError;
-
-      const newStock = novaMovimentacao.type === 'entrada' 
-        ? productToEdit.stock + novaMovimentacao.quantity
-        : productToEdit.stock - novaMovimentacao.quantity;
-
-      const { error: updateError } = await supabase
-        .from('products')
-        .update({ stock: newStock })
-        .eq('id', productToEdit.id);
-
-      if (updateError) throw updateError;
-
-      toast.success('Movimentação de estoque registrada com sucesso!');
-      
-      await loadStockMovements(productToEdit.id);
-
-      setNovaMovimentacao({
-        id: '',
-        type: 'entrada',
-        quantity: 0,
-        date: new Date().toISOString().split('T')[0],
-        observation: '',
-        created_at: new Date().toISOString()
-      });
-
-    } catch (error: any) {
-      console.error('Erro ao registrar movimentação:', error);
-      toast.error('Erro ao registrar movimentação de estoque');
-    }
-  };
-
-  const calculateTotalBalance = () => {
-    return movimentacoes.reduce((total, mov) => {
-      return total + (mov.type === 'entrada' ? mov.quantity : -mov.quantity);
-    }, 0);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (codeError || barcodeError) {
       toast.error('Por favor, corrija os erros antes de salvar');
+      return;
+    }
+
+    // Validate unit_id
+    if (!formData.unit_id) {
+      toast.error('Selecione uma unidade de medida');
+      return;
+    }
+
+    const selectedUnit = units.find(u => u.id === formData.unit_id);
+    if (!selectedUnit) {
+      toast.error('Unidade de medida inválida');
       return;
     }
     
@@ -553,6 +306,96 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
       toast.error('Erro ao salvar produto');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    if (name === 'code') {
+      setCodeError(null);
+    }
+    
+    if (name === 'barcode') {
+      setBarcodeError(null);
+    }
+
+    if (name === 'cfop') {
+      const cstValue = value === '5405' ? 'Substituicao Tributaria' : 'Tributado';
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: value,
+        cst: cstValue 
+      }));
+      return;
+    }
+    
+    if (name === 'cost_price') {
+      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      
+      setFormData(prev => {
+        const newData = { ...prev, [name]: numericValue };
+        
+        if (newData.cost_price && newData.profit_margin) {
+          const custo = parseFloat(newData.cost_price);
+          const margem = parseFloat(newData.profit_margin);
+          if (!isNaN(custo) && !isNaN(margem)) {
+            const precoVenda = custo * (1 + margem / 100);
+            newData.selling_price = precoVenda.toFixed(2);
+          }
+        }
+        
+        return newData;
+      });
+    } else if (name === 'profit_margin') {
+      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      
+      setFormData(prev => {
+        const newData = { ...prev, [name]: numericValue };
+        
+        if (newData.cost_price && newData.profit_margin) {
+          const custo = parseFloat(newData.cost_price);
+          const margem = parseFloat(newData.profit_margin);
+          if (!isNaN(custo) && !isNaN(margem)) {
+            const precoVenda = custo * (1 + margem / 100);
+            newData.selling_price = precoVenda.toFixed(2);
+          }
+        }
+        
+        return newData;
+      });
+    } else if (name === 'selling_price') {
+      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      
+      setFormData(prev => {
+        const newData = { ...prev, [name]: numericValue };
+        
+        if (newData.cost_price && newData.selling_price) {
+          const custo = parseFloat(newData.cost_price);
+          const venda = parseFloat(newData.selling_price);
+          
+          if (!isNaN(custo) && !isNaN(venda) && custo > 0) {
+            const margem = ((venda / custo) - 1) * 100;
+            newData.profit_margin = margem.toFixed(2);
+          }
+        }
+        
+        return newData;
+      });
+    } else if (name === 'ncm') {
+      const validValue = value.replace(/[^0-9.]/g, '');
+      setFormData(prev => ({ ...prev, [name]: validValue }));
+    } else if (name === 'stock' && !productToEdit) {
+      let numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      
+      // Only force integer values for non-KG units
+      if (selectedUnit && selectedUnit.code !== 'KG') {
+        numericValue = String(Math.floor(parseFloat(numericValue) || 0));
+      }
+      
+      setFormData(prev => ({ ...prev, [name]: numericValue }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
@@ -797,19 +640,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                 <Package size={20} />
                 Produto
               </button>
-              {productToEdit && (
-                <button
-                  onClick={() => setCurrentTab('estoque')}
-                  className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
-                    currentTab === 'estoque'
-                      ? 'text-blue-400 border-b-2 border-blue-400'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Archive size={20} />
-                  Estoque
-                </button>
-              )}
               <button
                 onClick={() => setCurrentTab('impostos')}
                 className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
@@ -865,8 +695,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                           type="button"
                           onClick={getNextAvailableCode}
                           className="absolute right-2 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-blue-400 transition-colors"
-                          title="Gerar pró
-                          ximo código disponível"
+                          title="Gerar próximo código disponível"
                           disabled={loadingNextCode}
                         >
                           {loadingNextCode ? (
@@ -1021,135 +850,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                     </div>
                   )}
                 </>
-              )}
-
-              {currentTab === 'estoque' && productToEdit && (
-                <div className="space-y-6">
-                  <div className="bg-slate-900 rounded-lg border border-slate-700 p-4">
-                    <h3 className="text-lg font-medium text-slate-200 mb-4">Nova Movimentação</h3>
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1">
-                          Tipo *
-                        </label>
-                        <select
-                          name="type"
-                          value={novaMovimentacao.type}
-                          onChange={handleMovimentacaoChange}
-                          className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        >
-                          <option value="entrada">Entrada</option>
-                          <option value="saida">Saída</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1">
-                          Quantidade *
-                        </label>
-                        <input
-                          type="number"
-                          name="quantity"
-                          value={novaMovimentacao.quantity}
-                          onChange={handleMovimentacaoChange}
-                          min="0.001"
-                          step={selectedUnit?.code === 'KG' ? '0.001' : '1'}
-                          className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder={selectedUnit?.code === 'KG' ? 'Digite o peso em quilogramas' : 'Digite a quantidade em unidades inteiras'}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1">
-                          Data *
-                        </label>
-                        <input
-                          type="date"
-                          name="date"
-                          value={novaMovimentacao.date}
-                          onChange={handleMovimentacaoChange}
-                          className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                    </div>
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Observação
-                      </label>
-                      <textarea
-                        name="observation"
-                        value={novaMovimentacao.observation}
-                        onChange={handleMovimentacaoChange}
-                        rows={2}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddMovimentacao}
-                      disabled={novaMovimentacao.quantity <= 0}
-                      className="w-full bg-blue-500 hover:bg-blue-400 text-white py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Adicionar Movimentação
-                    </button>
-                  </div>
-
-                  <div className="bg-slate-900 rounded-lg border border-slate-700">
-                    <div className="p-4 border-b border-slate-700">
-                      <h3 className="text-lg font-medium text-slate-200">
-                        Histórico de Movimentações
-                      </h3>
-                      <p className="text-sm text-slate-400 mt-1">
-                        Saldo total: <span className={`font-medium ${calculateTotalBalance() >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {calculateTotalBalance().toFixed(3)}
-                        </span>
-                      </p>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-slate-700">
-                            <th className="text-left p-4 text-slate-400 font-medium">Data</th>
-                            <th className="text-left p-4 text-slate-400 font-medium">Tipo</th>
-                            <th className="text-right p-4 text-slate-400 font-medium">Quantidade</th>
-                            <th className="text-left p-4 text-slate-400 font-medium">Observação</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {movimentacoes.map((mov) => (
-                            <tr key={mov.id} className="border-b border-slate-700">
-                              <td className="p-4 text-slate-200">
-                                {new Date(mov.date).toLocaleDateString('pt-BR')}
-                              </td>
-                              <td className="p-4">
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  mov.type === 'entrada' 
-                                    ? 'bg-green-500/10 text-green-500' 
-                                    : 'bg-red-500/10 text-red-400'
-                                }`}>
-                                  {mov.type === 'entrada' ? 'Entrada' : 'Saída'}
-                                </span>
-                              </td>
-                              <td className="p-4 text-right">
-                                <span className={mov.type === 'entrada' ? 'text-green-400' : 'text-red-400'}>
-                                  {mov.type === 'entrada' ? '+' : '-'}{mov.quantity.toFixed(3)}
-                                </span>
-                              </td>
-                              <td className="p-4 text-slate-200">{mov.observation}</td>
-                            </tr>
-                          ))}
-                          {movimentacoes.length === 0 && (
-                            <tr>
-                              <td colSpan={4} className="p-4 text-center text-slate-400">
-                                Nenhuma movimentação encontrada
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
               )}
 
               {currentTab === 'impostos' && (
