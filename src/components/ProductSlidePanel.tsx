@@ -96,10 +96,10 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
           name: productToEdit.name,
           unit_id: productToEdit.unit_id,
           group_id: productToEdit.group_id || '',
-          cost_price: productToEdit.cost_price.toString(),
-          profit_margin: productToEdit.profit_margin.toString(),
-          selling_price: productToEdit.selling_price.toString(),
-          stock: productToEdit.stock.toString(),
+          cost_price: productToEdit.cost_price.toString().replace('.', ','),
+          profit_margin: productToEdit.profit_margin.toString().replace('.', ','),
+          selling_price: productToEdit.selling_price.toString().replace('.', ','),
+          stock: productToEdit.stock.toString().replace('.', ','),
           cst: productToEdit.cst,
           pis: productToEdit.pis,
           cofins: productToEdit.cofins,
@@ -108,12 +108,13 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
           status: productToEdit.status
         });
       } else {
+        // Configuração padrão para novo produto
         setFormData({
-          code: '',
+          code: '',  // Será preenchido pela função loadDefaultValues
           barcode: '',
           name: '',
-          unit_id: '',
-          group_id: '',
+          unit_id: '',  // Será preenchido pela função loadDefaultValues
+          group_id: '',  // Será preenchido pela função loadDefaultValues
           cost_price: '',
           profit_margin: '',
           selling_price: '',
@@ -121,10 +122,15 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
           cst: 'Substituicao Tributaria',
           pis: '49- Outras operacoes de saida',
           cofins: '49- Outras operacoes de saida',
-          ncm: '',
+          ncm: '22021000',  // Valor padrão conforme solicitado
           cfop: '5405',
           status: 'active'
         });
+        
+        // Carregar valores padrão para novo produto
+        if (!productToEdit) {
+          loadDefaultValues();
+        }
       }
     }
   }, [isOpen, productToEdit]);
@@ -133,6 +139,40 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     const unit = units.find(u => u.id === formData.unit_id);
     setSelectedUnit(unit || null);
   }, [formData.unit_id, units]);
+
+  // Função para carregar valores padrão para um novo produto
+  const loadDefaultValues = async () => {
+    try {
+      // Obter o próximo código disponível
+      getNextAvailableCode();
+    } catch (error) {
+      console.error('Erro ao carregar valores padrão:', error);
+    }
+  };
+
+  // Efeito para definir valores padrão quando as unidades e grupos forem carregados
+  useEffect(() => {
+    // Se não estiver em modo de edição e tiver dados carregados
+    if (!productToEdit && !loadingData && units.length > 0 && groups.length > 0) {
+      // Configurar unidade padrão (UN)
+      const defaultUnit = units.find(unit => unit.code === 'UN');
+      if (defaultUnit) {
+        setFormData(prev => ({ ...prev, unit_id: defaultUnit.id }));
+      } else if (units.length > 0) {
+        // Se não encontrar UN, use a primeira unidade disponível
+        setFormData(prev => ({ ...prev, unit_id: units[0].id }));
+      }
+      
+      // Configurar grupo padrão (Diversos)
+      const defaultGroup = groups.find(group => group.name === 'Diversos');
+      if (defaultGroup) {
+        setFormData(prev => ({ ...prev, group_id: defaultGroup.id }));
+      } else if (groups.length > 0) {
+        // Se não encontrar Diversos, use o primeiro grupo disponível
+        setFormData(prev => ({ ...prev, group_id: groups[0].id }));
+      }
+    }
+  }, [productToEdit, loadingData, units, groups]);
 
   const loadUnitsAndGroups = async () => {
     try {
@@ -154,15 +194,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         throw new Error('Empresa não encontrada');
       }
 
-      // First, get system units
-      const { data: systemUnits, error: systemUnitsError } = await supabase
-        .from('system_units')
-        .select('*')
-        .order('name');
-
-      if (systemUnitsError) throw systemUnitsError;
-
-      // Then, get company units
+      // Buscar apenas as unidades da empresa (product_units)
       const { data: companyUnits, error: companyUnitsError } = await supabase
         .from('product_units')
         .select('*')
@@ -171,13 +203,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
       if (companyUnitsError) throw companyUnitsError;
 
-      // Combine and mark system units
-      const allUnits = [
-        ...systemUnits.map(unit => ({ ...unit, is_system: true })),
-        ...companyUnits.map(unit => ({ ...unit, is_system: false }))
-      ];
-
-      setUnits(allUnits);
+      // Configurar as unidades da empresa
+      setUnits(companyUnits || []);
 
       // Get groups
       const { data: groups, error: groupsError } = await supabase
@@ -236,6 +263,12 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         throw new Error('Empresa não encontrada');
       }
 
+      // Converte valores com vírgula para ponto antes de salvar
+      const cost_price = formData.cost_price.replace(',', '.');
+      const profit_margin = formData.profit_margin.replace(',', '.');
+      const selling_price = formData.selling_price.replace(',', '.');
+      const stock = formData.stock.replace(',', '.');
+
       const productData = {
         company_id: profile.company_id,
         code: formData.code,
@@ -243,9 +276,9 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
         name: formData.name,
         unit_id: formData.unit_id,
         group_id: formData.group_id || null,
-        cost_price: parseFloat(formData.cost_price),
-        profit_margin: parseFloat(formData.profit_margin),
-        selling_price: parseFloat(formData.selling_price),
+        cost_price: parseFloat(cost_price),
+        profit_margin: parseFloat(profit_margin),
+        selling_price: parseFloat(selling_price),
         stock: 0,
         cst: formData.cst,
         pis: formData.pis,
@@ -273,7 +306,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
 
         if (insertError) throw insertError;
 
-        const initialStock = parseFloat(formData.stock);
+        const initialStock = parseFloat(stock);
         if (initialStock > 0) {
           const { error: movementError } = await supabase
             .from('product_stock_movements')
@@ -309,6 +342,17 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     }
   };
 
+  // Função para formatar valores monetários no padrão brasileiro (usando vírgula)
+  const formatCurrency = (value: string): string => {
+    // Remove caracteres não numéricos e converte vírgula para ponto para cálculos internos
+    const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+    
+    // Formata o valor com 2 casas decimais e converte de volta para o formato brasileiro
+    return isNaN(parseFloat(numericValue)) 
+      ? ''  // Retorna vazio se não for um número válido
+      : parseFloat(numericValue).toFixed(2).replace('.', ',');  // Usa vírgula como separador decimal
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
@@ -331,52 +375,70 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     }
     
     if (name === 'cost_price') {
-      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      // Remove a formatação para manter apenas o valor numérico, mas mantém a vírgula como separador
+      const numericValue = value.replace(/[^0-9.,]/g, '');
       
       setFormData(prev => {
         const newData = { ...prev, [name]: numericValue };
         
         if (newData.cost_price && newData.profit_margin) {
-          const custo = parseFloat(newData.cost_price);
-          const margem = parseFloat(newData.profit_margin);
+          // Para cálculos, converte vírgula para ponto
+          const custoStr = newData.cost_price.replace(',', '.');
+          const margemStr = newData.profit_margin.replace(',', '.');
+          
+          const custo = parseFloat(custoStr);
+          const margem = parseFloat(margemStr);
+          
           if (!isNaN(custo) && !isNaN(margem)) {
             const precoVenda = custo * (1 + margem / 100);
-            newData.selling_price = precoVenda.toFixed(2);
+            // Formata no padrão brasileiro com vírgula
+            newData.selling_price = precoVenda.toFixed(2).replace('.', ',');
           }
         }
         
         return newData;
       });
     } else if (name === 'profit_margin') {
-      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      const numericValue = value.replace(/[^0-9.,]/g, '');
       
       setFormData(prev => {
         const newData = { ...prev, [name]: numericValue };
         
         if (newData.cost_price && newData.profit_margin) {
-          const custo = parseFloat(newData.cost_price);
-          const margem = parseFloat(newData.profit_margin);
+          // Para cálculos, converte vírgula para ponto
+          const custoStr = newData.cost_price.replace(',', '.');
+          const margemStr = newData.profit_margin.replace(',', '.');
+          
+          const custo = parseFloat(custoStr);
+          const margem = parseFloat(margemStr);
+          
           if (!isNaN(custo) && !isNaN(margem)) {
             const precoVenda = custo * (1 + margem / 100);
-            newData.selling_price = precoVenda.toFixed(2);
+            // Formata no padrão brasileiro com vírgula
+            newData.selling_price = precoVenda.toFixed(2).replace('.', ',');
           }
         }
         
         return newData;
       });
     } else if (name === 'selling_price') {
-      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      const numericValue = value.replace(/[^0-9.,]/g, '');
       
       setFormData(prev => {
         const newData = { ...prev, [name]: numericValue };
         
         if (newData.cost_price && newData.selling_price) {
-          const custo = parseFloat(newData.cost_price);
-          const venda = parseFloat(newData.selling_price);
+          // Para cálculos, converte vírgula para ponto
+          const custoStr = newData.cost_price.replace(',', '.');
+          const vendaStr = newData.selling_price.replace(',', '.');
+          
+          const custo = parseFloat(custoStr);
+          const venda = parseFloat(vendaStr);
           
           if (!isNaN(custo) && !isNaN(venda) && custo > 0) {
             const margem = ((venda / custo) - 1) * 100;
-            newData.profit_margin = margem.toFixed(2);
+            // Formata no padrão brasileiro com vírgula
+            newData.profit_margin = margem.toFixed(2).replace('.', ',');
           }
         }
         
@@ -386,11 +448,11 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
       const validValue = value.replace(/[^0-9.]/g, '');
       setFormData(prev => ({ ...prev, [name]: validValue }));
     } else if (name === 'stock' && !productToEdit) {
-      let numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
+      let numericValue = value.replace(/[^0-9.,]/g, '');
       
       // Only force integer values for non-KG units
       if (selectedUnit && selectedUnit.code !== 'KG') {
-        numericValue = String(Math.floor(parseFloat(numericValue) || 0));
+        numericValue = String(Math.floor(parseFloat(numericValue.replace(',', '.')) || 0));
       }
       
       setFormData(prev => ({ ...prev, [name]: numericValue }));
@@ -555,11 +617,10 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     const { name, value } = e.target;
     
     if (value) {
-      const numericValue = value.replace(/[^0-9.,]/g, '').replace(',', '.');
-      const formattedValue = parseFloat(numericValue).toFixed(2);
-      
-      if (!isNaN(parseFloat(formattedValue))) {
-        setFormData(prev => ({ ...prev, [name]: formattedValue }));
+      // Formata com o padrão brasileiro (vírgula como separador decimal)
+      const formatted = formatCurrency(value);
+      if (formatted) {
+        setFormData(prev => ({ ...prev, [name]: formatted }));
       }
     }
   };
@@ -640,6 +701,19 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                 <Package size={20} />
                 Produto
               </button>
+              {productToEdit && (
+                <button
+                  onClick={() => setCurrentTab('estoque')}
+                  className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
+                    currentTab === 'estoque'
+                      ? 'text-blue-400 border-b-2 border-blue-400'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Archive size={20} />
+                  Estoque
+                </button>
+              )}
               <button
                 onClick={() => setCurrentTab('impostos')}
                 className={`flex items-center gap-2 px-6 py-3 font-medium transition-colors ${
@@ -754,7 +828,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                       className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     >
-                      <option value="">Selecione uma unidade</option>
                       {units.map(unit => (
                         <option key={unit.id} value={unit.id}>
                           {unit.code} - {unit.name}
@@ -772,8 +845,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                       value={formData.group_id}
                       onChange={handleChange}
                       className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
                     >
-                      <option value="">Selecione um grupo</option>
                       {groups.map(group => (
                         <option key={group.id} value={group.id}>
                           {group.name}
@@ -849,6 +922,76 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                       )}
                     </div>
                   )}
+                </>
+              )}
+
+              {currentTab === 'estoque' && productToEdit && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Estoque Atual
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.stock}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled
+                    />
+                    <p className="mt-1 text-sm text-slate-400">
+                      O estoque é atualizado através dos movimentos de entrada e saída
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Unidade de Medida
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedUnit ? `${selectedUnit.code} - ${selectedUnit.name}` : ''}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled
+                    />
+                  </div>
+                  
+                  <div className="mt-4">
+                    <h3 className="text-lg font-medium text-slate-200 mb-3">Movimentações de Estoque</h3>
+                    <p className="text-slate-400 mb-4">
+                      Utilize as opções abaixo para gerenciar as movimentações de estoque deste produto.
+                      As movimentações afetam diretamente o estoque disponível para vendas.
+                    </p>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white py-3 px-4 rounded-lg transition-colors font-medium"
+                        onClick={() => {
+                          // Aqui normalmente teria a lógica para abrir um modal de entrada
+                          toast.info('Funcionalidade de entrada de estoque')
+                        }}
+                      >
+                        <span>Nova Entrada</span>
+                      </button>
+                      
+                      <button
+                        type="button"
+                        className="flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-white py-3 px-4 rounded-lg transition-colors font-medium"
+                        onClick={() => {
+                          // Aqui normalmente teria a lógica para abrir um modal de saída
+                          toast.info('Funcionalidade de saída de estoque')
+                        }}
+                      >
+                        <span>Nova Saída</span>
+                      </button>
+                    </div>
+                    
+                    <div className="mt-4 p-4 bg-slate-700/30 rounded-lg">
+                      <p className="text-slate-300 italic text-center">
+                        O histórico completo de movimentações pode ser acessado 
+                        através do módulo de Estoque no menu principal.
+                      </p>
+                    </div>
+                  </div>
                 </>
               )}
 

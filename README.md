@@ -91,6 +91,45 @@ O sistema utiliza autenticação via Supabase Auth com:
 - Interface responsiva e moderna
 - Feedback visual com toasts
 - Navegação intuitiva
+- Formatação monetária brasileira (usando vírgula como separador decimal)
+
+## ⚠️ Convenções e Padrões Importantes
+
+### Formatação Monetária Brasileira
+
+O sistema utiliza um padrão de formatação monetária adaptado para o mercado brasileiro, usando **vírgula como separador decimal** na interface de usuário enquanto mantém o formato internacional no banco de dados.
+
+**IMPORTANTE:** Esta implementação é intencional e não deve ser alterada. Ela garante a melhor experiência para usuários brasileiros sem comprometer a integridade dos dados.
+
+[Leia a documentação completa sobre a formatação monetária brasileira](./docs/formatacao-monetaria-brasileira.md)
+
+### Deploy em Produção
+
+Para realizar o deploy em produção, siga o processo documentado que inclui:
+- Geração de build otimizado com Vite
+- Configuração do servidor NGINX
+- Ajustes necessários nos arquivos estáticos
+- Verificação e solução de problemas comuns
+
+[Consulte o guia completo de deploy para produção](./docs/deploy-producao.md)
+
+## 🌐 Ambientes
+
+O sistema opera em dois ambientes principais:
+
+### Desenvolvimento
+```bash
+npm run dev
+```
+Inicia o servidor de desenvolvimento com hot-reload e funcionalidades para debugging.
+
+### Produção
+```bash
+npm run build
+```
+Gera arquivos estáticos otimizados na pasta `dist/` que devem ser copiados para o servidor web.
+
+Consulte o [guia de deploy](./docs/deploy-producao.md) para instruções detalhadas sobre como configurar o ambiente de produção.
 
 ## 🛠️ Desenvolvimento
 
