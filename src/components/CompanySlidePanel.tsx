@@ -169,12 +169,12 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       setLoading(true);
 
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
+
       if (userError || !user) {
         throw new Error('Usuário não autenticado');
       }
@@ -191,7 +191,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
             email: formData.email,
             whatsapp: formData.whatsapp,
             state_registration: formData.state_registration,
-            tax_regime: formData.tax_regime,
+            tax_regime: formData.tax_regime
           })
           .eq('id', formData.id);
 
@@ -211,9 +211,10 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           throw new Error('Erro ao criar empresa: ' + (companyError?.message || 'Dados não retornados'));
         }
 
+        // Vincular empresa ao perfil do usuário
         const { error: profileError } = await supabase
           .from('profiles')
-          .update({ 
+          .update({
             company_id: company.id,
             status_cad_empresa: 'S'
           })
@@ -226,12 +227,75 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
             .from('companies')
             .delete()
             .eq('id', company.id);
-          
+
           throw new Error('Erro ao vincular empresa ao perfil: ' + profileError.message);
         }
 
+        // Obter unidades de medida do sistema
+        const { data: systemUnits, error: systemUnitsError } = await supabase
+          .from('system_units')
+          .select('*');
+
+        if (systemUnitsError) {
+          throw new Error('Erro ao obter unidades de medida do sistema: ' + systemUnitsError.message);
+        }
+
+        // Criar unidades de medida para a empresa baseadas nas unidades do sistema
+        if (systemUnits && systemUnits.length > 0) {
+          const companyUnits = systemUnits.map(unit => ({
+            company_id: company.id,
+            code: unit.code,
+            name: unit.name,
+            description: unit.description
+          }));
+
+          const { error: unitsError } = await supabase
+            .from('product_units')
+            .insert(companyUnits);
+
+          if (unitsError) {
+            console.error('Erro ao criar unidades de medida:', unitsError);
+            // Vamos analisar o erro para mostrar mensagens mais específicas
+            if (unitsError.code === '23505') { // código para violação de chave única/duplicada
+              console.log('Unidades já existem - ignorando erro');
+              // Não mostramos aviso, pois isso é normal se as unidades já existirem
+            } else {
+              // Para outros erros, mostramos a mensagem de aviso
+              toast.warning('Empresa criada, mas houve um erro ao configurar unidades de medida');
+            }
+          }
+        }
+
+        // Criar grupo padrão "Diversos" para a empresa
+        const { error: groupError } = await supabase
+          .from('product_groups')
+          .insert({
+            company_id: company.id,
+            name: 'Diversos',
+            description: 'Grupo padrão para itens diversos'
+          });
+
+        if (groupError) {
+          console.error('Erro ao criar grupo padrão:', groupError);
+          
+          // Verificar se o erro é de chave duplicada (grupo já existe)
+          if (groupError.code === '23505') {
+            console.log('Grupo já existe - ignorando erro');
+            // Não mostramos aviso, pois isso é normal se o grupo já existir
+          } else {
+            // Para outros erros, mostramos a mensagem de aviso
+            toast.warning('Empresa criada, mas houve um erro ao configurar o grupo padrão');
+          }
+        }
+
+        // Atualize o estado local para evitar o bloqueio do painel
+        setIsEditing(true);
+        
+        // Atualize a página para que o Dashboard atualize o companyRegistrationStatus
         toast.success('Empresa cadastrada com sucesso!');
-        onClose();
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500); // Espere um momento para o toast ser visto
       }
     } catch (error: any) {
       console.error('Erro completo:', error);

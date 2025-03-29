@@ -70,7 +70,14 @@ export default function Register() {
         'Cadastro realizado com sucesso! Por favor, verifique seu e-mail para confirmar sua conta.',
         { autoClose: 8000 }
       );
-      navigate('/login');
+      // Navegar para a página de login com um indicador de que o usuário acabou de se registrar
+      // e incluir o email para preencher automaticamente o campo
+      navigate('/login', { 
+        state: { 
+          justRegistered: true,
+          email: formData.email 
+        } 
+      });
     } catch (error: any) {
       console.error('Erro completo:', error);
       toast.error(

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -13,12 +13,14 @@ import Grupo from './pages/Grupo';
 import Clientes from './pages/Clientes';
 import PasswordRecovery from './pages/PasswordRecovery';
 import ResetPassword from './pages/ResetPassword';
+import ResendConfirmation from './pages/ResendConfirmation';
+import ManualConfirmation from './pages/ManualConfirmation';
 import { handleAuthRedirect } from './lib/supabase';
 import { AIChat } from './components/AIChat';
 
 function AIChatWrapper() {
   const location = useLocation();
-  const publicRoutes = ['/', '/login', '/register', '/password-recovery', '/reset-password'];
+  const publicRoutes = ['/', '/login', '/register', '/password-recovery', '/reset-password', '/resend-confirmation', '/manual-confirmation'];
   
   if (publicRoutes.includes(location.pathname)) {
     return null;
@@ -66,6 +68,8 @@ function App() {
         <Route path="/clientes" element={<Clientes />} />
         <Route path="/password-recovery" element={<PasswordRecovery />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/resend-confirmation" element={<ResendConfirmation />} />
+        <Route path="/manual-confirmation" element={<ManualConfirmation />} />
         <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
       <AIChatWrapper />
