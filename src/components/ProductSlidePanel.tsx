@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X as XMarkIcon, Loader2, Package, Archive, Calculator, Shuffle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
+import { StockMovementModal } from './StockMovementModal';
 
 interface ProductSlidePanelProps {
   isOpen: boolean;
@@ -68,6 +69,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
   const [units, setUnits] = useState<Unit[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
+  const [showEntryModal, setShowEntryModal] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
   const [formData, setFormData] = useState<ProductFormData>({
     code: '',
     barcode: '',
@@ -148,6 +151,14 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
     } catch (error) {
       console.error('Erro ao carregar valores padrão:', error);
     }
+  };
+  
+  // Atualiza o estoque após movimentações
+  const handleStockUpdated = (newStock: number) => {
+    setFormData(prev => ({
+      ...prev,
+      stock: newStock.toString().replace('.', ',')
+    }));
   };
 
   // Efeito para definir valores padrão quando as unidades e grupos forem carregados
@@ -965,10 +976,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                       <button
                         type="button"
                         className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white py-3 px-4 rounded-lg transition-colors font-medium"
-                        onClick={() => {
-                          // Aqui normalmente teria a lógica para abrir um modal de entrada
-                          toast.info('Funcionalidade de entrada de estoque')
-                        }}
+                        onClick={() => setShowEntryModal(true)}
                       >
                         <span>Nova Entrada</span>
                       </button>
@@ -976,10 +984,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                       <button
                         type="button"
                         className="flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-white py-3 px-4 rounded-lg transition-colors font-medium"
-                        onClick={() => {
-                          // Aqui normalmente teria a lógica para abrir um modal de saída
-                          toast.info('Funcionalidade de saída de estoque')
-                        }}
+                        onClick={() => setShowExitModal(true)}
                       >
                         <span>Nova Saída</span>
                       </button>
@@ -992,6 +997,34 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSli
                       </p>
                     </div>
                   </div>
+                  
+                  {/* Modal de Entrada de Estoque */}
+                  {productToEdit && showEntryModal && (
+                    <StockMovementModal
+                      isOpen={showEntryModal}
+                      onClose={() => setShowEntryModal(false)}
+                      productId={productToEdit.id}
+                      productName={formData.name}
+                      currentStock={parseFloat(formData.stock.replace(',', '.'))}
+                      unitCode={selectedUnit?.code || ''}
+                      movementType="entrada"
+                      onStockUpdated={handleStockUpdated}
+                    />
+                  )}
+                  
+                  {/* Modal de Saída de Estoque */}
+                  {productToEdit && showExitModal && (
+                    <StockMovementModal
+                      isOpen={showExitModal}
+                      onClose={() => setShowExitModal(false)}
+                      productId={productToEdit.id}
+                      productName={formData.name}
+                      currentStock={parseFloat(formData.stock.replace(',', '.'))}
+                      unitCode={selectedUnit?.code || ''}
+                      movementType="saida"
+                      onStockUpdated={handleStockUpdated}
+                    />
+                  )}
                 </>
               )}
 
