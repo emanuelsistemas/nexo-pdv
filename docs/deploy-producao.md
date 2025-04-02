@@ -1,6 +1,6 @@
 # Processo de Deploy para Produção
 
-Este documento detalha o processo completo de deploy do Nexo PDV para o ambiente de produção.
+Este documento detalha o processo completo de deploy do Nenxo PDV para o ambiente de produção.
 
 ## Visão Geral
 
@@ -15,7 +15,7 @@ Para gerar os arquivos de build otimizados para produção:
 
 ```bash
 # Na raiz do projeto
-cd /root/nexo-pdv
+cd /root/ema-software/nenxo-pdv
 npm run build
 ```
 
@@ -46,7 +46,7 @@ Os arquivos do site são servidos a partir de:
 sudo mkdir -p /var/www/html/nexopdv
 
 # Copiar todos os arquivos do build
-sudo cp -r /root/nexo-pdv/dist/* /var/www/html/nexopdv/
+sudo cp -r /root/ema-software/nenxo-pdv/dist/* /var/www/html/nexopdv/
 ```
 
 ### 3.2 Ajustar Caminhos no HTML (se necessário)

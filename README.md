@@ -27,7 +27,7 @@ Sistema de PDV (Ponto de Venda) moderno e intuitivo desenvolvido com React, Tail
 1. Clone o repositório:
 ```bash
 git clone https://github.com/seu-usuario/nexo-pdv.git
-cd nexo-pdv
+cd nenxo-pdv
 ```
 
 2. Instale as dependências:
