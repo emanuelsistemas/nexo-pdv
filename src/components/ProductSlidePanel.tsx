@@ -195,15 +195,42 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
           quantity,
           date,
           observation,
-          created_by,
-          profiles(email, name)
+          created_by
         `)
         .eq('product_id', productId)
         .order('date', { ascending: false });
       
       if (error) throw error;
       
-      setStockMovements(data || []);
+      // Agora vamos buscar os dados dos usuários para cada movimentação
+      if (data && data.length > 0) {
+        // Obtém todos os IDs de usuários únicos
+        const userIds = [...new Set(data.map(m => m.created_by))];
+        
+        // Busca informações dos usuários
+        const { data: usersData, error: usersError } = await supabase
+          .from('profiles')
+          .select('id, email, name')
+          .in('id', userIds);
+        
+        if (!usersError && usersData) {
+          // Cria um mapa de usuários para referência rápida
+          const usersMap = new Map(usersData.map(u => [u.id, u]));
+          
+          // Associa os dados de usuário a cada movimentação
+          const enhancedData = data.map(movement => ({
+            ...movement,
+            user: usersMap.get(movement.created_by) || null
+          }));
+          
+          setStockMovements(enhancedData);
+        } else {
+          // Mesmo se não conseguir dados dos usuários, continua com as movimentações
+          setStockMovements(data);
+        }
+      } else {
+        setStockMovements([]);
+      }
     } catch (error) {
       console.error('Erro ao carregar movimentações de estoque:', error);
       toast.error('Erro ao carregar histórico de movimentações');
@@ -1088,7 +1115,7 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
                                     })}
                                   </td>
                                   <td className="p-3 text-sm text-slate-200">
-                                    {movement.profiles?.name || movement.profiles?.email || 'Sistema'}
+                                    {movement.user?.name || movement.user?.email || 'Sistema'}
                                   </td>
                                   <td className="p-3 text-sm text-slate-200">
                                     {movement.observation || '-'}
