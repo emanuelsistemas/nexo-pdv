@@ -28,6 +28,7 @@ export default function Register() {
     try {
       setLoading(true);
 
+      // Tenta criar o usuário - o Supabase já verifica se o email existe
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -39,17 +40,42 @@ export default function Register() {
       });
 
       if (authError) {
-        if (authError.message.includes('already registered')) {
+        // Tratamento específico para cada tipo de erro
+        if (authError.message.includes('already registered') || 
+            authError.message.includes('already been registered')) {
           toast.error('Este e-mail já está cadastrado. Por favor, faça login ou use outro e-mail.');
           return;
         }
-        throw authError;
+
+        switch (authError.message) {
+          case 'Password should be at least 6 characters':
+            toast.error('A senha deve ter pelo menos 6 caracteres.');
+            break;
+          case 'Unable to validate email address: invalid format':
+            toast.error('O e-mail informado é inválido. Por favor, verifique e tente novamente.');
+            break;
+          case 'Password is too weak':
+            toast.error('A senha é muito fraca. Use uma combinação de letras, números e caracteres especiais.');
+            break;
+          case 'Rate limit exceeded':
+            toast.error('Muitas tentativas de cadastro. Por favor, aguarde alguns minutos e tente novamente.');
+            break;
+          default:
+            console.error('Erro detalhado:', authError);
+            toast.error('Erro ao criar usuário. Por favor, tente novamente.');
+        }
+        return;
       }
 
       if (!authData.user) {
-        throw new Error('Erro ao criar usuário');
+        toast.error('Erro ao criar usuário. Por favor, tente novamente.');
+        return;
       }
 
+      // Aguarda um pequeno intervalo para garantir que o usuário foi criado
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Tenta criar o perfil
       const { error: profileError } = await supabase
         .from('profiles')
         .insert([
@@ -62,16 +88,37 @@ export default function Register() {
 
       if (profileError) {
         console.error('Erro ao criar perfil:', profileError);
-        await supabase.auth.admin.deleteUser(authData.user.id);
-        throw new Error('Erro ao criar perfil do usuário');
+        
+        // Tratamento específico para erros de perfil
+        switch (profileError.code) {
+          case '23505': // Unique violation
+            toast.error('Este e-mail já está cadastrado. Por favor, faça login ou use outro e-mail.');
+            break;
+          case '23503': // Foreign key violation
+            toast.error('Erro ao criar perfil. Por favor, tente novamente em alguns instantes.');
+            break;
+          case '23502': // Not null violation
+            toast.error('Dados incompletos. Por favor, preencha todos os campos obrigatórios.');
+            break;
+          default:
+            toast.error('Erro ao criar perfil. Por favor, tente novamente.');
+        }
+
+        // Em caso de erro no perfil, não podemos fazer nada além de informar o usuário
+        // para tentar fazer login normalmente, já que o usuário foi criado
+        toast.info(
+          'Se o problema persistir, tente fazer login normalmente ou entre em contato com o suporte.',
+          { autoClose: 8000 }
+        );
+        return;
       }
 
       toast.success(
         'Cadastro realizado com sucesso! Por favor, verifique seu e-mail para confirmar sua conta.',
         { autoClose: 8000 }
       );
+
       // Navegar para a página de login com um indicador de que o usuário acabou de se registrar
-      // e incluir o email para preencher automaticamente o campo
       navigate('/login', { 
         state: { 
           justRegistered: true,
@@ -80,11 +127,15 @@ export default function Register() {
       });
     } catch (error: any) {
       console.error('Erro completo:', error);
-      toast.error(
-        error.message === 'Erro ao criar perfil do usuário'
-          ? 'Erro ao criar sua conta. Por favor, tente novamente.'
-          : 'Erro no servidor. Por favor, tente novamente mais tarde.'
-      );
+      
+      // Mensagens de erro mais amigáveis e específicas
+      if (error.message?.includes('network')) {
+        toast.error('Erro de conexão. Por favor, verifique sua internet e tente novamente.');
+      } else if (error.message?.includes('timeout')) {
+        toast.error('O servidor está demorando para responder. Por favor, tente novamente em alguns instantes.');
+      } else {
+        toast.error('Erro ao criar usuário. Por favor, tente novamente.');
+      }
     } finally {
       setLoading(false);
     }

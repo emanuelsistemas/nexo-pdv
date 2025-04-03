@@ -1,6 +1,7 @@
 import React, { useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { ToastContainer } from 'react-toastify';
+import { ToastContainer, toast } from 'react-toastify';
+import { Copy } from 'lucide-react';
 import 'react-toastify/dist/ReactToastify.css';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -17,6 +18,41 @@ import ResendConfirmation from './pages/ResendConfirmation';
 import ManualConfirmation from './pages/ManualConfirmation';
 import { handleAuthRedirect } from './lib/supabase';
 import { AIChat } from './components/AIChat';
+
+// Override default toast error configuration
+const toastErrorConfig = {
+  autoClose: 8000, // 8 seconds
+  closeButton: true,
+  closeOnClick: false,
+  draggable: false,
+  icon: '❌',
+  // Custom render function to add copy button
+  render: (props: any) => (
+    <div className="flex items-start gap-3">
+      <div className="flex-1 break-all">{props.children}</div>
+      <button
+        onClick={() => {
+          navigator.clipboard.writeText(typeof props.children === 'string' ? props.children : props.children.toString());
+          toast.info('Mensagem copiada!', { 
+            autoClose: 2000,
+            icon: '✓'
+          });
+        }}
+        className="shrink-0 flex items-center gap-1.5 px-2 py-1 bg-white/10 hover:bg-white/20 rounded transition-colors text-xs"
+        title="Copiar mensagem"
+      >
+        <Copy size={14} />
+        <span>Copiar</span>
+      </button>
+    </div>
+  )
+};
+
+// Override the default toast.error function
+const originalError = toast.error;
+toast.error = (message, options = {}) => {
+  return originalError(message, { ...toastErrorConfig, ...options });
+};
 
 function AIChatWrapper() {
   const location = useLocation();
