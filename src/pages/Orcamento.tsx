@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, FileText, Calendar, Filter, X, ChevronLeft, ChevronRight, MoreVertical, Printer, Trash2, Copy, Edit } from 'lucide-react';
+import { Search, Plus, FileText, Calendar, Filter, X, ChevronLeft, ChevronRight, MoreVertical, Printer, Trash2, Copy, Edit, ArrowUpDown, ArrowDownAZ, ArrowUpAZ } from 'lucide-react';
 import { Logo } from '../components/Logo';
 
 export default function Orcamento() {
@@ -10,9 +10,22 @@ export default function Orcamento() {
   const [endDate, setEndDate] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: string) => {
+    // Se já estiver ordenando por este campo, inverte a direção
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Caso contrário, começa a ordenar por este campo em ordem ascendente
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   // Mock data for demonstration
-  const orcamentos = [
+  let orcamentos = [
     {
       id: '1',
       numero: '0001',
@@ -50,6 +63,51 @@ export default function Orcamento() {
       items: 2
     }
   ];
+
+  // Ordenação
+  if (sortField) {
+    orcamentos = [...orcamentos].sort((a, b) => {
+      let valueA, valueB;
+
+      // Determinar quais valores comparar com base no campo de ordenação
+      switch (sortField) {
+        case 'numero':
+          valueA = parseInt(a.numero);
+          valueB = parseInt(b.numero);
+          break;
+        case 'cliente':
+          valueA = a.cliente.toLowerCase();
+          valueB = b.cliente.toLowerCase();
+          break;
+        case 'data':
+          // Convertendo data no formato DD/MM/YYYY para comparação
+          const [dayA, monthA, yearA] = a.data.split('/');
+          const [dayB, monthB, yearB] = b.data.split('/');
+          valueA = new Date(`${yearA}-${monthA}-${dayA}`);
+          valueB = new Date(`${yearB}-${monthB}-${dayB}`);
+          break;
+        case 'valor':
+          valueA = a.valor;
+          valueB = b.valor;
+          break;
+        case 'status':
+          valueA = a.status;
+          valueB = b.status;
+          break;
+        case 'items':
+          valueA = a.items;
+          valueB = b.items;
+          break;
+        default:
+          return 0;
+      }
+
+      // Compara os valores na direção apropriada
+      if (valueA < valueB) return sortDirection === 'asc' ? -1 : 1;
+      if (valueA > valueB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -193,12 +251,90 @@ export default function Orcamento() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-700">
-                  <th className="text-left p-4 text-slate-400 font-medium">Número</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Cliente</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Data</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Valor</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Status</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Itens</th>
+                  <th className="text-left p-4 text-slate-400 font-medium">
+                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('numero')}>
+                      Número
+                      {sortField === 'numero' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUpDown size={14} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                        )
+                      ) : (
+                        <ArrowUpDown size={14} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-left p-4 text-slate-400 font-medium">
+                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('cliente')}>
+                      Cliente
+                      {sortField === 'cliente' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowDownAZ size={16} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpAZ size={16} className="text-blue-400" />
+                        )
+                      ) : (
+                        <ArrowDownAZ size={16} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-left p-4 text-slate-400 font-medium">
+                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('data')}>
+                      Data
+                      {sortField === 'data' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUpDown size={14} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                        )
+                      ) : (
+                        <ArrowUpDown size={14} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-left p-4 text-slate-400 font-medium">
+                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('valor')}>
+                      Valor
+                      {sortField === 'valor' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUpDown size={14} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                        )
+                      ) : (
+                        <ArrowUpDown size={14} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-left p-4 text-slate-400 font-medium">
+                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('status')}>
+                      Status
+                      {sortField === 'status' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowDownAZ size={16} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpAZ size={16} className="text-blue-400" />
+                        )
+                      ) : (
+                        <ArrowDownAZ size={16} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-left p-4 text-slate-400 font-medium">
+                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('items')}>
+                      Itens
+                      {sortField === 'items' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUpDown size={14} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                        )
+                      ) : (
+                        <ArrowUpDown size={14} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
                   <th className="p-4 text-slate-400 font-medium w-[100px]">Ações</th>
                 </tr>
               </thead>

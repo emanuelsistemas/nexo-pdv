@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Plus, Package, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, ArrowUpDown, Tag, Loader2 } from 'lucide-react';
+import { Search, Plus, Package, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, ArrowUpDown, Tag, Loader2, ArrowDownAZ, ArrowUpAZ } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { ProductSlidePanel } from '../components/ProductSlidePanel';
 import { supabase } from '../lib/supabase';
@@ -41,9 +41,12 @@ export default function Produtos() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const [initialTabState, setInitialTabState] = useState<'produto' | 'estoque' | 'impostos'>('produto');
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
     loadProducts();
@@ -167,6 +170,13 @@ export default function Produtos() {
 
   const handleEditProduct = (product: Product) => {
     setProductToEdit(product);
+    setInitialTabState('produto');
+    setShowProductPanel(true);
+  };
+
+  const handleStockMovementClick = (product: Product) => {
+    setProductToEdit(product);
+    setInitialTabState('estoque');
     setShowProductPanel(true);
   };
 
@@ -214,7 +224,19 @@ export default function Produtos() {
     }
   };
 
-  const filteredProducts = products.filter(product => {
+  const handleSort = (field: string) => {
+    // Se já estiver ordenando por este campo, inverte a direção
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Caso contrário, começa a ordenar por este campo em ordem ascendente
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Primeiro filtra os produtos
+  let filteredProducts = products.filter(product => {
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch = 
       product.code.toLowerCase().includes(searchLower) ||
@@ -226,6 +248,52 @@ export default function Produtos() {
 
     return matchesSearch && matchesStatus && matchesGroup;
   });
+
+  // Depois ordena os produtos filtrados
+  if (sortField) {
+    filteredProducts = [...filteredProducts].sort((a, b) => {
+      let valueA, valueB;
+
+      // Determinar quais valores comparar com base no campo de ordenação
+      switch (sortField) {
+        case 'code':
+          valueA = parseInt(a.code) || 0;
+          valueB = parseInt(b.code) || 0;
+          break;
+        case 'name':
+          valueA = a.name.toLowerCase();
+          valueB = b.name.toLowerCase();
+          break;
+        case 'group':
+          valueA = (a.group_name || '').toLowerCase();
+          valueB = (b.group_name || '').toLowerCase();
+          break;
+        case 'cost_price':
+          valueA = a.cost_price;
+          valueB = b.cost_price;
+          break;
+        case 'selling_price':
+          valueA = a.selling_price;
+          valueB = b.selling_price;
+          break;
+        case 'stock':
+          valueA = a.stock;
+          valueB = b.stock;
+          break;
+        case 'status':
+          valueA = a.status;
+          valueB = b.status;
+          break;
+        default:
+          return 0;
+      }
+
+      // Compara os valores na direção apropriada
+      if (valueA < valueB) return sortDirection === 'asc' ? -1 : 1;
+      if (valueA > valueB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -350,14 +418,105 @@ export default function Produtos() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-700">
-                  <th className="text-left p-4 text-slate-400 font-medium">Código</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Nome</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Grupo</th>
+                  <th className="text-left p-4 text-slate-400 font-medium">
+                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('code')}>
+                      Código
+                      {sortField === 'code' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUpDown size={14} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                        )
+                      ) : (
+                        <ArrowUpDown size={14} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-left p-4 text-slate-400 font-medium">
+                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('name')}>
+                      Nome
+                      {sortField === 'name' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowDownAZ size={16} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpAZ size={16} className="text-blue-400" />
+                        )
+                      ) : (
+                        <ArrowDownAZ size={16} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-left p-4 text-slate-400 font-medium">
+                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('group')}>
+                      Grupo
+                      {sortField === 'group' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowDownAZ size={16} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpAZ size={16} className="text-blue-400" />
+                        )
+                      ) : (
+                        <ArrowDownAZ size={16} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
                   <th className="text-left p-4 text-slate-400 font-medium">Un.</th>
-                  <th className="text-right p-4 text-slate-400 font-medium">Preço Custo</th>
-                  <th className="text-right p-4 text-slate-400 font-medium">Preço Venda</th>
-                  <th className="text-right p-4 text-slate-400 font-medium">Estoque</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Status</th>
+                  <th className="text-right p-4 text-slate-400 font-medium">
+                    <div className="flex items-center justify-end gap-1 cursor-pointer" onClick={() => handleSort('cost_price')}>
+                      Preço Custo
+                      {sortField === 'cost_price' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUpDown size={14} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                        )
+                      ) : (
+                        <ArrowUpDown size={14} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-right p-4 text-slate-400 font-medium">
+                    <div className="flex items-center justify-end gap-1 cursor-pointer" onClick={() => handleSort('selling_price')}>
+                      Preço Venda
+                      {sortField === 'selling_price' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUpDown size={14} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                        )
+                      ) : (
+                        <ArrowUpDown size={14} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-right p-4 text-slate-400 font-medium">
+                    <div className="flex items-center justify-end gap-1 cursor-pointer" onClick={() => handleSort('stock')}>
+                      Estoque
+                      {sortField === 'stock' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUpDown size={14} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                        )
+                      ) : (
+                        <ArrowUpDown size={14} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-left p-4 text-slate-400 font-medium">
+                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('status')}>
+                      Status
+                      {sortField === 'status' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowDownAZ size={16} className="text-blue-400" />
+                        ) : (
+                          <ArrowUpAZ size={16} className="text-blue-400" />
+                        )
+                      ) : (
+                        <ArrowDownAZ size={16} className="opacity-40" />
+                      )}
+                    </div>
+                  </th>
                   <th className="p-4 text-slate-400 font-medium w-[100px]">Ações</th>
                 </tr>
               </thead>
@@ -401,21 +560,11 @@ export default function Produtos() {
                       <td className="p-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                          onClick={() => {
-                            setProductToEdit(product);
-                            setShowProductPanel(true);
-                          }}
+                          onClick={() => handleStockMovementClick(product)}
                           className="p-1 text-slate-400 hover:text-slate-200"
                           title="Movimentar estoque"
                         >
                           <ArrowUpDown size={16} />
-                          </button>
-                          <button
-                            onClick={() => {}}
-                            className="p-1 text-slate-400 hover:text-slate-200"
-                            title="Etiquetas"
-                          >
-                            <Tag size={16} />
                           </button>
                           <button
                             onClick={() => handleEditProduct(product)}
@@ -473,7 +622,7 @@ export default function Produtos() {
           setProductToEdit(null);
           loadProducts();
         }}
-        initialTab={productToEdit ? 'estoque' : 'produto'}
+        initialTab={initialTabState}
         productToEdit={productToEdit}
       />
 

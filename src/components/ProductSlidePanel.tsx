@@ -91,7 +91,9 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
   });
 
   useEffect(() => {
+    // Quando o painel é aberto, atualiza a aba atual para a aba inicial especificada
     if (isOpen) {
+      setCurrentTab(initialTab);
       loadUnitsAndGroups();
       if (productToEdit) {
         setFormData({
