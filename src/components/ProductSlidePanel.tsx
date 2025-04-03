@@ -164,6 +164,9 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
   
   // Atualiza o estoque após movimentações
   const handleStockUpdated = (newStock: number) => {
+    console.log(`Atualizando estoque no painel para: ${newStock}`);
+    
+    // Atualiza o estoque no formulário
     setFormData(prev => ({
       ...prev,
       stock: newStock.toString().replace('.', ',')
@@ -171,7 +174,55 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
     
     // Recarrega o histórico de movimentações quando uma nova movimentação é registrada
     if (productToEdit) {
+      console.log(`Recarregando movimentações para o produto: ${productToEdit.id}`);
       loadStockMovements(productToEdit.id);
+      
+      // Opcionalmente, verificar se o estoque foi atualizado no banco de dados
+      verifyStockUpdate(productToEdit.id, newStock);
+    }
+  };
+  
+  // Função para verificar se o estoque foi atualizado corretamente
+  const verifyStockUpdate = async (productId: string, expectedStock: number) => {
+    try {
+      // Busca o produto para verificar o estoque atual
+      const { data, error } = await supabase
+        .from('products')
+        .select('stock')
+        .eq('id', productId)
+        .single();
+        
+      if (error) {
+        console.error('Erro ao verificar estoque:', error);
+        return;
+      }
+      
+      // Verifica se o estoque no banco corresponde ao esperado
+      if (data && Math.abs(data.stock - expectedStock) > 0.001) {
+        console.warn(`Divergência de estoque: esperado ${expectedStock}, atual ${data.stock}`);
+        
+        // Se houver divergência, atualiza novamente
+        const { error: updateError } = await supabase
+          .from('products')
+          .update({ stock: expectedStock })
+          .eq('id', productId);
+          
+        if (updateError) {
+          console.error('Erro ao corrigir estoque:', updateError);
+        } else {
+          console.log(`Estoque corrigido para: ${expectedStock}`);
+          
+          // Atualiza o formulário com o valor correto
+          setFormData(prev => ({
+            ...prev,
+            stock: expectedStock.toString().replace('.', ',')
+          }));
+        }
+      } else {
+        console.log(`Estoque verificado: ${data?.stock}`);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar atualização de estoque:', error);
     }
   };
 

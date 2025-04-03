@@ -109,16 +109,20 @@ export function StockMovementModal({
       
       if (movementType === 'entrada') {
         newStock = currentStock + numericQuantity;
+        console.log(`Adicionando ${numericQuantity} ao estoque atual ${currentStock}. Novo estoque: ${newStock}`);
       } else {
         if (numericQuantity > currentStock) {
           toast.error('Quantidade de saída não pode ser maior que o estoque atual');
           return;
         }
         newStock = currentStock - numericQuantity;
+        console.log(`Subtraindo ${numericQuantity} do estoque atual ${currentStock}. Novo estoque: ${newStock}`);
       }
       
+      console.log(`Registrando movimento de ${movementType} para o produto ${productId}`);
+      
       // Inserir movimento no histórico
-      const { error: movementError } = await supabase
+      const { data: movementData, error: movementError } = await supabase
         .from('product_stock_movements')
         .insert({
           product_id: productId,
@@ -128,17 +132,30 @@ export function StockMovementModal({
           date: new Date().toISOString(),
           observation: observation || null,
           created_by: userId
-        });
+        })
+        .select();
         
-      if (movementError) throw movementError;
+      if (movementError) {
+        console.error('Erro ao inserir movimento:', movementError);
+        throw movementError;
+      }
+      
+      console.log(`Movimento registrado com sucesso:`, movementData);
+      console.log(`Atualizando estoque do produto ${productId} para ${newStock}`);
       
       // Atualizar estoque do produto
-      const { error: productError } = await supabase
+      const { data: updateData, error: productError } = await supabase
         .from('products')
         .update({ stock: newStock })
-        .eq('id', productId);
+        .eq('id', productId)
+        .select();
         
-      if (productError) throw productError;
+      if (productError) {
+        console.error('Erro ao atualizar estoque:', productError);
+        throw productError;
+      }
+      
+      console.log(`Estoque atualizado com sucesso:`, updateData);
       
       // Notificar o componente pai sobre a atualização do estoque
       onStockUpdated(newStock);
