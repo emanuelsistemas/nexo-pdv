@@ -72,6 +72,8 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [stockMovements, setStockMovements] = useState<any[]>([]);
+  const [loadingMovements, setLoadingMovements] = useState(false);
   const [formData, setFormData] = useState<ProductFormData>({
     code: '',
     barcode: '',
@@ -96,6 +98,10 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
       setCurrentTab(initialTab);
       loadUnitsAndGroups();
       if (productToEdit) {
+        // Se estiver abrindo na aba de estoque, carrega o histórico de movimentações
+        if (initialTab === 'estoque') {
+          loadStockMovements(productToEdit.id);
+        }
         setFormData({
           code: productToEdit.code,
           barcode: productToEdit.barcode || '',
@@ -162,6 +168,48 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
       ...prev,
       stock: newStock.toString().replace('.', ',')
     }));
+    
+    // Recarrega o histórico de movimentações quando uma nova movimentação é registrada
+    if (productToEdit) {
+      loadStockMovements(productToEdit.id);
+    }
+  };
+
+  // Função para carregar o histórico de movimentações de estoque
+  const loadStockMovements = async (productId: string) => {
+    try {
+      setLoadingMovements(true);
+      
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Buscar movimentações de estoque
+      const { data, error } = await supabase
+        .from('product_stock_movements')
+        .select(`
+          id,
+          type,
+          quantity,
+          date,
+          observation,
+          created_by,
+          profiles(email, name)
+        `)
+        .eq('product_id', productId)
+        .order('date', { ascending: false });
+      
+      if (error) throw error;
+      
+      setStockMovements(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar movimentações de estoque:', error);
+      toast.error('Erro ao carregar histórico de movimentações');
+    } finally {
+      setLoadingMovements(false);
+    }
   };
 
   // Efeito para definir valores padrão quando as unidades e grupos forem carregados
@@ -991,6 +1039,70 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
                       >
                         <span>Nova Saída</span>
                       </button>
+                    </div>
+
+                    {/* Histórico de Movimentações */}
+                    <div className="mt-6">
+                      <h4 className="text-md font-medium text-slate-200 mb-3">Histórico de Movimentações</h4>
+                      
+                      {loadingMovements ? (
+                        <div className="flex justify-center my-6">
+                          <Loader2 size={24} className="animate-spin text-slate-400" />
+                        </div>
+                      ) : stockMovements.length > 0 ? (
+                        <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+                          <table className="w-full">
+                            <thead>
+                              <tr className="border-b border-slate-700">
+                                <th className="p-3 text-left text-xs font-medium text-slate-400">Tipo</th>
+                                <th className="p-3 text-left text-xs font-medium text-slate-400">Quantidade</th>
+                                <th className="p-3 text-left text-xs font-medium text-slate-400">Data</th>
+                                <th className="p-3 text-left text-xs font-medium text-slate-400">Usuário</th>
+                                <th className="p-3 text-left text-xs font-medium text-slate-400">Observação</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {stockMovements.map((movement) => (
+                                <tr key={movement.id} className="border-b border-slate-700">
+                                  <td className="p-3 text-sm">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      movement.type === 'entrada'
+                                        ? 'bg-green-500/10 text-green-500'
+                                        : 'bg-amber-500/10 text-amber-500'
+                                    }`}>
+                                      {movement.type === 'entrada' ? 'Entrada' : 'Saída'}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-sm text-slate-200">
+                                    {selectedUnit?.code === 'KG' 
+                                      ? movement.quantity.toFixed(3) 
+                                      : movement.quantity.toFixed(0)} {selectedUnit?.code}
+                                  </td>
+                                  <td className="p-3 text-sm text-slate-200">
+                                    {new Date(movement.date).toLocaleDateString('pt-BR', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    })}
+                                  </td>
+                                  <td className="p-3 text-sm text-slate-200">
+                                    {movement.profiles?.name || movement.profiles?.email || 'Sistema'}
+                                  </td>
+                                  <td className="p-3 text-sm text-slate-200">
+                                    {movement.observation || '-'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-6 text-center text-slate-400">
+                          Nenhuma movimentação de estoque registrada para este produto.
+                        </div>
+                      )}
                     </div>
                     
                     <div className="mt-4 p-4 bg-slate-700/30 rounded-lg">
