@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Plus, Ruler, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, Ruler, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, Lock } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { UnitSlidePanel } from '../components/UnitSlidePanel';
 import { supabase } from '../lib/supabase';
@@ -69,12 +69,29 @@ export default function Unidade() {
     }
   };
 
+  // Função para verificar se é uma unidade do sistema
+  const isSystemUnit = (code: string) => {
+    return ['UN', 'KG'].includes(code);
+  };
+
   const handleEditUnit = (unit: Unit) => {
+    // Não permitir edição de unidades do sistema
+    if (isSystemUnit(unit.code)) {
+      toast.warn('Unidades do sistema não podem ser editadas');
+      return;
+    }
+    
     setUnitToEdit(unit);
     setShowUnitPanel(true);
   };
 
   const handleDeleteClick = (unit: Unit) => {
+    // Não permitir exclusão de unidades do sistema
+    if (isSystemUnit(unit.code)) {
+      toast.warn('Unidades do sistema não podem ser excluídas');
+      return;
+    }
+
     setUnitToDelete(unit);
     setShowDeleteConfirm(true);
   };
@@ -223,18 +240,29 @@ export default function Unidade() {
                     </td>
                     <td className="p-4">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleEditUnit(unit)}
-                          className="p-1 text-slate-400 hover:text-slate-200"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(unit)}
-                          className="p-1 text-red-400 hover:text-red-300"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {isSystemUnit(unit.code) ? (
+                          // Unidades do sistema têm ícone de cadeado
+                          <div className="p-1 text-slate-500 flex items-center gap-1" title="Unidade do sistema (não pode ser alterada)">
+                            <Lock size={14} />
+                            <span className="text-xs">Sistema</span>
+                          </div>
+                        ) : (
+                          // Unidades criadas pelo usuário podem ser editadas/excluídas
+                          <>
+                            <button
+                              onClick={() => handleEditUnit(unit)}
+                              className="p-1 text-slate-400 hover:text-slate-200"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(unit)}
+                              className="p-1 text-red-400 hover:text-red-300"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

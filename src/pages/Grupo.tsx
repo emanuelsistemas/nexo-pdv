@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Plus, Grid2X2, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, Grid2X2, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, Lock } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { GroupSlidePanel } from '../components/GroupSlidePanel';
 import { supabase } from '../lib/supabase';
@@ -68,12 +68,29 @@ export default function Grupo() {
     }
   };
 
+  // Função para verificar se é um grupo do sistema
+  const isSystemGroup = (name: string) => {
+    return name === 'Diversos';
+  };
+
   const handleEditGroup = (group: Group) => {
+    // Não permitir edição de grupos do sistema
+    if (isSystemGroup(group.name)) {
+      toast.warn('Grupos do sistema não podem ser editados');
+      return;
+    }
+    
     setGroupToEdit(group);
     setShowGroupPanel(true);
   };
 
   const handleDeleteClick = (group: Group) => {
+    // Não permitir exclusão de grupos do sistema
+    if (isSystemGroup(group.name)) {
+      toast.warn('Grupos do sistema não podem ser excluídos');
+      return;
+    }
+
     setGroupToDelete(group);
     setShowDeleteConfirm(true);
   };
@@ -217,18 +234,29 @@ export default function Grupo() {
                     </td>
                     <td className="p-4">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleEditGroup(group)}
-                          className="p-1 text-slate-400 hover:text-slate-200"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(group)}
-                          className="p-1 text-red-400 hover:text-red-300"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        {isSystemGroup(group.name) ? (
+                          // Grupos do sistema têm ícone de cadeado
+                          <div className="p-1 text-slate-500 flex items-center gap-1" title="Grupo do sistema (não pode ser alterado)">
+                            <Lock size={14} />
+                            <span className="text-xs">Sistema</span>
+                          </div>
+                        ) : (
+                          // Grupos criados pelo usuário podem ser editados/excluídos
+                          <>
+                            <button
+                              onClick={() => handleEditGroup(group)}
+                              className="p-1 text-slate-400 hover:text-slate-200"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(group)}
+                              className="p-1 text-red-400 hover:text-red-300"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
