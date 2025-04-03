@@ -25,7 +25,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'pkce',
+    flowType: 'pkce' as const, // Tipo explícito para evitar erro de TypeScript
     storage: localStorage,
     storageKey: 'supabase.auth.token',
     debug: import.meta.env.DEV

@@ -170,6 +170,36 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validação manual de todos os campos obrigatórios
+    if (!formData.segment) {
+      toast.error('Por favor, selecione um segmento.');
+      return;
+    }
+    if (!formData.document_number) {
+      toast.error(`Por favor, informe o ${formData.document_type}.`);
+      return;
+    }
+    if (!formData.legal_name) {
+      toast.error('Por favor, informe a Razão Social.');
+      return;
+    }
+    if (!formData.trade_name) {
+      toast.error('Por favor, informe o Nome Fantasia.');
+      return;
+    }
+    if (!formData.email) {
+      toast.error('Por favor, informe o Email.');
+      return;
+    }
+    if (!formData.whatsapp) {
+      toast.error('Por favor, informe o WhatsApp.');
+      return;
+    }
+    if (!formData.state_registration) {
+      toast.error('Por favor, informe a Inscrição Estadual.');
+      return;
+    }
+
     try {
       setLoading(true);
 
@@ -177,6 +207,23 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
 
       if (userError || !user) {
         throw new Error('Usuário não autenticado');
+      }
+
+      // Verificar se já existe uma empresa com o mesmo número de documento
+      if (!isEditing) {
+        const { data: existingCompany, error: checkError } = await supabase
+          .from('companies')
+          .select('id')
+          .eq('document_number', formData.document_number)
+          .maybeSingle();
+
+        if (checkError) {
+          console.error('Erro ao verificar documento:', checkError);
+        }
+
+        if (existingCompany) {
+          throw new Error(`Este ${formData.document_type} já está cadastrado no sistema. Por favor, utilize outro documento ou entre em contato com o suporte.`);
+        }
       }
 
       if (isEditing && formData.id) {
@@ -211,24 +258,47 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           throw new Error('Erro ao criar empresa: ' + (companyError?.message || 'Dados não retornados'));
         }
 
+        console.log('Empresa criada com sucesso:', company);
+        
         // Vincular empresa ao perfil do usuário
-        const { error: profileError } = await supabase
+        console.log('Tentando atualizar o perfil do usuário com company_id:', company.id);
+        console.log('User ID:', user.id);
+        
+        const { data: profileUpdateData, error: profileError } = await supabase
           .from('profiles')
           .update({
             company_id: company.id,
             status_cad_empresa: 'S'
           })
           .eq('id', user.id)
-          .select('*')
-          .single();
+          .select();
+          
+        console.log('Resultado da atualização do perfil:', profileUpdateData);
 
         if (profileError) {
+          console.error('Erro ao atualizar perfil:', profileError);
+          
+          // Tenta excluir a empresa se não conseguir vincular ao perfil
           await supabase
             .from('companies')
             .delete()
             .eq('id', company.id);
 
           throw new Error('Erro ao vincular empresa ao perfil: ' + profileError.message);
+        }
+        
+        // Verificação adicional para garantir que o perfil foi atualizado
+        const { data: checkProfile } = await supabase
+          .from('profiles')
+          .select('company_id, status_cad_empresa')
+          .eq('id', user.id)
+          .single();
+          
+        console.log('Verificação do perfil após atualização:', checkProfile);
+        
+        if (checkProfile?.company_id !== company.id || checkProfile?.status_cad_empresa !== 'S') {
+          console.error('Perfil não atualizado corretamente:', checkProfile);
+          toast.warning('Empresa criada, mas pode haver um problema com o registro. Por favor, verifique e tente novamente se necessário.');
         }
 
         // Obter unidades de medida do sistema
@@ -333,7 +403,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto p-6">
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form id="companyForm" onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
                   Segmento *
@@ -507,8 +577,8 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           <div className="p-6 border-t border-slate-700">
             <button
               type="submit"
+              form="companyForm"
               disabled={loading}
-              onClick={handleSubmit}
               className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white py-2.5 px-4 rounded-lg transition-all duration-200 font-medium shadow-lg shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (

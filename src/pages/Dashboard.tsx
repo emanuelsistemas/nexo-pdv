@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Cog, Users, FileBarChart2 } from 'lucide-react';
+import { useTheme } from '../App';
+import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Cog, Users, FileBarChart2, Moon, Sun } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import GridLayout from 'react-grid-layout';
@@ -25,6 +26,7 @@ function Dashboard() {
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [userName, setUserName] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -359,6 +361,21 @@ function Dashboard() {
                   >
                     <Settings size={16} />
                     Configurações
+                  </button>
+                  <button
+                    onClick={() => {
+                      toggleTheme();
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center justify-between px-4 py-2 text-slate-200 hover:bg-slate-700"
+                  >
+                    <div className="flex items-center gap-2">
+                      {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
+                      <span>Tema {theme === 'dark' ? 'Escuro' : 'Claro'}</span>
+                    </div>
+                    <div className={`w-10 h-5 bg-slate-700 rounded-full p-1 transition-all duration-300 ${theme === 'light' ? 'bg-blue-600' : ''}`}>
+                      <div className={`bg-white h-3 w-3 rounded-full transform transition-transform duration-300 ${theme === 'light' ? 'translate-x-5' : ''}`}></div>
+                    </div>
                   </button>
                   <hr className="my-1 border-slate-700" />
                   <button

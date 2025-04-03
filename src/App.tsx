@@ -1,4 +1,4 @@
-import React, { useEffect, Suspense } from 'react';
+import React, { useEffect, createContext, useState, useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import { Copy } from 'lucide-react';
@@ -19,13 +19,56 @@ import ManualConfirmation from './pages/ManualConfirmation';
 import { handleAuthRedirect } from './lib/supabase';
 import { AIChat } from './components/AIChat';
 
+// Criando context para o tema
+type Theme = 'dark' | 'light';
+type ThemeContextType = {
+  theme: Theme;
+  toggleTheme: () => void;
+};
+
+const ThemeContext = createContext<ThemeContextType>({
+  theme: 'dark',
+  toggleTheme: () => {}
+});
+
+// Hook para acessar o tema
+export const useTheme = () => useContext(ThemeContext);
+
+// Provider do tema
+const ThemeProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+  // Inicializa com o tema salvo no localStorage ou dark como padrão
+  const [theme, setTheme] = useState<Theme>(() => {
+    const savedTheme = localStorage.getItem('theme');
+    return (savedTheme as Theme) || 'dark';
+  });
+
+  // Atualiza o atributo data-theme no HTML quando o tema mudar
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.body.className = theme === 'light' ? 'bg-white' : 'bg-gradient-to-br from-slate-900 to-slate-800';
+    localStorage.setItem('theme', theme);
+    console.log('Tema alterado para:', theme);
+  }, [theme]);
+
+  // Função para alternar entre temas
+  const toggleTheme = () => {
+    setTheme(prevTheme => prevTheme === 'dark' ? 'light' : 'dark');
+  };
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+
 // Override default toast error configuration
-const toastErrorConfig = {
+const toastErrorConfig: any = {
   autoClose: 8000, // 8 seconds
   closeButton: true,
   closeOnClick: false,
   draggable: false,
-  icon: '❌',
+  icon: () => <span>❌</span>, // Usando função para criar um elemento React em vez de string
   // Custom render function to add copy button
   render: (props: any) => (
     <div className="flex items-start gap-3">
@@ -35,7 +78,7 @@ const toastErrorConfig = {
           navigator.clipboard.writeText(typeof props.children === 'string' ? props.children : props.children.toString());
           toast.info('Mensagem copiada!', { 
             autoClose: 2000,
-            icon: '✓'
+            icon: () => <span>✓</span>
           });
         }}
         className="shrink-0 flex items-center gap-1.5 px-2 py-1 bg-white/10 hover:bg-white/20 rounded transition-colors text-xs"
@@ -65,8 +108,41 @@ function AIChatWrapper() {
   return <AIChat />;
 }
 
+// Componente para o ToastContainer que usa o hook useTheme
+function AppToastContainer() {
+  const { theme } = useTheme();
+  
+  return (
+    <ToastContainer
+      position="top-right"
+      autoClose={3000}
+      hideProgressBar={false}
+      newestOnTop
+      closeOnClick
+      rtl={false}
+      pauseOnFocusLoss={false}
+      draggable={false}
+      pauseOnHover={false}
+      theme={theme}
+      limit={3}
+    />
+  );
+}
+
 function App() {
   useEffect(() => {
+    // REDIRECIONAMENTO DE DOMÍNIO - detectar redirecionamentos do domínio antigo
+    const currentHost = window.location.hostname;
+    const oldDomain = 'nexopdv.appbr.io';
+    const newDomain = 'nexopdv.emasoftware.io';
+    
+    // Se o domínio atual é o antigo, redirecionar para o novo com todos os parâmetros
+    if (currentHost === oldDomain) {
+      const newUrl = window.location.href.replace(oldDomain, newDomain);
+      window.location.href = newUrl;
+      return; // Para evitar o processamento dos outros códigos enquanto redireciona
+    }
+    
     // Verifica se há parâmetros de autenticação na URL
     const hash = window.location.hash;
     
@@ -81,18 +157,41 @@ function App() {
         // Limpar o hash e redirecionar para a página de reset de senha
         window.location.replace('/reset-password');
       }
-    } else if (hash && hash.includes('type=signup')) {
+    } else if (hash && hash.includes('type=signup') || hash.includes('type=email_change')) {
       handleAuthRedirect().then((success) => {
         if (!success) {
           window.location.href = '/login';
         }
       });
     }
+    
+    // Outra solução: Verificar se estamos em uma URL de confirmação e guardar o token
+    if (hash && hash.includes('access_token=')) {
+      const accessToken = new URLSearchParams(hash.substring(1)).get('access_token');
+      const tokenType = new URLSearchParams(hash.substring(1)).get('type');
+      
+      if (accessToken) {
+        console.log('Token detectado:', tokenType);
+        if (tokenType === 'recovery') {
+          localStorage.setItem('recovery_token', accessToken);
+          window.location.replace('/reset-password');
+        } else if (tokenType === 'signup') {
+          // Tentar lidar com confirmação de email
+          localStorage.setItem('access_token', accessToken);
+          handleAuthRedirect().then((success) => {
+            if (!success) {
+              window.location.href = '/login';
+            }
+          });
+        }
+      }
+    }
   }, []);
 
   return (
-    <BrowserRouter>
-      <Routes>
+    <ThemeProvider>
+      <BrowserRouter>
+        <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/dashboard" element={<Dashboard />} />
@@ -109,20 +208,10 @@ function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
       <AIChatWrapper />
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss={false}
-        draggable={false}
-        pauseOnHover={false}
-        theme="dark"
-        limit={3}
-      />
+      <AppToastContainer />
+      
     </BrowserRouter>
+    </ThemeProvider>
   );
 }
 

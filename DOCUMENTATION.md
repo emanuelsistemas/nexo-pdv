@@ -164,6 +164,45 @@ export const handleAuthRedirect = async () => {
 - Políticas de segurança
 - Logs de erro
 
+## Boas Práticas para Formulários e Ações
+
+### Prevenção de Recarregamento de Página
+- **IMPORTANTE:** Nunca usar `type="submit"` em botões que realizam operações assíncronas com o Supabase ou qualquer API
+- Sempre usar `type="button"` para botões que manipulam dados e prevenir o comportamento padrão de submissão
+- Implementar manipuladores de eventos personalizados que chamam `preventDefault()` para evitar recarregamento da página
+
+### Implementação Correta
+```typescript
+// Correto ✅
+<form className="p-6 space-y-4">
+  {/* Conteúdo do formulário */}
+  <button
+    type="button"
+    onClick={(e) => {
+      e.preventDefault();
+      handleSubmit(e as unknown as React.FormEvent);
+    }}
+    className="btn-primary"
+  >
+    Enviar
+  </button>
+</form>
+
+// Incorreto ❌
+<form onSubmit={handleSubmit} className="p-6 space-y-4">
+  {/* Conteúdo do formulário */}
+  <button type="submit" className="btn-primary">
+    Enviar
+  </button>
+</form>
+```
+
+### Razões para essa Abordagem
+- Evita perda de contexto/estado na aplicação SPA
+- Permite controle total sobre o fluxo de submissão
+- Facilita o tratamento de erros e feedback visual
+- Impede interrupção de operações assíncronas
+
 ## Performance
 
 ### Otimizações

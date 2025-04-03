@@ -229,15 +229,20 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
   // Função para carregar o histórico de movimentações de estoque
   const loadStockMovements = async (productId: string) => {
     try {
+      console.log(`Iniciando carregamento de movimentações para o produto ${productId}`);
       setLoadingMovements(true);
       
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
+        console.error('Erro ao obter usuário:', userError);
         throw new Error('Usuário não autenticado');
       }
+      
+      console.log(`Usuário autenticado: ${user.id}`);
 
       // Buscar movimentações de estoque
+      console.log(`Buscando movimentações de estoque para o produto ${productId}`);
       const { data, error } = await supabase
         .from('product_stock_movements')
         .select(`
@@ -251,12 +256,18 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
         .eq('product_id', productId)
         .order('date', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao buscar movimentações:', error);
+        throw error;
+      }
+      
+      console.log(`Movimentações encontradas: ${data ? data.length : 0}`);
       
       // Agora vamos buscar os dados dos usuários para cada movimentação
       if (data && data.length > 0) {
         // Obtém todos os IDs de usuários únicos
         const userIds = [...new Set(data.map(m => m.created_by))];
+        console.log(`Buscando informações para ${userIds.length} usuários`);
         
         // Busca informações dos usuários
         const { data: usersData, error: usersError } = await supabase
@@ -265,6 +276,7 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
           .in('id', userIds);
         
         if (!usersError && usersData) {
+          console.log(`Dados de usuários obtidos: ${usersData.length}`);
           // Cria um mapa de usuários para referência rápida
           const usersMap = new Map(usersData.map(u => [u.id, u]));
           
@@ -274,18 +286,22 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
             user: usersMap.get(movement.created_by) || null
           }));
           
+          console.log('Atualizando estado com dados completos de movimentações');
           setStockMovements(enhancedData);
         } else {
+          console.warn('Não foi possível obter dados de usuários:', usersError);
           // Mesmo se não conseguir dados dos usuários, continua com as movimentações
           setStockMovements(data);
         }
       } else {
+        console.log('Nenhuma movimentação encontrada');
         setStockMovements([]);
       }
     } catch (error) {
       console.error('Erro ao carregar movimentações de estoque:', error);
       toast.error('Erro ao carregar histórico de movimentações');
     } finally {
+      console.log('Finalizando carregamento de movimentações');
       setLoadingMovements(false);
     }
   };

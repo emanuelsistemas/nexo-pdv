@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root, [data-theme='dark'] {
   --background: 224 71% 4%;
   --foreground: 213 31% 91%;
   --card: 224 71% 4%;
@@ -11,15 +11,76 @@
   --input: 216 34% 17%;
   --border: 216 34% 17%;
   --ring: 224 71% 4%;
+  /* Cores adicionais para tema escuro */
+  --bg-primary: theme('colors.slate.900');
+  --bg-secondary: theme('colors.slate.800');
+  --text-primary: theme('colors.slate.200');
+  --text-secondary: theme('colors.slate.400');
+  --border-color: theme('colors.slate.700');
 }
 
 [data-theme='light'] {
   --background: 0 0% 100%;
   --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --accent: 214 32% 91%;
+  --input: 214 32% 91%;
+  --border: 220 13% 91%;
+  --ring: 224 71% 4%;
+  /* Cores adicionais para tema claro */
+  --bg-primary: theme('colors.white');
+  --bg-secondary: theme('colors.slate.100');
+  --text-primary: theme('colors.slate.800');
+  --text-secondary: theme('colors.slate.600');
+  --border-color: theme('colors.slate.300');
 }
 
+/* Tema escuro (padrão) */
 body {
   @apply bg-gradient-to-br from-slate-900 to-slate-800;
+  color: theme('colors.slate.200');
+}
+
+/* Tema claro */
+[data-theme='light'] body {
+  @apply bg-gradient-to-br from-blue-50 to-white;
+  color: theme('colors.slate.800');
+}
+
+/* Ajustes para componentes comuns no tema claro */
+[data-theme='light'] .auth-form {
+  @apply bg-white border border-slate-300 shadow-lg;
+}
+
+[data-theme='light'] .sidebar {
+  @apply bg-white border-r border-slate-300;
+}
+
+[data-theme='light'] .sidebar-item {
+  @apply text-slate-700 hover:bg-slate-100;
+}
+
+[data-theme='light'] .sidebar-item.active {
+  @apply bg-blue-50 text-blue-700;
+}
+
+[data-theme='light'] input, 
+[data-theme='light'] select, 
+[data-theme='light'] textarea {
+  @apply bg-white border-slate-300 text-slate-800;
+}
+
+[data-theme='light'] .modal-content {
+  @apply bg-white border-slate-300;
+}
+
+[data-theme='light'] table th {
+  @apply bg-slate-100 text-slate-800;
+}
+
+[data-theme='light'] table td {
+  @apply border-slate-200 text-slate-700;
 }
 
 .brand-name {

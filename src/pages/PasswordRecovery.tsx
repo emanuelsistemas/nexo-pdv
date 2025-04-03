@@ -15,8 +15,8 @@ export default function PasswordRecovery() {
     try {
       setLoading(true);
 
-      // Configura a URL de redirecionamento absoluta
-      const redirectTo = new URL('/reset-password', window.location.origin).toString();
+      // Configura a URL de redirecionamento com o novo domínio
+      const redirectTo = 'https://nexopdv.emasoftware.io/reset-password';
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo
