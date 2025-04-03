@@ -1,51 +1,64 @@
 #!/bin/bash
 
-echo "Iniciando processo de build para o nenxo-pdv..."
+# Script de deploy para o aplicativo NexoPDV
+# Este script constrói a aplicação e copia os arquivos para o diretório de produção
 
-# Definir variáveis de ambiente
-export NODE_ENV=production
+echo "🚀 Iniciando processo de build e deploy do NexoPDV..."
 
-# Parar instâncias anteriores se existirem
-echo "Parando instâncias anteriores..."
-pm2 stop nenxo-pdv-dev 2>/dev/null || true
-pm2 stop nenxo-pdv-prod 2>/dev/null || true
-pm2 delete nenxo-pdv-dev 2>/dev/null || true
-pm2 delete nenxo-pdv-prod 2>/dev/null || true
+# Verificando diretório atual
+CURRENT_DIR=$(pwd)
+echo "📂 Diretório atual: $CURRENT_DIR"
 
-# Instalar dependências se necessário
-echo "Verificando e instalando dependências..."
-pnpm install
+# Instalando dependências (opcional, descomentar se necessário)
+# echo "📦 Instalando dependências..."
+# npm install
 
-# Executar build
-echo "Executando build de produção..."
-pnpm run build
+# Rodando o build
+echo "🔨 Executando build de produção..."
+npm run build
+BUILD_STATUS=$?
 
-# Iniciar serviço de produção
-echo "Iniciando serviço na porta 5000..."
-pm2 start ecosystem.config.cjs --only nenxo-pdv-prod
+if [ $BUILD_STATUS -ne 0 ]; then
+  echo "❌ Falha no build! Código de saída: $BUILD_STATUS"
+  exit $BUILD_STATUS
+fi
 
-# Verificar status
-echo "Verificando status dos serviços..."
-pm2 ls
+echo "✅ Build concluído com sucesso!"
 
-echo "Build finalizado!"
-echo "O nenxo-pdv está em execução na porta 5000 (produção)."
-echo "Para iniciar o ambiente de desenvolvimento na porta 5002, execute:"
-echo "pm2 start ecosystem.config.cjs --only nenxo-pdv-dev"
+# Criando diretório de destino se não existir
+DEST_DIR="/var/www/html/nexopdv"
+echo "📂 Verificando diretório de destino: $DEST_DIR"
 
-# Instrução para configurar o NGINX
-echo ""
-echo "Instruções para configurar o NGINX:"
-echo "1. Copie o arquivo de configuração para o diretório do NGINX:"
-echo "   sudo cp $(pwd)/nginx/nexopdv.conf /etc/nginx/sites-available/"
-echo ""
-echo "2. Crie um link simbólico para habilitar o site:"
-echo "   sudo ln -s /etc/nginx/sites-available/nexopdv.conf /etc/nginx/sites-enabled/"
-echo ""
-echo "3. Verifique a configuração do NGINX:"
-echo "   sudo nginx -t"
-echo ""
-echo "4. Reinicie o NGINX para aplicar as alterações:"
-echo "   sudo systemctl restart nginx"
-echo ""
-echo "5. Configure o DNS para que nexopdv.emasoftware.io aponte para o IP deste servidor"
+if [ ! -d "$DEST_DIR" ]; then
+  echo "📂 Criando diretório de destino..."
+  sudo mkdir -p $DEST_DIR
+  sudo chown -R $(whoami):$(whoami) $DEST_DIR
+fi
+
+# Limpando diretório de destino
+echo "🧹 Limpando diretório de destino..."
+sudo rm -rf $DEST_DIR/*
+
+# Copiando arquivos do build
+echo "📋 Copiando arquivos do build para $DEST_DIR..."
+sudo cp -r dist/* $DEST_DIR/
+
+# Ajustando permissões
+echo "🔒 Ajustando permissões..."
+sudo chown -R www-data:www-data $DEST_DIR
+sudo chmod -R 755 $DEST_DIR
+
+# Restartando servidor Nginx
+echo "🔄 Restartando Nginx..."
+sudo systemctl restart nginx
+NGINX_STATUS=$?
+
+if [ $NGINX_STATUS -ne 0 ]; then
+  echo "⚠️ Aviso: Falha ao reiniciar o Nginx. Verifique a configuração."
+  echo "   Você pode verificar o status com: sudo systemctl status nginx"
+  echo "   Ou verificar a sintaxe com: sudo nginx -t"
+else
+  echo "✅ Nginx reiniciado com sucesso!"
+fi
+
+echo "🎉 Deploy concluído! A aplicação está disponível em https://nexopdv.emasoftware.io"
