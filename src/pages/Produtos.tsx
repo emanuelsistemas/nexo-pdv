@@ -21,6 +21,7 @@ interface Product {
   pis: string;
   cofins: string;
   ncm: string;
+  cfop: string;
   status: 'active' | 'inactive';
   created_at: string;
   // Joined fields
@@ -400,11 +401,14 @@ export default function Produtos() {
                       <td className="p-4">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => {}}
-                            className="p-1 text-slate-400 hover:text-slate-200"
-                            title="Movimentar estoque"
-                          >
-                            <ArrowUpDown size={16} />
+                          onClick={() => {
+                            setProductToEdit(product);
+                            setShowProductPanel(true);
+                          }}
+                          className="p-1 text-slate-400 hover:text-slate-200"
+                          title="Movimentar estoque"
+                        >
+                          <ArrowUpDown size={16} />
                           </button>
                           <button
                             onClick={() => {}}
@@ -469,6 +473,7 @@ export default function Produtos() {
           setProductToEdit(null);
           loadProducts();
         }}
+        initialTab={productToEdit ? 'estoque' : 'produto'}
         productToEdit={productToEdit}
       />
 

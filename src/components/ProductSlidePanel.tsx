@@ -7,6 +7,7 @@ import { StockMovementModal } from './StockMovementModal';
 interface ProductSlidePanelProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: 'produto' | 'estoque' | 'impostos';
   productToEdit?: {
     id: string;
     code: string;
@@ -59,8 +60,8 @@ interface ProductFormData {
   status: 'active' | 'inactive';
 }
 
-export function ProductSlidePanel({ isOpen, onClose, productToEdit }: ProductSlidePanelProps) {
-  const [currentTab, setCurrentTab] = useState<'produto' | 'estoque' | 'impostos'>('produto');
+export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', productToEdit }: ProductSlidePanelProps) {
+  const [currentTab, setCurrentTab] = useState<'produto' | 'estoque' | 'impostos'>(initialTab);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [loadingNextCode, setLoadingNextCode] = useState(false);
