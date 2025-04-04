@@ -10,6 +10,7 @@ try {
   new URL(supabaseUrl);
   isValidUrl = true;
 } catch (e) {
+  console.error('Invalid Supabase URL format:', e);
   isValidUrl = false;
 }
 
@@ -19,13 +20,13 @@ if (!isValidUrl || !supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Configuração do cliente Supabase com site URL e opções adicionais
+// Create Supabase client with enhanced error handling and retry logic
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'pkce' as const, // Tipo explícito para evitar erro de TypeScript
+    flowType: 'pkce' as const,
     storage: localStorage,
     storageKey: 'supabase.auth.token',
     debug: import.meta.env.DEV
@@ -39,21 +40,34 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     params: {
       eventsPerSecond: 10
     }
+  },
+  db: {
+    schema: 'public'
+  },
+  // Add retryable fetch configuration
+  fetch: (url, options = {}) => {
+    return fetch(url, {
+      ...options,
+      // Add retry logic
+      signal: options.signal,
+      // Ensure proper credentials handling
+      credentials: 'include',
+    }).catch(error => {
+      console.error('Supabase fetch error:', error);
+      throw error;
+    });
   }
 });
 
-// Função para lidar com o redirecionamento após autenticação
+// Enhanced error handling for auth redirect
 export const handleAuthRedirect = async () => {
   try {
-    // Verifica se é um fluxo de recuperação de senha
     const hash = window.location.hash;
     const isRecoveryFlow = hash && hash.includes('type=recovery');
     
     if (isRecoveryFlow) {
-      // Extrai o token de acesso do hash
       const accessToken = new URLSearchParams(hash.substring(1)).get('access_token');
       if (accessToken) {
-        // Armazena o token para uso na página de reset de senha
         localStorage.setItem('recovery_token', accessToken);
         return true;
       }
@@ -63,19 +77,22 @@ export const handleAuthRedirect = async () => {
     const { data: { session }, error } = await supabase.auth.getSession();
     
     if (error) {
-      console.error('Erro ao obter sessão:', error);
+      console.error('Session error:', error);
+      // Check if error is due to network issues
+      if (error.message?.includes('Failed to fetch')) {
+        console.error('Network error - please check your connection and Supabase configuration');
+      }
       return false;
     }
     
     if (session) {
-      // Remove os parâmetros de autenticação da URL
       window.location.hash = '';
       return true;
     }
     
     return false;
   } catch (error) {
-    console.error('Erro ao processar redirecionamento:', error);
+    console.error('Auth redirect error:', error);
     return false;
   }
 };

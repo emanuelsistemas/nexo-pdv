@@ -50,11 +50,11 @@ body {
 
 /* Ajustes para componentes comuns no tema claro */
 [data-theme='light'] .auth-form {
-  @apply bg-white border border-slate-300 shadow-lg;
+  @apply bg-white border border-slate-200 shadow-lg;
 }
 
 [data-theme='light'] .sidebar {
-  @apply bg-white border-r border-slate-300;
+  @apply bg-white border-r border-slate-200;
 }
 
 [data-theme='light'] .sidebar-item {
@@ -68,11 +68,11 @@ body {
 [data-theme='light'] input, 
 [data-theme='light'] select, 
 [data-theme='light'] textarea {
-  @apply bg-white border-slate-300 text-slate-800;
+  @apply bg-white border-slate-200 text-slate-800;
 }
 
 [data-theme='light'] .modal-content {
-  @apply bg-white border-slate-300;
+  @apply bg-white border-slate-200;
 }
 
 [data-theme='light'] table th {
@@ -81,6 +81,85 @@ body {
 
 [data-theme='light'] table td {
   @apply border-slate-200 text-slate-700;
+}
+
+/* Tema claro - Header e navegação */
+[data-theme='light'] header {
+  @apply bg-white border-slate-200;
+}
+
+[data-theme='light'] .nav-link {
+  @apply text-slate-600 hover:text-slate-800;
+}
+
+/* Tema claro - Cards e containers */
+[data-theme='light'] .bg-slate-800 {
+  @apply bg-white;
+}
+
+[data-theme='light'] .bg-slate-800\/50 {
+  @apply bg-white/50;
+}
+
+[data-theme='light'] .border-slate-700 {
+  @apply border-slate-200;
+}
+
+[data-theme='light'] .text-slate-200 {
+  @apply text-slate-800;
+}
+
+[data-theme='light'] .text-slate-400 {
+  @apply text-slate-600;
+}
+
+/* Tema claro - Botões e interações */
+[data-theme='light'] .hover\:bg-slate-700:hover {
+  @apply hover:bg-slate-100;
+}
+
+[data-theme='light'] .hover\:text-slate-200:hover {
+  @apply hover:text-slate-800;
+}
+
+/* Tema claro - Inputs e formulários */
+[data-theme='light'] .bg-slate-900 {
+  @apply bg-white;
+}
+
+[data-theme='light'] .bg-slate-700 {
+  @apply bg-slate-100;
+}
+
+[data-theme='light'] .placeholder-slate-400::placeholder {
+  @apply text-slate-400;
+}
+
+/* Tema claro - Dropdowns e menus */
+[data-theme='light'] .bg-slate-800 {
+  @apply bg-white shadow-lg;
+}
+
+[data-theme='light'] .hover\:bg-slate-700:hover {
+  @apply hover:bg-slate-100;
+}
+
+/* Tema claro - Grid items */
+[data-theme='light'] .bg-slate-800 {
+  @apply bg-white;
+}
+
+[data-theme='light'] .hover\:bg-slate-700:hover {
+  @apply hover:bg-slate-100;
+}
+
+[data-theme='light'] .border-slate-700 {
+  @apply border-slate-200;
+}
+
+/* Tema claro - Página de login/registro */
+[data-theme='light'] .min-h-screen.bg-gradient-to-br.from-slate-900.to-slate-800 {
+  @apply from-blue-50 to-white;
 }
 
 .brand-name {

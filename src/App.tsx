@@ -37,17 +37,21 @@ export const useTheme = () => useContext(ThemeContext);
 // Provider do tema
 const ThemeProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   // Inicializa com o tema salvo no localStorage ou dark como padrão
-  const [theme, setTheme] = useState<Theme>(() => {
+  const [theme, setTheme] = useState<Theme>('dark');
+
+  // Carrega o tema salvo no localStorage apenas se existir
+  useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
-    return (savedTheme as Theme) || 'dark';
-  });
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      setTheme(savedTheme);
+    }
+  }, []);
 
   // Atualiza o atributo data-theme no HTML quando o tema mudar
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     document.body.className = theme === 'light' ? 'bg-white' : 'bg-gradient-to-br from-slate-900 to-slate-800';
     localStorage.setItem('theme', theme);
-    console.log('Tema alterado para:', theme);
   }, [theme]);
 
   // Função para alternar entre temas
@@ -64,12 +68,11 @@ const ThemeProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
 
 // Override default toast error configuration
 const toastErrorConfig: any = {
-  autoClose: 8000, // 8 seconds
+  autoClose: 8000,
   closeButton: true,
   closeOnClick: false,
   draggable: false,
-  icon: () => <span>❌</span>, // Usando função para criar um elemento React em vez de string
-  // Custom render function to add copy button
+  icon: () => <span>❌</span>,
   render: (props: any) => (
     <div className="flex items-start gap-3">
       <div className="flex-1 break-all">{props.children}</div>
@@ -140,7 +143,7 @@ function App() {
     if (currentHost === oldDomain) {
       const newUrl = window.location.href.replace(oldDomain, newDomain);
       window.location.href = newUrl;
-      return; // Para evitar o processamento dos outros códigos enquanto redireciona
+      return;
     }
     
     // Verifica se há parâmetros de autenticação na URL
@@ -192,25 +195,24 @@ function App() {
     <ThemeProvider>
       <BrowserRouter>
         <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/pdv" element={<PDV />} />
-        <Route path="/orcamento" element={<Orcamento />} />
-        <Route path="/produtos" element={<Produtos />} />
-        <Route path="/unidade" element={<Unidade />} />
-        <Route path="/grupo" element={<Grupo />} />
-        <Route path="/clientes" element={<Clientes />} />
-        <Route path="/password-recovery" element={<PasswordRecovery />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/resend-confirmation" element={<ResendConfirmation />} />
-        <Route path="/manual-confirmation" element={<ManualConfirmation />} />
-        <Route path="/" element={<Navigate to="/login" replace />} />
-      </Routes>
-      <AIChatWrapper />
-      <AppToastContainer />
-      
-    </BrowserRouter>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/pdv" element={<PDV />} />
+          <Route path="/orcamento" element={<Orcamento />} />
+          <Route path="/produtos" element={<Produtos />} />
+          <Route path="/unidade" element={<Unidade />} />
+          <Route path="/grupo" element={<Grupo />} />
+          <Route path="/clientes" element={<Clientes />} />
+          <Route path="/password-recovery" element={<PasswordRecovery />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/resend-confirmation" element={<ResendConfirmation />} />
+          <Route path="/manual-confirmation" element={<ManualConfirmation />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
+        </Routes>
+        <AIChatWrapper />
+        <AppToastContainer />
+      </BrowserRouter>
     </ThemeProvider>
   );
 }

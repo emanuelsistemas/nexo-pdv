@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../App';
-import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Cog, Users, FileBarChart2, Moon, Sun } from 'lucide-react';
+import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Cog, Users, FileBarChart2, Moon, Sun, Bug, Maximize2, Minimize2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import GridLayout from 'react-grid-layout';
@@ -39,6 +39,7 @@ function Dashboard() {
   const [companyRegistrationStatus, setCompanyRegistrationStatus] = useState<'N' | 'S'>('N');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const logoutConfirmRef = useRef<HTMLDivElement>(null);
 
@@ -67,6 +68,18 @@ function Dashboard() {
     const savedLayout = localStorage.getItem('gridLayout');
     return savedLayout ? JSON.parse(savedLayout) : initialLayout;
   });
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -321,17 +334,41 @@ function Dashboard() {
             >
               <Menu size={24} />
             </button>
-            <button className="p-1.5 text-slate-400 hover:text-slate-200 rounded-full hover:bg-slate-700">
+            <button 
+              className="p-1.5 text-slate-400 hover:text-slate-200 rounded-full hover:bg-slate-700 group relative"
+              title="Correções"
+            >
+              <Bug size={18} />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-900 text-slate-200 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                Correções
+              </span>
+            </button>
+            <button 
+              className="p-1.5 text-slate-400 hover:text-slate-200 rounded-full hover:bg-slate-700 group relative"
+              title="Mensagens"
+            >
               <Bell size={18} />
+              <span className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-900 text-slate-200 text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                Mensagens
+              </span>
             </button>
             <div className="relative" ref={userMenuRef}>
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="hidden md:flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-700 text-slate-200"
-              >
-                <User size={18} className="text-slate-400" />
-                <span className="text-sm">{userName}</span>
-              </button>
+              <div className="hidden md:flex items-center gap-2">
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-700 text-slate-200"
+                >
+                  <User size={18} className="text-slate-400" />
+                  <span className="text-sm">{userName}</span>
+                </button>
+                <button
+                  onClick={toggleFullscreen}
+                  className="p-1.5 text-slate-400 hover:text-slate-200 rounded-full hover:bg-slate-700"
+                  title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
+                >
+                  {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                </button>
+              </div>
               
               {showUserMenu && (
                 <div className="absolute right-0 mt-2 w-48 bg-slate-800 rounded-lg shadow-lg border border-slate-700 py-1 z-50">
@@ -362,21 +399,39 @@ function Dashboard() {
                     <Settings size={16} />
                     Configurações
                   </button>
-                  <button
-                    onClick={() => {
-                      toggleTheme();
-                      setShowUserMenu(false);
-                    }}
-                    className="w-full flex items-center justify-between px-4 py-2 text-slate-200 hover:bg-slate-700"
-                  >
-                    <div className="flex items-center gap-2">
-                      {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-                      <span>Tema {theme === 'dark' ? 'Escuro' : 'Claro'}</span>
+                  <div className="px-4 py-2 text-slate-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm">Tema</span>
                     </div>
-                    <div className={`w-10 h-5 bg-slate-700 rounded-full p-1 transition-all duration-300 ${theme === 'light' ? 'bg-blue-600' : ''}`}>
-                      <div className={`bg-white h-3 w-3 rounded-full transform transition-transform duration-300 ${theme === 'light' ? 'translate-x-5' : ''}`}></div>
+                    <div className="flex bg-slate-700 rounded-lg p-1">
+                      <button
+                        onClick={() => {
+                          if (theme !== 'dark') toggleTheme();
+                        }}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded ${
+                          theme === 'dark' 
+                            ? 'bg-slate-600 text-blue-400' 
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <Moon size={14} />
+                        <span className="text-xs">Escuro</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (theme !== 'light') toggleTheme();
+                        }}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1 px-2 rounded ${
+                          theme === 'light' 
+                            ? 'bg-slate-600 text-blue-400' 
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <Sun size={14} />
+                        <span className="text-xs">Claro</span>
+                      </button>
                     </div>
-                  </button>
+                  </div>
                   <hr className="my-1 border-slate-700" />
                   <button
                     onClick={() => {
