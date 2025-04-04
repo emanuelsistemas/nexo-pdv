@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../App';
-import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Cog, Users, FileBarChart2, Moon, Sun, Bug, Maximize2, Minimize2 } from 'lucide-react';
+import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Cog, Users, FileBarChart2, Moon, Sun, Bug, Maximize2, Minimize2, RefreshCw } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import GridLayout from 'react-grid-layout';
@@ -26,7 +26,6 @@ function Dashboard() {
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const { theme, toggleTheme } = useTheme();
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [userName, setUserName] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -42,6 +41,7 @@ function Dashboard() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const logoutConfirmRef = useRef<HTMLDivElement>(null);
+  const { theme, toggleTheme } = useTheme();
 
   const initialLayout: GridItem[] = [
     { i: 'caixa', x: 0, y: 0, w: 1, h: 1, type: 'app', icon: <Store className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Caixa.app' },
@@ -399,6 +399,18 @@ function Dashboard() {
                     <Settings size={16} />
                     Configurações
                   </button>
+                  <button
+                    onClick={() => {
+                      // Simula o pressionamento de Alt + F5
+                      window.location.reload(true);
+                      setShowUserMenu(false);
+                      toast.success('Cache limpo com sucesso!');
+                    }}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-slate-200 hover:bg-slate-700"
+                  >
+                    <RefreshCw size={16} />
+                    Limpar cache
+                  </button>
                   <div className="px-4 py-2 text-slate-200">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm">Tema</span>
@@ -630,7 +642,7 @@ function Dashboard() {
                   onClick={() => setShowLogoutConfirm(false)}
                   className="px-4 py-2 text-sm font-medium text-slate-200 hover:text-slate-100 hover:bg-slate-700 rounded-lg transition-colors"
                 >
-                  Cancelar
+                  Cancel
                 </button>
                 <button
                   onClick={handleLogout}
