@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ShoppingCart, Trash2, Plus, Minus, Receipt, CreditCard, Wallet, QrCode, X, CreditCard as Credit, Smartphone as Debit, Ticket as Voucher, Loader2, ArrowLeft, Percent, DollarSign, Tag, FileText, RefreshCw, MoreHorizontal, ClipboardList, RotateCcw, Save, Settings, DollarSign as Dollar, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, Plus, Minus, Receipt, CreditCard, Wallet, QrCode, X, CreditCard as Credit, Smartphone as Debit, Ticket as Voucher, Loader2, ArrowLeft, Percent, DollarSign, Tag, FileText, MoreHorizontal, ClipboardList, RotateCcw, Save, Settings, DollarSign as Dollar, ArrowDownCircle, ArrowUpCircle, Bike, User, UserPlus, UserSearch } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
@@ -51,6 +51,12 @@ export default function PDV() {
   const [showPartialPaymentPopup, setShowPartialPaymentPopup] = useState(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
+  const [currentPage, setCurrentPage] = useState(0);
+  const buttonsPerPage = 9;
+  const [selectedClient, setSelectedClient] = useState<{id: string, name: string} | null>(null);
+  const [showClientSearch, setShowClientSearch] = useState(false);
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [filteredClients, setFilteredClients] = useState<{id: string, name: string, document: string}[]>([]);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState('');
   const [partialPaymentMethod, setPartialPaymentMethod] = useState<string | null>(null);
   const [partialPayments, setPartialPayments] = useState<{method: string, amount: number}[]>([]);
@@ -100,28 +106,66 @@ export default function PDV() {
   // Função para verificar se pode rolar para esquerda ou direita
   const checkScrollability = () => {
     const container = document.getElementById('menu-container');
-    if (container) {
-      // Verifica se pode rolar para a esquerda (se já rolou algo)
-      setCanScrollLeft(container.scrollLeft > 0);
+    const menuButtons = container?.querySelectorAll('button');
+    
+    if (container && menuButtons) {
+      // Verifica se pode rolar para a esquerda (se não está na primeira página)
+      setCanScrollLeft(currentPage > 0);
       
-      // Verifica se pode rolar para a direita (se não chegou ao final)
-      const canScrollMoreRight = container.scrollLeft < (container.scrollWidth - container.clientWidth);
-      setCanScrollRight(canScrollMoreRight);
+      // Verifica se pode rolar para a direita (se não está na última página)
+      const totalPages = Math.ceil(menuButtons.length / buttonsPerPage);
+      setCanScrollRight(currentPage < totalPages - 1);
     }
   };
 
-  // Adiciona um event listener para o scroll do menu
+  // Efeito para verificar a scrollabilidade quando a página atual mudar
+  useEffect(() => {
+    // Verificação inicial com atraso para garantir que o DOM foi carregado
+    setTimeout(checkScrollability, 500);
+  }, [currentPage]);
+  
+  // Função para navegar para a página anterior
+  const goToPreviousPage = () => {
+    if (currentPage > 0) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+  
+  // Função para navegar para a próxima página
+  const goToNextPage = () => {
+    const container = document.getElementById('menu-container');
+    const menuButtons = container?.querySelectorAll('button');
+    
+    if (menuButtons) {
+      const totalPages = Math.ceil(menuButtons.length / buttonsPerPage);
+      if (currentPage < totalPages - 1) {
+        setCurrentPage(currentPage + 1);
+      }
+    }
+  };
+  
+  // Efeito para aplicar a paginação quando a página atual mudar
   useEffect(() => {
     const container = document.getElementById('menu-container');
-    if (container) {
-      container.addEventListener('scroll', checkScrollability);
-      // Verificação inicial com atraso para garantir que o DOM foi carregado
-      setTimeout(checkScrollability, 500);
-      return () => {
-        container.removeEventListener('scroll', checkScrollability);
-      };
+    const menuButtons = container?.querySelectorAll('button');
+    
+    if (container && menuButtons) {
+      // Oculta todos os botões
+      menuButtons.forEach((button, index) => {
+        const start = currentPage * buttonsPerPage;
+        const end = start + buttonsPerPage;
+        
+        if (index >= start && index < end) {
+          button.style.display = 'flex';
+        } else {
+          button.style.display = 'none';
+        }
+      });
+      
+      // Verifica a scrollabilidade após a mudança
+      checkScrollability();
     }
-  }, []);
+  }, [currentPage]);
 
   useEffect(() => {
     // Carregar configurações do localStorage
@@ -408,55 +452,56 @@ export default function PDV() {
     toast.success('Desconto aplicado com sucesso');
   };
 
-  const handleRemoveDiscount = (id: string) => {
-    setItems(items.map(item => {
-      if (item.id === id) {
-        const { discount, ...rest } = item;
-        return rest as CartItem;
-      }
-      return item;
-    }));
-    toast.info('Desconto removido');
-  };
-
-  const handleTotalDiscountClick = () => {
-    setTotalDiscountType('percentage');
-    setTotalDiscountAmount('');
-    setShowTotalDiscountPopup(true);
-  };
-
-  const handleApplyTotalDiscount = () => {
-    if (!totalDiscountAmount) {
-      setShowTotalDiscountPopup(false);
-      return;
+const handleRemoveDiscount = (id: string) => {
+  setItems(items.map(item => {
+    if (item.id === id) {
+      const { discount, ...rest } = item;
+      return rest as CartItem;
     }
+    return item;
+  }));
+  toast.info('Desconto removido');
+};
 
-    const amount = parseFloat(totalDiscountAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast.error('Valor de desconto inválido');
-      return;
-    }
+const handleTotalDiscountClick = () => {
+  setTotalDiscountType('percentage');
+  setTotalDiscountAmount('');
+  setShowTotalDiscountPopup(true);
+  console.log('Abrindo popup de desconto total');
+};
 
-    // Verificar se o desconto em valor não é maior que o subtotal
-    if (totalDiscountType === 'value' && amount >= subtotal) {
-      toast.error('Desconto não pode ser maior ou igual ao valor total da venda');
-      return;
-    }
-
-    // Verificar se o desconto em porcentagem não é maior que 100%
-    if (totalDiscountType === 'percentage' && amount >= 100) {
-      toast.error('Desconto não pode ser maior ou igual a 100%');
-      return;
-    }
-
-    setAppliedTotalDiscount({
-      type: totalDiscountType,
-      amount: amount
-    });
-
+const handleApplyTotalDiscount = () => {
+  if (!totalDiscountAmount) {
     setShowTotalDiscountPopup(false);
-    toast.success(`Desconto total de ${totalDiscountType === 'percentage' ? amount + '%' : 'R$ ' + amount.toFixed(2)} aplicado`);
-  };
+    return;
+  }
+
+  const amount = parseFloat(totalDiscountAmount);
+  if (isNaN(amount) || amount <= 0) {
+    toast.error('Valor de desconto inválido');
+    return;
+  }
+
+  // Verificar se o desconto em valor não é maior que o subtotal
+  if (totalDiscountType === 'value' && amount >= subtotal) {
+    toast.error('Desconto não pode ser maior ou igual ao valor total da venda');
+    return;
+  }
+
+  // Verificar se o desconto em porcentagem não é maior que 100%
+  if (totalDiscountType === 'percentage' && amount >= 100) {
+    toast.error('Desconto não pode ser maior ou igual a 100%');
+    return;
+  }
+
+  setAppliedTotalDiscount({
+    type: totalDiscountType,
+    amount: amount
+  });
+
+  setShowTotalDiscountPopup(false);
+  toast.success(`Desconto total de ${totalDiscountType === 'percentage' ? amount + '%' : 'R$ ' + amount.toFixed(2)} aplicado`);
+};
 
   const handleRemoveTotalDiscount = () => {
     setAppliedTotalDiscount(null);
@@ -752,121 +797,139 @@ export default function PDV() {
           <div className="flex items-center justify-between h-20 pr-4 pl-0">
             <div className="flex-1 overflow-hidden relative">
               <div id="menu-container" className="flex items-center overflow-x-hidden transition-transform duration-300 ease-in-out ml-0" style={{scrollBehavior: 'smooth'}}>
-                {/* Definindo uma largura fixa para todos os botões baseada no tamanho da palavra 'Sincronizar' */}
+                {/* Menu modernizado com agrupamento visual e melhor organização */}
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                  title="Entrega para cliente"
+                >
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <Bike size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Delivery</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => toast.info('Função em desenvolvimento')}
                   disabled={items.length === 0}
                   title={items.length === 0 ? 'Adicione itens ao carrinho primeiro' : 'Salvar venda atual'}
                 >
-                  <Save size={20} className="mb-1" />
-                  <span className="text-xs">Salvar</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <Save size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Salvar</span>
                 </button>
                 
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
-                  <ShoppingCart size={20} className="mb-1" />
-                  <span className="text-xs">Vendas</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <ShoppingCart size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Vendas</span>
                 </button>
                 
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
-                  <FileText size={20} className="mb-1" />
-                  <span className="text-xs">Orçamento</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <FileText size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Orçamento</span>
                 </button>
                 
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
-                  <RotateCcw size={20} className="mb-1" />
-                  <span className="text-xs">Troca</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <RotateCcw size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Troca</span>
                 </button>
                 
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
-                  <Dollar size={20} className="mb-1" />
-                  <span className="text-xs">Fiado</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <Dollar size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Fiado</span>
                 </button>
                 
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
-                  onClick={handleTotalDiscountClick}
-                  disabled={items.length === 0}
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  onClick={() => {
+                    console.log('Botão de desconto clicado');
+                    if (items.length === 0) {
+                      toast.warning('Para aplicar desconto é necessário ter pelo menos um item no carrinho');
+                    } else {
+                      setTotalDiscountType('percentage');
+                      setTotalDiscountAmount('');
+                      setShowTotalDiscountPopup(true);
+                    }
+                  }}
                   title={items.length === 0 ? 'Adicione itens ao carrinho primeiro' : 'Aplicar desconto ao total da venda'}
                 >
-                  <Percent size={20} className="mb-1" />
-                  <span className="text-xs">Desconto</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <Percent size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Desconto</span>
                 </button>
                 
+
+                
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
-                  <ClipboardList size={20} className="mb-1" />
-                  <span className="text-xs">Histórico</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <RotateCcw size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Devolução</span>
                 </button>
                 
+
+                
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
-                  <RotateCcw size={20} className="mb-1" />
-                  <span className="text-xs">Devolução</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <ArrowDownCircle size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Suprimento</span>
                 </button>
                 
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
-                  <RefreshCw size={20} className="mb-1" />
-                  <span className="text-xs">Sincronizar</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <ArrowUpCircle size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Sangria</span>
                 </button>
                 
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-green-700 hover:bg-green-600 text-white transition-colors whitespace-nowrap px-2 border-r border-slate-600"
-                  onClick={() => toast.info('Função em desenvolvimento')}
-                >
-                  <ArrowDownCircle size={20} className="mb-1" />
-                  <span className="text-xs">Suprimento</span>
-                </button>
-                
-                <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-red-700 hover:bg-red-600 text-white transition-colors whitespace-nowrap px-2 border-r border-slate-600"
-                  onClick={() => toast.info('Função em desenvolvimento')}
-                >
-                  <ArrowUpCircle size={20} className="mb-1" />
-                  <span className="text-xs">Sangria</span>
-                </button>
-                
-                <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => setShowConfigPopup(true)}
                 >
-                  <Settings size={20} className="mb-1" />
-                  <span className="text-xs">Config</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <Settings size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Config</span>
                 </button>
                 
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
-                  <FileText size={20} className="mb-1" />
-                  <span className="text-xs">Relatórios</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <FileText size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Relatórios</span>
                 </button>
                 
                 <button
-                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
-                  <Wallet size={20} className="mb-1" />
-                  <span className="text-xs">Financeiro</span>
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <Wallet size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Financeiro</span>
                 </button>
 
               </div>
@@ -876,33 +939,21 @@ export default function PDV() {
             <div className="flex items-center gap-2 ml-2">
               <button
                 id="scroll-left"
-                className={`flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105 ${!canScrollLeft ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onClick={() => {
-                  const container = document.getElementById('menu-container');
-                  if (container && canScrollLeft) {
-                    container.scrollBy({ left: -200, behavior: 'smooth' });
-                    setTimeout(checkScrollability, 300);
-                  }
-                }}
+                className={`flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105 hover:shadow-blue-900/30 ${!canScrollLeft ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={goToPreviousPage}
                 disabled={!canScrollLeft}
-                title={canScrollLeft ? 'Rolar para a esquerda' : 'Não há mais opções nesta direção'}
+                title={canScrollLeft ? 'Página anterior' : 'Você está na primeira página'}
               >
-                <ArrowLeft size={20} />
+                <ArrowLeft size={20} className="text-blue-400" />
               </button>
               <button
                 id="scroll-right"
-                className={`flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105 ${!canScrollRight ? 'opacity-50 cursor-not-allowed' : ''}`}
-                onClick={() => {
-                  const container = document.getElementById('menu-container');
-                  if (container && canScrollRight) {
-                    container.scrollBy({ left: 200, behavior: 'smooth' });
-                    setTimeout(checkScrollability, 300);
-                  }
-                }}
+                className={`flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105 hover:shadow-blue-900/30 ${!canScrollRight ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={goToNextPage}
                 disabled={!canScrollRight}
-                title={canScrollRight ? 'Rolar para a direita' : 'Não há mais opções nesta direção'}
+                title={canScrollRight ? 'Próxima página' : 'Você está na última página'}
               >
-                <ArrowLeft size={20} className="rotate-180" />
+                <ArrowLeft size={20} className="rotate-180 text-blue-400" />
               </button>
             </div>
           </div>
@@ -910,8 +961,9 @@ export default function PDV() {
       </div>
 
       <div className="w-[400px] min-w-[400px] flex-shrink-0 bg-slate-800 border-l border-slate-700 flex flex-col">
-        <div className="px-6 pt-6 pb-5 border-b border-slate-700">
-          <div className="flex items-center justify-between mb-4">
+        <div className="px-6 pt-3 pb-2 border-b border-slate-700">
+          {/* Primeira linha: Venda, Data e X */}
+          <div className="flex items-center justify-between mb-1">
             <div>
               <span className="text-slate-400 text-sm">Venda #1234</span>
             </div>
@@ -919,13 +971,15 @@ export default function PDV() {
               <span className="text-white text-lg font-bold tracking-wide">{currentDateTime}</span>
               <button
                 onClick={() => navigate('/dashboard')}
-                className="text-red-400 hover:text-red-300 ml-4"
+                className="text-red-400 hover:text-red-300 ml-3"
               >
                 <X size={20} />
               </button>
             </div>
           </div>
-          <div className="flex items-center justify-between text-sm">
+          
+          {/* Segunda linha: Caixa e Operador */}
+          <div className="flex items-center justify-between text-sm mb-1.5">
             <div className="flex items-center gap-2">
               <span className="text-slate-400">Caixa:</span>
               <span className="text-green-400">Aberto</span>
@@ -934,6 +988,96 @@ export default function PDV() {
               <span className="text-slate-400">Operador:</span>
               <span className="text-slate-200">João Silva</span>
             </div>
+          </div>
+          
+          {/* Terceira linha: Cliente */}
+          <div className="relative client-search-container mb-0.5">
+            {selectedClient ? (
+              <div className="flex items-center bg-slate-600 rounded-md px-2 py-1 w-fit">
+                <User size={16} className="text-blue-400 mr-1" />
+                <span className="text-slate-200 text-sm font-medium">{selectedClient.name}</span>
+                <button 
+                  onClick={() => setSelectedClient(null)}
+                  className="ml-2 text-slate-400 hover:text-slate-300"
+                  title="Remover cliente"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => setShowClientSearch(true)}
+                className="flex items-center bg-blue-600 hover:bg-blue-500 text-white rounded-md px-2 py-1 text-sm transition-colors"
+                title="Selecionar cliente"
+              >
+                <UserPlus size={16} className="mr-1" />
+                <span>Cliente</span>
+              </button>
+            )}
+            
+            {/* Modal de busca de clientes */}
+            {showClientSearch && (
+              <div className="absolute top-full left-0 mt-1 w-72 bg-slate-800 rounded-md shadow-lg z-50 border border-slate-700">
+                <div className="p-2">
+                  <div className="flex items-center bg-slate-700 rounded-md mb-2">
+                    <input
+                      type="text"
+                      value={clientSearchQuery}
+                      onChange={(e) => setClientSearchQuery(e.target.value)}
+                      placeholder="Buscar cliente..."
+                      className="bg-transparent text-white p-2 w-full outline-none text-sm"
+                      autoFocus
+                    />
+                    <UserSearch size={18} className="text-slate-400 mr-2" />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    {/* Lista de clientes fictícia - em produção seria carregada do banco */}
+                    {[
+                      { id: '1', name: 'Maria Silva', document: '123.456.789-00' },
+                      { id: '2', name: 'João Oliveira', document: '987.654.321-00' },
+                      { id: '3', name: 'Ana Santos', document: '456.789.123-00' },
+                      { id: '4', name: 'Carlos Ferreira', document: '789.123.456-00' },
+                      { id: '5', name: 'Juliana Costa', document: '321.654.987-00' }
+                    ]
+                      .filter(client => 
+                        clientSearchQuery === '' || 
+                        client.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) ||
+                        client.document.includes(clientSearchQuery)
+                      )
+                      .map(client => (
+                        <div 
+                          key={client.id}
+                          className="p-2 hover:bg-slate-700 rounded-md cursor-pointer flex justify-between items-center"
+                          onClick={() => {
+                            setSelectedClient({ id: client.id, name: client.name });
+                            setShowClientSearch(false);
+                            setClientSearchQuery('');
+                            toast.success(`Cliente ${client.name} selecionado`);
+                          }}
+                        >
+                          <div>
+                            <div className="text-slate-200 text-sm">{client.name}</div>
+                            <div className="text-slate-400 text-xs">{client.document}</div>
+                          </div>
+                          <User size={16} className="text-blue-400" />
+                        </div>
+                      ))
+                    }
+                  </div>
+                  <div className="flex justify-end mt-2">
+                    <button 
+                      onClick={() => {
+                        setShowClientSearch(false);
+                        setClientSearchQuery('');
+                      }}
+                      className="text-sm text-slate-400 hover:text-slate-300 px-2 py-1"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1297,7 +1441,7 @@ export default function PDV() {
 
       {/* Popup de Desconto Total */}
       {showTotalDiscountPopup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
           <div className="bg-slate-800 rounded-lg p-6 w-[350px] border border-slate-700 shadow-xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-slate-200 text-lg font-medium">Desconto no Total da Venda</h3>
