@@ -49,6 +49,8 @@ export default function PDV() {
   const [showSecondMenu, setShowSecondMenu] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState('');
   const [showPartialPaymentPopup, setShowPartialPaymentPopup] = useState(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState('');
   const [partialPaymentMethod, setPartialPaymentMethod] = useState<string | null>(null);
   const [partialPayments, setPartialPayments] = useState<{method: string, amount: number}[]>([]);
@@ -82,6 +84,7 @@ export default function PDV() {
       const year = now.getFullYear().toString().slice(2);
       const hours = now.getHours().toString().padStart(2, '0');
       const minutes = now.getMinutes().toString().padStart(2, '0');
+
       const seconds = now.getSeconds().toString().padStart(2, '0');
 
       setCurrentDateTime(`${day}, ${date}/${month}/${year} ${hours}:${minutes}:${seconds}`);
@@ -92,6 +95,32 @@ export default function PDV() {
     const timer = setInterval(updateDateTime, 1000);
 
     return () => clearInterval(timer);
+  }, []);
+
+  // Função para verificar se pode rolar para esquerda ou direita
+  const checkScrollability = () => {
+    const container = document.getElementById('menu-container');
+    if (container) {
+      // Verifica se pode rolar para a esquerda (se já rolou algo)
+      setCanScrollLeft(container.scrollLeft > 0);
+      
+      // Verifica se pode rolar para a direita (se não chegou ao final)
+      const canScrollMoreRight = container.scrollLeft < (container.scrollWidth - container.clientWidth);
+      setCanScrollRight(canScrollMoreRight);
+    }
+  };
+
+  // Adiciona um event listener para o scroll do menu
+  useEffect(() => {
+    const container = document.getElementById('menu-container');
+    if (container) {
+      container.addEventListener('scroll', checkScrollability);
+      // Verificação inicial com atraso para garantir que o DOM foi carregado
+      setTimeout(checkScrollability, 500);
+      return () => {
+        container.removeEventListener('scroll', checkScrollability);
+      };
+    }
   }, []);
 
   useEffect(() => {
@@ -720,159 +749,161 @@ export default function PDV() {
         </div>
 
         <footer className="bg-slate-800 border-t border-slate-700 w-full overflow-hidden">
-          <div className="flex items-center justify-between h-12 px-4">
-            <div className="flex-1 overflow-x-auto">
-              <div className="flex items-center gap-2 min-w-max">
-                {showSecondMenu && showExpandedMenu ? (
-                  <>
-                    <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <FileText size={16} />
-                    <span>Relatórios</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <ShoppingCart size={16} />
-                    <span>Produtos</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <Wallet size={16} />
-                    <span>Financeiro</span>
-                  </button>
-                  </>
-                ) : showExpandedMenu ? (
-                  <>
-                    <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <ClipboardList size={16} />
-                    <span>Histórico</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <RotateCcw size={16} />
-                    <span>Devolução</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <RefreshCw size={16} />
-                    <span>Sincronizar</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <ClipboardList size={16} />
-                    <span>Vend. Concluídas</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-green-700 hover:bg-green-600 text-white rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <ArrowDownCircle size={16} />
-                    <span>Suprimento</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-red-700 hover:bg-red-600 text-white rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <ArrowUpCircle size={16} />
-                    <span>Sangria</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => setShowConfigPopup(true)}
-                  >
-                    <Settings size={16} />
-                    <span>Configuração do PDV</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                    disabled={items.length === 0}
-                    title={items.length === 0 ? 'Adicione itens ao carrinho primeiro' : 'Salvar venda atual'}
-                  >
-                    <Save size={16} />
-                    <span>Salvar Venda</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <ShoppingCart size={16} />
-                    <span>Vendas Abertas</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <FileText size={16} />
-                    <span>Import Orçamento</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <RotateCcw size={16} />
-                    <span>Troca</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={() => toast.info('Função em desenvolvimento')}
-                  >
-                    <Dollar size={16} />
-                    <span>Rec. Fiado</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-md transition-colors whitespace-nowrap"
-                    onClick={handleTotalDiscountClick}
-                    disabled={items.length === 0}
-                    title={items.length === 0 ? 'Adicione itens ao carrinho primeiro' : 'Aplicar desconto ao total da venda'}
-                  >
-                    <Percent size={16} />
-                    <span>Desc. Total</span>
-                  </button>
-                  </>
-                )}
+          <div className="flex items-center justify-between h-20 pr-4 pl-0">
+            <div className="flex-1 overflow-hidden relative">
+              <div id="menu-container" className="flex items-center overflow-x-hidden transition-transform duration-300 ease-in-out ml-0" style={{scrollBehavior: 'smooth'}}>
+                {/* Definindo uma largura fixa para todos os botões baseada no tamanho da palavra 'Sincronizar' */}
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                  disabled={items.length === 0}
+                  title={items.length === 0 ? 'Adicione itens ao carrinho primeiro' : 'Salvar venda atual'}
+                >
+                  <Save size={20} className="mb-1" />
+                  <span className="text-xs">Salvar</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <ShoppingCart size={20} className="mb-1" />
+                  <span className="text-xs">Vendas</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <FileText size={20} className="mb-1" />
+                  <span className="text-xs">Orçamento</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <RotateCcw size={20} className="mb-1" />
+                  <span className="text-xs">Troca</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <Dollar size={20} className="mb-1" />
+                  <span className="text-xs">Fiado</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={handleTotalDiscountClick}
+                  disabled={items.length === 0}
+                  title={items.length === 0 ? 'Adicione itens ao carrinho primeiro' : 'Aplicar desconto ao total da venda'}
+                >
+                  <Percent size={20} className="mb-1" />
+                  <span className="text-xs">Desconto</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <ClipboardList size={20} className="mb-1" />
+                  <span className="text-xs">Histórico</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <RotateCcw size={20} className="mb-1" />
+                  <span className="text-xs">Devolução</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <RefreshCw size={20} className="mb-1" />
+                  <span className="text-xs">Sincronizar</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-green-700 hover:bg-green-600 text-white transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <ArrowDownCircle size={20} className="mb-1" />
+                  <span className="text-xs">Suprimento</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-red-700 hover:bg-red-600 text-white transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <ArrowUpCircle size={20} className="mb-1" />
+                  <span className="text-xs">Sangria</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => setShowConfigPopup(true)}
+                >
+                  <Settings size={20} className="mb-1" />
+                  <span className="text-xs">Config</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <FileText size={20} className="mb-1" />
+                  <span className="text-xs">Relatórios</span>
+                </button>
+                
+                <button
+                  className="flex flex-col items-center justify-center w-28 h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors whitespace-nowrap px-2 border-r border-slate-600"
+                  onClick={() => toast.info('Função em desenvolvimento')}
+                >
+                  <Wallet size={20} className="mb-1" />
+                  <span className="text-xs">Financeiro</span>
+                </button>
+
               </div>
             </div>
 
+            {/* Botões de navegação */}
             <div className="flex items-center gap-2 ml-2">
               <button
-                className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105"
+                id="scroll-left"
+                className={`flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105 ${!canScrollLeft ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
-                  setShowExpandedMenu(!showExpandedMenu);
-                  if (!showExpandedMenu) setShowSecondMenu(false);
+                  const container = document.getElementById('menu-container');
+                  if (container && canScrollLeft) {
+                    container.scrollBy({ left: -200, behavior: 'smooth' });
+                    setTimeout(checkScrollability, 300);
+                  }
                 }}
-                title={showExpandedMenu ? "Menos opções" : "Mais opções"}
+                disabled={!canScrollLeft}
+                title={canScrollLeft ? 'Rolar para a esquerda' : 'Não há mais opções nesta direção'}
               >
-                {showExpandedMenu ? <Minus size={20} /> : <Plus size={20} />}
+                <ArrowLeft size={20} />
               </button>
-
-              {showExpandedMenu && (
-                <button
-                  className="flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105"
-                  onClick={() => setShowSecondMenu(!showSecondMenu)}
-                  title={showSecondMenu ? "Menos opções" : "Mais opções"}
-                >
-                  {showSecondMenu ? <Minus size={20} /> : <Plus size={20} />}
-                </button>
-              )}
+              <button
+                id="scroll-right"
+                className={`flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105 ${!canScrollRight ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={() => {
+                  const container = document.getElementById('menu-container');
+                  if (container && canScrollRight) {
+                    container.scrollBy({ left: 200, behavior: 'smooth' });
+                    setTimeout(checkScrollability, 300);
+                  }
+                }}
+                disabled={!canScrollRight}
+                title={canScrollRight ? 'Rolar para a direita' : 'Não há mais opções nesta direção'}
+              >
+                <ArrowLeft size={20} className="rotate-180" />
+              </button>
             </div>
           </div>
         </footer>
