@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, ShoppingCart, Trash2, Plus, Minus, Receipt, CreditCard, Wallet, QrCode, X, CreditCard as Credit, Smartphone as Debit, Ticket as Voucher, Loader2, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { Search, ShoppingCart, Trash2, Plus, Minus, Receipt, CreditCard, Wallet, QrCode, X, CreditCard as Credit, Smartphone as Debit, Ticket as Voucher, Loader2, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
@@ -393,6 +393,12 @@ export default function PDV() {
 
         <div className="flex-1 p-6">
           <div className="space-y-4">
+            <div className="flex justify-between items-center bg-slate-700 p-4 rounded-lg shadow-lg">
+              <span className="text-xl font-medium text-slate-200">Total</span>
+              <span className="text-3xl font-bold text-blue-400">
+                R$ {total.toFixed(2)}
+              </span>
+            </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Subtotal</span>
               <span className="text-slate-200">R$ {total.toFixed(2)}</span>
@@ -400,12 +406,6 @@ export default function PDV() {
             <div className="flex justify-between">
               <span className="text-slate-400">Desconto</span>
               <span className="text-slate-200">R$ 0,00</span>
-            </div>
-            <div className="flex justify-between items-center bg-slate-700 p-4 rounded-lg shadow-lg">
-              <span className="text-xl font-medium text-slate-200">Total</span>
-              <span className="text-3xl font-bold text-blue-400">
-                R$ {total.toFixed(2)}
-              </span>
             </div>
           </div>
         </div>
@@ -553,9 +553,9 @@ export default function PDV() {
                   <div className="flex flex-col gap-2">
                     <div className="grid grid-cols-2 gap-2">
                       <button 
-                        onClick={() => handlePaymentMethodClick('money')}
+                        onClick={() => handleMoneyPaymentSelect('money_full')}
                         className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
-                          selectedPaymentMethod?.startsWith('money') ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'
+                          selectedPaymentMethod === 'money_full' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'
                         }`}
                       >
                         <Wallet size={20} className="text-slate-200" />
@@ -573,23 +573,36 @@ export default function PDV() {
                         <span className="text-xs text-slate-400">Parcial</span>
                       </button>
                     </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={() => handlePaymentMethodClick('pix')}
+                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
+                          selectedPaymentMethod === 'pix' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'
+                        }`}
+                      >
+                        <QrCode size={20} className="text-slate-200" />
+                        <span className="font-medium text-slate-200">PIX</span>
+                        <span className="text-xs text-slate-400">À Vista</span>
+                      </button>
+                      <button 
+                        onClick={() => handlePaymentMethodClick('pix_partial')}
+                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
+                          selectedPaymentMethod === 'pix_partial' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'
+                        }`}
+                      >
+                        <QrCode size={20} className="text-slate-200" />
+                        <span className="font-medium text-slate-200">PIX</span>
+                        <span className="text-xs text-slate-400">Parcial</span>
+                      </button>
+                    </div>
                     <button 
                       onClick={() => handlePaymentMethodClick('card')}
                       className={`flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-3 px-4 rounded-lg transition-colors ${
-                        selectedPaymentMethod?.includes('card') || selectedPaymentMethod?.includes('debit') || selectedPaymentMethod?.includes('credit') ? 'ring-2 ring-blue-500' : ''
+                        selectedPaymentMethod === 'card' ? 'ring-2 ring-blue-500' : ''
                       }`}
                     >
                       <CreditCard size={20} />
                       <span>Cartão</span>
-                    </button>
-                    <button 
-                      onClick={() => handlePaymentMethodClick('pix')}
-                      className={`flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-3 px-4 rounded-lg transition-colors ${
-                        selectedPaymentMethod === 'pix' ? 'ring-2 ring-blue-500' : ''
-                      }`}
-                    >
-                      <QrCode size={20} />
-                      <span>PIX</span>
                     </button>
                     <button 
                       onClick={() => handlePaymentMethodClick('credit')}
