@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Plus, Package, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, ArrowUpDown, Tag, Loader2, ArrowDownAZ, ArrowUpAZ } from 'lucide-react';
+import { Search, Plus, Package, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, ArrowUpDown, Tag, Loader2, ArrowDownAZ, ArrowUpAZ, Copy } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { ProductSlidePanel } from '../components/ProductSlidePanel';
 import { supabase } from '../lib/supabase';
@@ -35,7 +35,7 @@ export default function Produtos() {
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('active');
   const [selectedGroup, setSelectedGroup] = useState('all');
   const [showProductPanel, setShowProductPanel] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -45,7 +45,7 @@ export default function Produtos() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
-  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<string | null>('code');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
@@ -111,7 +111,7 @@ export default function Produtos() {
         .from('products')
         .select('*')
         .eq('company_id', profile.company_id)
-        .order('created_at', { ascending: false });
+        .order('code', { ascending: true });
 
       if (productsError) throw productsError;
 
@@ -189,7 +189,7 @@ export default function Produtos() {
     if (!productToDelete) return;
 
     try {
-      // First delete all stock movements for this product
+      // Primeiro excluir todos os movimentos de estoque deste produto
       const { error: movementsError } = await supabase
         .from('product_stock_movements')
         .delete()
@@ -197,7 +197,7 @@ export default function Produtos() {
 
       if (movementsError) throw movementsError;
 
-      // Then delete the product
+      // Depois excluir o produto
       const { error: productError } = await supabase
         .from('products')
         .delete()
@@ -213,6 +213,106 @@ export default function Produtos() {
     } finally {
       setShowDeleteConfirm(false);
       setProductToDelete(null);
+    }
+  };
+
+  const handleCloneProduct = async (productToClone: Product) => {
+    try {
+      setLoading(true);
+      
+      // Obter o usuário e a empresa atual
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      // Buscar todos os códigos de produtos existentes para gerar um novo código único
+      const { data: existingProducts, error: productsError } = await supabase
+        .from('products')
+        .select('code')
+        .eq('company_id', profile.company_id);
+
+      if (productsError) throw productsError;
+
+      // Extrair todos os códigos numéricos para encontrar o próximo disponível
+      const numericCodes = existingProducts
+        .map(p => parseInt(p.code))
+        .filter(code => !isNaN(code));
+
+      // Organizar os códigos em ordem crescente
+      numericCodes.sort((a, b) => a - b);
+
+      // Encontrar o maior código
+      const maxCode = numericCodes.length > 0 ? Math.max(...numericCodes) : 0;
+      
+      // Gerar o próximo código disponível
+      const newCode = (maxCode + 1).toString();
+
+      // Criar o produto clonado sem o código de barras
+      const clonedProduct = {
+        // Campos a serem mantidos do produto original
+        name: `${productToClone.name} CLONADO`,
+        unit_id: productToClone.unit_id,
+        group_id: productToClone.group_id,
+        cost_price: productToClone.cost_price,
+        profit_margin: productToClone.profit_margin,
+        selling_price: productToClone.selling_price,
+        stock: productToClone.stock,
+        cst: productToClone.cst,
+        pis: productToClone.pis,
+        cofins: productToClone.cofins,
+        ncm: productToClone.ncm,
+        cfop: productToClone.cfop,
+        status: productToClone.status,
+        // Campos a serem alterados
+        code: newCode,
+        barcode: null, // Removendo o código de barras conforme solicitado
+        company_id: profile.company_id
+      };
+
+      // Inserir o produto clonado no banco de dados
+      const { error: insertError } = await supabase
+        .from('products')
+        .insert([clonedProduct]);
+
+      if (insertError) throw insertError;
+
+      toast.success('Produto clonado com sucesso!');
+      
+      // Buscar o produto recém-clonado para abrir na tela de edição
+      const { data: newProducts, error: fetchError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('company_id', profile.company_id)
+        .eq('code', newCode)
+        .eq('name', `${productToClone.name} CLONADO`);
+        
+      if (fetchError) throw fetchError;
+      
+      if (newProducts && newProducts.length > 0) {
+        // Abrir o produto clonado para edição
+        setProductToEdit(newProducts[0]);
+        setShowProductPanel(true);
+        setInitialTabState('produto');
+      }
+      
+      loadProducts(); // Recarregar a lista de produtos
+    } catch (error) {
+      console.error('Erro ao clonar produto:', error);
+      toast.error('Erro ao clonar produto');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -249,9 +349,8 @@ export default function Produtos() {
     return matchesSearch && matchesStatus && matchesGroup;
   });
 
-  // Depois ordena os produtos filtrados
-  if (sortField) {
-    filteredProducts = [...filteredProducts].sort((a, b) => {
+  // Sempre ordena os produtos filtrados, usando 'code' como padrão se nenhum campo for especificado
+  filteredProducts = [...filteredProducts].sort((a, b) => {
       let valueA, valueB;
 
       // Determinar quais valores comparar com base no campo de ordenação
@@ -293,7 +392,6 @@ export default function Produtos() {
       if (valueA > valueB) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -565,6 +663,13 @@ export default function Produtos() {
                           title="Movimentar estoque"
                         >
                           <ArrowUpDown size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleCloneProduct(product)}
+                            className="p-1 text-slate-400 hover:text-slate-200"
+                            title="Clonar produto"
+                          >
+                            <Copy size={16} />
                           </button>
                           <button
                             onClick={() => handleEditProduct(product)}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X as XMarkIcon, Loader2, Package, Archive, Calculator, Shuffle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
@@ -67,6 +67,7 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
   const [loadingNextCode, setLoadingNextCode] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [barcodeError, setBarcodeError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
@@ -156,7 +157,7 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
   const loadDefaultValues = async () => {
     try {
       // Obter o próximo código disponível
-      getNextAvailableCode();
+      await getNextAvailableCode();
     } catch (error) {
       console.error('Erro ao carregar valores padrão:', error);
     }
@@ -383,7 +384,7 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (codeError || barcodeError) {
+    if (codeError || barcodeError || nameError) {
       toast.error('Por favor, corrija os erros antes de salvar');
       return;
     }
@@ -454,6 +455,49 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
 
         toast.success('Produto atualizado com sucesso!');
       } else {
+        // Verificar novamente se o código já está em uso por outro usuário antes de salvar
+        const { data: existingProducts, error: checkError } = await supabase
+          .from('products')
+          .select('id')
+          .eq('company_id', profile.company_id)
+          .eq('code', formData.code);
+
+        if (checkError) throw checkError;
+
+        // Se o código já estiver em uso, gerar um novo código e tentar novamente
+        if (existingProducts && existingProducts.length > 0) {
+          // Código já está em uso por outro usuário
+          toast.error(`O código ${formData.code} já foi utilizado por outro usuário. Gerando um novo código...`);
+          
+          // Buscar todos os códigos existentes para gerar um novo
+          const { data: allProducts, error: allProductsError } = await supabase
+            .from('products')
+            .select('code')
+            .eq('company_id', profile.company_id);
+
+          if (allProductsError) throw allProductsError;
+
+          // Extrair códigos numéricos e encontrar o próximo disponível
+          const existingCodes = allProducts
+            .map(item => parseInt(item.code.replace(/\D/g, '')))
+            .filter(code => !isNaN(code))
+            .sort((a, b) => a - b);
+
+          let nextCode = 1;
+          for (const code of existingCodes) {
+            if (code > nextCode) {
+              break;
+            }
+            nextCode = code + 1;
+          }
+
+          // Atualizar o objeto com o novo código
+          productData.code = nextCode.toString();
+          
+          toast.info(`Novo código gerado: ${productData.code}`);
+        }
+
+        // Inserir o produto com o código verificado ou novo
         const { data: newProduct, error: insertError } = await supabase
           .from('products')
           .insert([productData])
@@ -509,15 +553,17 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
       : parseFloat(numericValue).toFixed(2).replace('.', ',');  // Usa vírgula como separador decimal
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
     
+    // Limpar mensagens de erro ao alterar valores
     if (name === 'code') {
       setCodeError(null);
-    }
-    
-    if (name === 'barcode') {
+    } else if (name === 'barcode') {
       setBarcodeError(null);
+    } else if (name === 'name') {
+      setNameError(null);
     }
 
     if (name === 'cfop') {
@@ -527,7 +573,6 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
         [name]: value,
         cst: cstValue 
       }));
-      return;
     }
     
     if (name === 'cost_price') {
@@ -617,6 +662,34 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
     }
   };
 
+
+
+  // Variável para armazenar o ID da reserva temporária (usado para cancelar ao fechar o painel)
+  const [tempReservationId, setTempReservationId] = useState<string | null>(null);
+
+  // Função para cancelar a reserva de código ao fechar o painel
+  const cancelCodeReservation = async () => {
+    if (tempReservationId) {
+      try {
+        await supabase
+          .from('temp_product_codes')
+          .delete()
+          .eq('id', tempReservationId);
+        
+        setTempReservationId(null);
+      } catch (error) {
+        console.error('Erro ao cancelar reserva de código:', error);
+      }
+    }
+  };
+
+  // Adicionando limpeza da reserva quando o componente é fechado
+  useEffect(() => {
+    return () => {
+      cancelCodeReservation();
+    };
+  }, [tempReservationId]);
+
   const getNextAvailableCode = async () => {
     try {
       setLoadingNextCode(true);
@@ -673,6 +746,8 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
       setLoadingNextCode(false);
     }
   };
+
+  
 
   const validateCode = async (code: string) => {
     if (!code.trim()) return;
@@ -758,6 +833,61 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
       console.error('Erro ao validar código de barras:', error);
     }
   };
+  
+  // Validação para verificar se o nome do produto já existe
+  const validateName = async (name: string) => {
+    if (!name.trim()) return;
+    
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      // Busca produtos com nomes similares (ignorando maiúsculas/minúsculas)
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, code, name')
+        .eq('company_id', profile.company_id)
+        .ilike('name', name); // Usando ilike para busca case-insensitive
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Se estiver editando e encontrou o produto atual, não mostra erro
+        if (productToEdit && data.length === 1 && data[0].id === productToEdit.id) {
+          setNameError(null);
+        } else {
+          // Filtra para não considerar o produto atual quando estiver editando
+          const duplicates = productToEdit 
+            ? data.filter(item => item.id !== productToEdit.id)
+            : data;
+            
+          if (duplicates.length > 0) {
+            // Mostra aviso com o código do produto existente
+            setNameError(`Já existe um produto com nome similar: "${duplicates[0].name}" (Código: ${duplicates[0].code})`);
+          } else {
+            setNameError(null);
+          }
+        }
+      } else {
+        setNameError(null);
+      }
+    } catch (error: any) {
+      console.error('Erro ao validar nome do produto:', error);
+    }
+  };
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -766,6 +896,8 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
       validateCode(value);
     } else if (name === 'barcode') {
       validateBarcode(value);
+    } else if (name === 'name') {
+      validateName(value);
     }
   };
 
@@ -968,9 +1100,13 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
                       name="name"
                       value={formData.name}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      onBlur={handleBlur}
+                      className={`w-full px-4 py-2 rounded-lg bg-slate-900 border ${nameError ? 'border-red-500' : 'border-slate-700'} text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                       required
                     />
+                    {nameError && (
+                      <p className="mt-1 text-sm text-red-500">{nameError}</p>
+                    )}
                   </div>
 
                   <div>

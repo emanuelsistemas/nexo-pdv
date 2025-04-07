@@ -71,14 +71,113 @@ export default function PDV() {
     groupItems: false,
     controlCashier: false,
     requireSeller: false,
-    fullScreen: false
+    fullScreen: false,
+    configId: null as string | null // ID da configuração no banco de dados
   });
 
-  // Carrega o estado do PDV do localStorage quando o componente é montado
+  // Cria a tabela de configurações do PDV se necessário
+  const createPdvConfigurationsTable = async () => {
+    try {
+      // Usar SQL bruto para criar a tabela
+      const { error } = await supabase.rpc('create_pdv_config_table');
+      
+      if (error) {
+        console.error('Erro ao criar tabela de configurações:', error);
+      }
+    } catch (error) {
+      console.error('Erro ao executar SQL para criar tabela:', error);
+    }
+  };
+
+  // Carrega as configurações do PDV do Supabase ou localStorage
+  const loadPdvConfig = async () => {
+    try {
+      // Obter o usuário logado
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Obter o ID da empresa
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (!profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      // Verificar se a tabela existe
+      try {
+        // Tentar carregar configurações
+        const { data: config, error } = await supabase
+          .from('pdv_configurations')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('company_id', profile.company_id)
+          .maybeSingle();
+
+        if (error && !error.message.includes('does not exist')) {
+          throw error;
+        }
+
+        if (config) {
+          setPdvConfig({
+            groupItems: config.group_items,
+            controlCashier: config.control_cashier,
+            requireSeller: config.require_seller,
+            fullScreen: config.full_screen,
+            configId: config.id
+          });
+          return;
+        }
+      } catch (error) {
+        console.error('Erro ao verificar configurações:', error);
+      }
+
+      // Fallback para localStorage
+      const savedConfig = localStorage.getItem('pdvConfig');
+      if (savedConfig) {
+        try {
+          const parsedConfig = JSON.parse(savedConfig);
+          setPdvConfig(prev => ({
+            ...parsedConfig,
+            configId: prev.configId
+          }));
+        } catch (e) {
+          console.error('Erro ao analisar configurações do localStorage:', e);
+        }
+      }
+
+    } catch (error) {
+      console.error('Erro ao carregar configurações:', error);
+      // Tentar carregar do localStorage como fallback
+      const savedConfig = localStorage.getItem('pdvConfig');
+      if (savedConfig) {
+        try {
+          setPdvConfig({
+            ...JSON.parse(savedConfig),
+            configId: null
+          });
+        } catch (e) {
+          console.error('Erro ao analisar configurações do localStorage:', e);
+        }
+      }
+    }
+  };
+
+
+  // Carrega o estado do PDV quando o componente é montado
   useEffect(() => {
     if (searchInputRef.current) {
       searchInputRef.current.focus();
     }
+    
+    // Carregar configurações do PDV
+    loadPdvConfig();
 
     try {
       // Recupera o estado salvo do PDV
@@ -390,18 +489,25 @@ export default function PDV() {
   };
 
   const handleProductSelect = (product: Product) => {
+    // Verifica se o produto já existe no carrinho
     const existingItem = items.find(item => item.id === product.id);
 
-    if (existingItem) {
+    // Se a configuração de agrupar itens estiver ativada e o item já existir
+    if (pdvConfig.groupItems && existingItem) {
       if (existingItem.quantity >= product.stock) {
         toast.warn('Quantidade excede o estoque disponível');
         return;
       }
 
+      // Aumenta a quantidade do item existente
       handleQuantityChange(product.id, 1);
     } else {
+      // Se a configuração de agrupar itens estiver desativada ou o item não existir,
+      // adiciona como um novo item ao carrinho
       const newItem: CartItem = {
-        id: product.id,
+        // Quando não estamos agrupando, geramos um ID único para cada item adicionado
+        // combinando o ID do produto com um timestamp para permitir a remoção individual
+        id: pdvConfig.groupItems ? product.id : `${product.id}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         code: product.code,
         name: product.name,
         price: product.selling_price,
@@ -410,6 +516,7 @@ export default function PDV() {
         unit_code: product.unit_code
       };
 
+      // Adiciona o novo item ao carrinho
       setItems(prev => [...prev, newItem]);
     }
 
@@ -609,11 +716,107 @@ const handleApplyTotalDiscount = () => {
     }));
   };
 
-  const handleSaveConfig = () => {
-    // Aqui você poderia salvar as configurações no localStorage ou em uma API
-    localStorage.setItem('pdvConfig', JSON.stringify(pdvConfig));
-    toast.success('Configurações salvas com sucesso');
-    setShowConfigPopup(false);
+  // Salva as configurações no Supabase e no localStorage como backup
+  const handleSaveConfig = async () => {
+    try {
+      // Obter o usuário logado
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Obter o ID da empresa do perfil
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (!profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      // Verificar se a tabela pdv_configurations existe
+      const { error: tableCheckError } = await supabase
+        .from('pdv_configurations')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+      // Se a tabela não existir, criá-la
+      if (tableCheckError && tableCheckError.message.includes('does not exist')) {
+        await createPdvConfigurationsTable();
+      }
+
+      const configData = {
+        user_id: user.id,
+        company_id: profile.company_id,
+        group_items: pdvConfig.groupItems,
+        control_cashier: pdvConfig.controlCashier,
+        require_seller: pdvConfig.requireSeller,
+        full_screen: pdvConfig.fullScreen
+      };
+
+      let result;
+      
+      // Se já existe um ID de configuração, atualizar
+      if (pdvConfig.configId) {
+        result = await supabase
+          .from('pdv_configurations')
+          .update(configData)
+          .eq('id', pdvConfig.configId)
+          .select();
+      } else {
+        // Verificar se já existe configuração para este usuário e empresa
+        const { data: existingConfig } = await supabase
+          .from('pdv_configurations')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('company_id', profile.company_id)
+          .maybeSingle();
+
+        if (existingConfig) {
+          // Atualizar configuração existente
+          result = await supabase
+            .from('pdv_configurations')
+            .update(configData)
+            .eq('id', existingConfig.id)
+            .select();
+        } else {
+          // Criar nova configuração
+          result = await supabase
+            .from('pdv_configurations')
+            .insert(configData)
+            .select();
+        }
+      }
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      if (result.data?.[0]) {
+        // Atualizar o config ID
+        setPdvConfig(prev => ({
+          ...prev,
+          configId: result.data[0].id
+        }));
+      }
+
+      // Salvar no localStorage como backup
+      localStorage.setItem('pdvConfig', JSON.stringify(pdvConfig));
+      
+      toast.success('Configurações salvas com sucesso');
+      setShowConfigPopup(false);
+    } catch (error) {
+      console.error('Erro ao salvar configurações:', error);
+      toast.error('Erro ao salvar configurações. Tentando salvar localmente...');
+      
+      // Fallback para localStorage se falhar
+      localStorage.setItem('pdvConfig', JSON.stringify(pdvConfig));
+      setShowConfigPopup(false);
+    }
   };
 
   const getItemDiscountValue = (item: CartItem) => {
@@ -845,13 +1048,106 @@ const handleApplyTotalDiscount = () => {
     try {
       setLoading(true);
       
-      // Aqui seria implementada a lógica para salvar a venda no banco de dados
-      // Por enquanto apenas simulamos a finalização
+      // Obter dados do usuário e empresa
+      const { data: { user } } = await supabase.auth.getUser();
       
-      toast.success('Venda finalizada com sucesso!', {
-        position: 'top-center',
-        autoClose: 3000
-      });
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+      
+      // 1. Obter o próximo número de venda disponível para a empresa
+      const { data: lastSales, error: salesError } = await supabase
+        .from('sales')
+        .select('sale_number')
+        .eq('company_id', profile.company_id)
+        .order('sale_number', { ascending: false })
+        .limit(1);
+      
+      if (salesError) {
+        // Se a tabela não existir ainda, o erro será tratado mais tarde
+        console.warn('Tabela de vendas não encontrada ou erro:', salesError);
+      }
+      
+      // 2. Calcular o próximo número de venda
+      let nextSaleNumber = 1; // Começa com 1 se não houver vendas anteriores
+      
+      if (lastSales && lastSales.length > 0 && lastSales[0].sale_number) {
+        nextSaleNumber = parseInt(lastSales[0].sale_number) + 1;
+      }
+      
+      const saleData = {
+        company_id: profile.company_id,
+        user_id: user.id,
+        sale_number: nextSaleNumber,
+        date: new Date().toISOString(),
+        total_amount: calculateTotal(),
+        discount_amount: calculateTotalDiscount(),
+        payment_method: selectedPaymentMethod,
+        status: 'completed',
+        // Outros campos relevantes para a venda
+      };
+      
+      // 3. Tenta inserir a venda com o número calculado
+      const { data: newSale, error: insertError } = await supabase
+        .from('sales')
+        .insert([saleData])
+        .select()
+        .single();
+      
+      // 4. Verifica se ocorreu erro por número de venda duplicado (concorrência)
+      if (insertError) {
+        // Se for erro de chave duplicada (outro usuário usou o mesmo número)
+        if (insertError.code === '23505' && insertError.details?.includes('sale_number')) {
+          // Busca novamente o último número de venda (que agora inclui o que foi inserido pelo outro usuário)
+          const { data: updatedLastSales } = await supabase
+            .from('sales')
+            .select('sale_number')
+            .eq('company_id', profile.company_id)
+            .order('sale_number', { ascending: false })
+            .limit(1);
+          
+          if (updatedLastSales && updatedLastSales.length > 0) {
+            // Usar o próximo número disponível
+            const realNextNumber = parseInt(updatedLastSales[0].sale_number) + 1;
+            saleData.sale_number = realNextNumber;
+            
+            // Tentar novamente com o novo número
+            const { data: retryNewSale, error: retryError } = await supabase
+              .from('sales')
+              .insert([saleData])
+              .select()
+              .single();
+              
+            if (retryError) throw retryError;
+            
+            toast.success(`Venda #${realNextNumber} finalizada com sucesso!`, {
+              position: 'top-center',
+              autoClose: 3000
+            });
+          } else {
+            throw new Error('Não foi possível obter o próximo número de venda');
+          }
+        } else {
+          // Se for outro tipo de erro
+          throw insertError;
+        }
+      } else {
+        // Se não houve erro de concorrência
+        toast.success(`Venda #${nextSaleNumber} finalizada com sucesso!`, {
+          position: 'top-center',
+          autoClose: 3000
+        });
+      }
       
       // Limpa o estado após finalizar a venda
       setItems([]);
