@@ -59,7 +59,7 @@ export default function PDV() {
   const [filteredClients, setFilteredClients] = useState<{id: string, name: string, document: string}[]>([]);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState('');
   const [partialPaymentMethod, setPartialPaymentMethod] = useState<string | null>(null);
-  const [partialPayments, setPartialPayments] = useState<{method: string, amount: number}[]>([]);
+  const [partialPayments, setPartialPayments] = useState<{id: string, method: string, amount: number, methodType: string}[]>([]);
   const [showTotalDiscountPopup, setShowTotalDiscountPopup] = useState(false);
   const [totalDiscountType, setTotalDiscountType] = useState<'percentage' | 'value'>('percentage');
   const [totalDiscountAmount, setTotalDiscountAmount] = useState<string>('');
@@ -70,12 +70,54 @@ export default function PDV() {
   const [pdvConfig, setPdvConfig] = useState({
     groupItems: false,
     controlCashier: false,
-    requireSeller: false
+    requireSeller: false,
+    fullScreen: false
   });
 
+  // Carrega o estado do PDV do localStorage quando o componente é montado
   useEffect(() => {
     if (searchInputRef.current) {
       searchInputRef.current.focus();
+    }
+
+    try {
+      // Recupera o estado salvo do PDV
+      const savedPdvState = localStorage.getItem('pdvState');
+      
+      if (savedPdvState) {
+        const parsedState = JSON.parse(savedPdvState);
+        
+        // Restaura os itens do carrinho
+        if (parsedState.items && Array.isArray(parsedState.items)) {
+          setItems(parsedState.items);
+        }
+        
+        // Restaura os pagamentos parciais
+        if (parsedState.partialPayments && Array.isArray(parsedState.partialPayments)) {
+          setPartialPayments(parsedState.partialPayments);
+        }
+        
+        // Restaura o desconto total aplicado
+        if (parsedState.appliedTotalDiscount) {
+          setAppliedTotalDiscount(parsedState.appliedTotalDiscount);
+        }
+        
+        // Restaura o cliente selecionado
+        if (parsedState.selectedClient) {
+          setSelectedClient(parsedState.selectedClient);
+        }
+        
+        // Toast informativo apenas se houver itens
+        if (parsedState.items && parsedState.items.length > 0) {
+          toast.info('Estado anterior do PDV restaurado', {
+            autoClose: 3000
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar estado do PDV:', error);
+      // Em caso de erro, limpa o localStorage para evitar problemas futuros
+      localStorage.removeItem('pdvState');
     }
   }, []);
 
@@ -107,11 +149,11 @@ export default function PDV() {
   const checkScrollability = () => {
     const container = document.getElementById('menu-container');
     const menuButtons = container?.querySelectorAll('button');
-    
+
     if (container && menuButtons) {
       // Verifica se pode rolar para a esquerda (se não está na primeira página)
       setCanScrollLeft(currentPage > 0);
-      
+
       // Verifica se pode rolar para a direita (se não está na última página)
       const totalPages = Math.ceil(menuButtons.length / buttonsPerPage);
       setCanScrollRight(currentPage < totalPages - 1);
@@ -123,19 +165,19 @@ export default function PDV() {
     // Verificação inicial com atraso para garantir que o DOM foi carregado
     setTimeout(checkScrollability, 500);
   }, [currentPage]);
-  
+
   // Função para navegar para a página anterior
   const goToPreviousPage = () => {
     if (currentPage > 0) {
       setCurrentPage(currentPage - 1);
     }
   };
-  
+
   // Função para navegar para a próxima página
   const goToNextPage = () => {
     const container = document.getElementById('menu-container');
     const menuButtons = container?.querySelectorAll('button');
-    
+
     if (menuButtons) {
       const totalPages = Math.ceil(menuButtons.length / buttonsPerPage);
       if (currentPage < totalPages - 1) {
@@ -143,25 +185,25 @@ export default function PDV() {
       }
     }
   };
-  
+
   // Efeito para aplicar a paginação quando a página atual mudar
   useEffect(() => {
     const container = document.getElementById('menu-container');
     const menuButtons = container?.querySelectorAll('button');
-    
+
     if (container && menuButtons) {
       // Oculta todos os botões
       menuButtons.forEach((button, index) => {
         const start = currentPage * buttonsPerPage;
         const end = start + buttonsPerPage;
-        
+
         if (index >= start && index < end) {
           button.style.display = 'flex';
         } else {
           button.style.display = 'none';
         }
       });
-      
+
       // Verifica a scrollabilidade após a mudança
       checkScrollability();
     }
@@ -179,6 +221,50 @@ export default function PDV() {
       }
     }
   }, []);
+
+  // Salva o estado do PDV no localStorage sempre que houver mudanças relevantes
+  useEffect(() => {
+    // Só salva se houver itens no carrinho (evita salvar um carrinho vazio)
+    if (items.length > 0 || partialPayments.length > 0) {
+      try {
+        const pdvState = {
+          items,
+          partialPayments,
+          appliedTotalDiscount,
+          selectedClient
+        };
+        
+        localStorage.setItem('pdvState', JSON.stringify(pdvState));
+      } catch (error) {
+        console.error('Erro ao salvar estado do PDV:', error);
+      }
+    } else {
+      // Se não há itens nem pagamentos, limpa o estado salvo
+      localStorage.removeItem('pdvState');
+    }
+  }, [items, partialPayments, appliedTotalDiscount, selectedClient]);
+  
+  // Efeito para controlar o modo de tela cheia
+  useEffect(() => {
+    const toggleFullScreen = async () => {
+      try {
+        if (pdvConfig.fullScreen) {
+          if (!document.fullscreenElement) {
+            await document.documentElement.requestFullscreen();
+          }
+        } else {
+          if (document.fullscreenElement) {
+            await document.exitFullscreen();
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao alternar modo de tela cheia:', error);
+        toast.error('Não foi possível alternar o modo de tela cheia');
+      }
+    };
+
+    toggleFullScreen();
+  }, [pdvConfig.fullScreen]);
 
   useEffect(() => {
     loadProducts();
@@ -547,7 +633,21 @@ const handleApplyTotalDiscount = () => {
     return itemTotal - discountValue;
   };
 
+  // Verifica se já existe algum pagamento que zerou o total
+  const isFullPaymentApplied = () => {
+    // Verifica se o valor restante está zerado ou negativo (com tolerância de 0.01 para arredondamentos)
+    return remainingTotal <= 0.01 && partialPayments.length > 0;
+  };
+
   const handlePaymentMethodClick = (method: string) => {
+    // Se já existe um pagamento à vista que zerou o total, não permite selecionar outro
+    // A menos que seja um método parcial
+    if (isFullPaymentApplied() && !method.includes('_partial') && 
+        !['card', 'money'].includes(method)) {
+      toast.info('Remova o pagamento atual antes de adicionar um novo método de pagamento');
+      return;
+    }
+
     if (method === 'card') {
       setShowCardOptions(true);
       setShowMoneyOptions(false);
@@ -565,26 +665,95 @@ const handleApplyTotalDiscount = () => {
       setShowCardOptions(false);
       setShowMoneyOptions(false);
       setSelectedPaymentMethod(method);
+
+      // Para métodos à vista (não parciais), automaticamente aplica o valor total restante
+      if (method === 'pix') {
+        const remainingAmount = total - totalPaid;
+        if (remainingAmount > 0) {
+          // Adiciona o pagamento PIX à vista com o valor total restante
+          setPartialPayments([...partialPayments, {
+            id: `pix_${Date.now()}`,
+            method: 'PIX',
+            methodType: 'pix',
+            amount: remainingAmount
+          }]);
+          toast.success(`Pagamento de R$ ${remainingAmount.toFixed(2)} aplicado`);
+        }
+      }
     }
   };
 
   const handleCardPaymentSelect = (method: string) => {
+    // Se já existe um pagamento à vista que zerou o total, não permite selecionar outro
+    // A menos que seja um método parcial
+    if (isFullPaymentApplied() && !method.includes('_partial')) {
+      toast.info('Remova o pagamento atual antes de adicionar um novo método de pagamento');
+      return;
+    }
+    
     if (method.includes('_partial')) {
       setPartialPaymentMethod(method);
       setPartialPaymentAmount('');
       setShowPartialPaymentPopup(true);
     } else {
       setSelectedPaymentMethod(method);
+
+      // Para métodos de cartão à vista, automaticamente aplica o valor total restante
+      const remainingAmount = total - totalPaid;
+      if (remainingAmount > 0) {
+        let methodName = '';
+        
+        if (method === 'debit') {
+          methodName = 'Débito';
+        } else if (method === 'credit') {
+          methodName = 'Crédito';
+        } else if (method === 'voucher') {
+          methodName = 'Voucher';
+        }
+
+        if (methodName) {
+          // Adiciona o pagamento com cartão à vista com o valor total restante
+          setPartialPayments([...partialPayments, {
+            id: `${method}_${Date.now()}`,
+            method: methodName,
+            methodType: method,
+            amount: remainingAmount
+          }]);
+          toast.success(`Pagamento de R$ ${remainingAmount.toFixed(2)} aplicado`);
+        }
+      }
     }
   };
 
   const handleMoneyPaymentSelect = (method: string) => {
+    // Se já existe um pagamento à vista que zerou o total, não permite selecionar outro
+    // A menos que seja um método parcial
+    if (isFullPaymentApplied() && !method.includes('_partial')) {
+      toast.info('Remova o pagamento atual antes de adicionar um novo método de pagamento');
+      return;
+    }
+    
     if (method.includes('_partial')) {
       setPartialPaymentMethod(method);
       setPartialPaymentAmount('');
       setShowPartialPaymentPopup(true);
     } else {
       setSelectedPaymentMethod(method);
+
+      // Para método de dinheiro à vista (money_full), automaticamente aplica o valor total restante
+      if (method === 'money_full') {
+        const remainingAmount = total - totalPaid;
+        if (remainingAmount > 0) {
+          // Adiciona o pagamento em dinheiro à vista com o valor total restante
+          setPartialPayments([...partialPayments, {
+            id: `money_full_${Date.now()}`,
+            method: 'Dinheiro',
+            methodType: 'money_full',
+            amount: remainingAmount
+          }]);
+          toast.success(`Pagamento de R$ ${remainingAmount.toFixed(2)} aplicado`);
+        }
+      }
     }
   };
 
@@ -626,7 +795,9 @@ const handleApplyTotalDiscount = () => {
 
     // Adicionar o pagamento parcial à lista
     setPartialPayments([...partialPayments, {
+      id: `${partialPaymentMethod}_${Date.now()}`,
       method: methodName,
+      methodType: partialPaymentMethod,
       amount: amount
     }]);
 
@@ -634,8 +805,28 @@ const handleApplyTotalDiscount = () => {
     toast.success(`Pagamento de R$ ${amount.toFixed(2)} aplicado`);
 
     // Se o valor for maior ou igual ao valor restante, finalizar o pagamento
-    if (amount >= remainingTotal) {
+    // Se o valor for maior ou igual ao valor restante (com tolerância de 0.01 para arredondamentos)
+    if (amount >= remainingTotal - 0.01) {
       setSelectedPaymentMethod('partial_complete');
+    }
+  };
+
+  // Função para remover um pagamento específico
+  const handleRemovePayment = (paymentId: string) => {
+    // Encontra o pagamento a ser removido
+    const paymentToRemove = partialPayments.find(payment => payment.id === paymentId);
+    
+    if (paymentToRemove) {
+      // Remove o pagamento da lista
+      const updatedPayments = partialPayments.filter(payment => payment.id !== paymentId);
+      setPartialPayments(updatedPayments);
+      
+      // Se o método removido era o método selecionado, desmarque-o
+      if (selectedPaymentMethod === paymentToRemove.methodType) {
+        setSelectedPaymentMethod(null);
+      }
+      
+      toast.success(`Pagamento de ${paymentToRemove.method} removido`);
     }
   };
 
@@ -649,17 +840,87 @@ const handleApplyTotalDiscount = () => {
   const changeAmount = totalMoneyPaid > total ? totalMoneyPaid - total : 0;
   const hasChange = changeAmount > 0;
 
+  // Função para finalizar a venda
+  const handleFinalizeSale = async () => {
+    try {
+      setLoading(true);
+      
+      // Aqui seria implementada a lógica para salvar a venda no banco de dados
+      // Por enquanto apenas simulamos a finalização
+      
+      toast.success('Venda finalizada com sucesso!', {
+        position: 'top-center',
+        autoClose: 3000
+      });
+      
+      // Limpa o estado após finalizar a venda
+      setItems([]);
+      setSelectedPaymentMethod(null);
+      setPartialPayments([]);
+      setShowCardOptions(false);
+      setShowMoneyOptions(false);
+      setAppliedTotalDiscount(null);
+      setSelectedClient(null);
+      
+      // Limpa o estado salvo no localStorage
+      localStorage.removeItem('pdvState');
+      
+      // Restaura o foco no campo de busca para nova venda
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+      }
+      
+    } catch (error) {
+      console.error('Erro ao finalizar venda:', error);
+      toast.error(`Erro ao finalizar a venda: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Função para cancelar a venda atual
+  const handleCancelSale = () => {
+    if (items.length === 0 && partialPayments.length === 0) {
+      toast.info('Não há venda em andamento para cancelar');
+      return;
+    }
+    
+    if (confirm('Deseja realmente cancelar esta venda?')) {
+      // Limpa todos os estados
+      setItems([]);
+      setSelectedPaymentMethod(null);
+      setPartialPayments([]);
+      setShowCardOptions(false);
+      setShowMoneyOptions(false);
+      setAppliedTotalDiscount(null);
+      setSelectedClient(null);
+      
+      // Limpa o localStorage
+      localStorage.removeItem('pdvState');
+      
+      toast.success('Venda cancelada com sucesso!');
+      
+      // Restaura o foco no campo de busca
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+      }
+    }
+  };
+
   // Pode finalizar se tiver um método de pagamento selecionado e itens no carrinho
-  // OU se os pagamentos parciais cobrirem o valor total
+  // ou se for um pagamento parcial e tiver pelo menos um pagamento registrado
   // Nunca pode finalizar se não houver itens no carrinho
   const canFinalize = items.length > 0 && (
     (selectedPaymentMethod) ||
     (partialPayments.length > 0 && Math.abs(remainingTotal) < 0.01)
   );
 
+  // O container principal tem uma largura mínima de 1024px (624px da área principal + 400px da área de pagamento)
+  // para garantir que todos os elementos sejam exibidos corretamente na resolução mínima de 1024x768
   return (
-    <div className="min-h-screen bg-slate-900 flex overflow-hidden">
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+    <div className="min-h-screen bg-slate-900 flex overflow-hidden min-w-[1024px]">
+      {/* Área principal com largura flexível, mas com mínimo de 624px para garantir que os botões do rodapé sejam exibidos */}
+      <div className="min-w-[624px] flex-1 flex flex-col overflow-hidden">
         <div className="bg-slate-800 border-b border-slate-700 py-3.5 px-4">
           <div className="flex items-center justify-between">
             <Logo variant="dashboard" />
@@ -794,69 +1055,70 @@ const handleApplyTotalDiscount = () => {
         </div>
 
         <footer className="bg-slate-800 border-t border-slate-700 w-full overflow-hidden">
-          <div className="flex items-center justify-between h-20 pr-4 pl-0">
+          <div className="flex items-center justify-between h-16 pr-4 pl-0">
             <div className="flex-1 overflow-hidden relative">
-              <div id="menu-container" className="flex items-center overflow-x-hidden transition-transform duration-300 ease-in-out ml-0" style={{scrollBehavior: 'smooth'}}>
-                {/* Menu modernizado com agrupamento visual e melhor organização */}
+              {/* Container de botões com distribuição igual de espaço */}
+              <div id="menu-container" className="flex items-center overflow-x-hidden transition-transform duration-300 ease-in-out ml-0 w-full" style={{scrollBehavior: 'smooth'}}>
+                {/* Menu modernizado com agrupamento visual e melhor organização - botões com largura mínima fixa que podem expandir */}
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                   title="Entrega para cliente"
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <Bike size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <Bike size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Delivery</span>
                 </button>
-                
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                   disabled={items.length === 0}
                   title={items.length === 0 ? 'Adicione itens ao carrinho primeiro' : 'Salvar venda atual'}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <Save size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <Save size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Salvar</span>
                 </button>
-                
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <ShoppingCart size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <ShoppingCart size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Vendas</span>
                 </button>
-                
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <FileText size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <FileText size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Orçamento</span>
                 </button>
-                
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <RotateCcw size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <RotateCcw size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Troca</span>
                 </button>
-                
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <Dollar size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <Dollar size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Fiado</span>
                 </button>
-                
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => {
                     console.log('Botão de desconto clicado');
                     if (items.length === 0) {
@@ -870,65 +1132,65 @@ const handleApplyTotalDiscount = () => {
                   title={items.length === 0 ? 'Adicione itens ao carrinho primeiro' : 'Aplicar desconto ao total da venda'}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <Percent size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <Percent size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Desconto</span>
                 </button>
-                
 
-                
+
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <RotateCcw size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <RotateCcw size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Devolução</span>
                 </button>
-                
 
-                
+
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <ArrowDownCircle size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <ArrowDownCircle size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Suprimento</span>
                 </button>
-                
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <ArrowUpCircle size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <ArrowUpCircle size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Sangria</span>
                 </button>
-                
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => setShowConfigPopup(true)}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <Settings size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <Settings size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Config</span>
                 </button>
-                
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <FileText size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <FileText size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Relatórios</span>
                 </button>
-                
+
                 <button
-                  className="flex flex-col items-center justify-center w-20 h-20 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group flex-shrink-0"
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  <Wallet size={20} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <Wallet size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Financeiro</span>
                 </button>
 
@@ -939,45 +1201,43 @@ const handleApplyTotalDiscount = () => {
             <div className="flex items-center gap-2 ml-2">
               <button
                 id="scroll-left"
-                className={`flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105 hover:shadow-blue-900/30 ${!canScrollLeft ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`flex items-center justify-center w-8 h-8 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105 hover:shadow-blue-900/30 ${!canScrollLeft ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={goToPreviousPage}
                 disabled={!canScrollLeft}
                 title={canScrollLeft ? 'Página anterior' : 'Você está na primeira página'}
               >
-                <ArrowLeft size={20} className="text-blue-400" />
+                <ArrowLeft size={16} className="text-blue-400" />
               </button>
               <button
                 id="scroll-right"
-                className={`flex items-center justify-center w-10 h-10 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105 hover:shadow-blue-900/30 ${!canScrollRight ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`flex items-center justify-center w-8 h-8 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full shadow-lg transition-all duration-200 transform hover:scale-105 hover:shadow-blue-900/30 ${!canScrollRight ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={goToNextPage}
                 disabled={!canScrollRight}
                 title={canScrollRight ? 'Próxima página' : 'Você está na última página'}
               >
-                <ArrowLeft size={20} className="rotate-180 text-blue-400" />
+                <ArrowLeft size={16} className="rotate-180 text-blue-400" />
               </button>
             </div>
           </div>
         </footer>
       </div>
 
-      <div className="w-[400px] min-w-[400px] flex-shrink-0 bg-slate-800 border-l border-slate-700 flex flex-col">
+      {/* Área de pagamento à direita com largura fixa de 350px para se ajustar à resolução mínima */}
+      <div className="w-[350px] min-w-[350px] flex-shrink-0 bg-slate-800 border-l border-slate-700 flex flex-col">
         <div className="px-6 pt-3 pb-2 border-b border-slate-700">
-          {/* Primeira linha: Venda, Data e X */}
+          {/* Primeira linha: Data e X */}
           <div className="flex items-center justify-between mb-1">
-            <div>
-              <span className="text-slate-400 text-sm">Venda #1234</span>
+            <div className="flex-1">
+              <span className="text-white text-lg font-bold tracking-wide whitespace-nowrap">{currentDateTime}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-white text-lg font-bold tracking-wide">{currentDateTime}</span>
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="text-red-400 hover:text-red-300 ml-3"
-              >
-                <X size={20} />
-              </button>
-            </div>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="text-red-400 hover:text-red-300 ml-3 flex-shrink-0"
+            >
+              <X size={20} />
+            </button>
           </div>
-          
+
           {/* Segunda linha: Caixa e Operador */}
           <div className="flex items-center justify-between text-sm mb-1.5">
             <div className="flex items-center gap-2">
@@ -989,14 +1249,14 @@ const handleApplyTotalDiscount = () => {
               <span className="text-slate-200">João Silva</span>
             </div>
           </div>
-          
+
           {/* Terceira linha: Cliente */}
           <div className="relative client-search-container mb-0.5">
             {selectedClient ? (
               <div className="flex items-center bg-slate-600 rounded-md px-2 py-1 w-fit">
                 <User size={16} className="text-blue-400 mr-1" />
                 <span className="text-slate-200 text-sm font-medium">{selectedClient.name}</span>
-                <button 
+                <button
                   onClick={() => setSelectedClient(null)}
                   className="ml-2 text-slate-400 hover:text-slate-300"
                   title="Remover cliente"
@@ -1005,7 +1265,7 @@ const handleApplyTotalDiscount = () => {
                 </button>
               </div>
             ) : (
-              <button 
+              <button
                 onClick={() => setShowClientSearch(true)}
                 className="flex items-center bg-blue-600 hover:bg-blue-500 text-white rounded-md px-2 py-1 text-sm transition-colors"
                 title="Selecionar cliente"
@@ -1014,7 +1274,7 @@ const handleApplyTotalDiscount = () => {
                 <span>Cliente</span>
               </button>
             )}
-            
+
             {/* Modal de busca de clientes */}
             {showClientSearch && (
               <div className="absolute top-full left-0 mt-1 w-72 bg-slate-800 rounded-md shadow-lg z-50 border border-slate-700">
@@ -1039,13 +1299,13 @@ const handleApplyTotalDiscount = () => {
                       { id: '4', name: 'Carlos Ferreira', document: '789.123.456-00' },
                       { id: '5', name: 'Juliana Costa', document: '321.654.987-00' }
                     ]
-                      .filter(client => 
-                        clientSearchQuery === '' || 
+                      .filter(client =>
+                        clientSearchQuery === '' ||
                         client.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) ||
                         client.document.includes(clientSearchQuery)
                       )
                       .map(client => (
-                        <div 
+                        <div
                           key={client.id}
                           className="p-2 hover:bg-slate-700 rounded-md cursor-pointer flex justify-between items-center"
                           onClick={() => {
@@ -1065,7 +1325,7 @@ const handleApplyTotalDiscount = () => {
                     }
                   </div>
                   <div className="flex justify-end mt-2">
-                    <button 
+                    <button
                       onClick={() => {
                         setShowClientSearch(false);
                         setClientSearchQuery('');
@@ -1089,12 +1349,23 @@ const handleApplyTotalDiscount = () => {
                 R$ {remainingTotal > 0 ? remainingTotal.toFixed(2) : '0.00'}
               </span>
             </div>
-            {partialPayments.map((payment, index) => (
-              <div key={index} className="flex justify-between">
-                <span className="text-slate-400">{payment.method}</span>
-                <span className="text-orange-400 font-medium">
-                  R$ {payment.amount.toFixed(2)}
-                </span>
+            {partialPayments.map((payment) => (
+              <div key={payment.id} className="flex justify-between items-center bg-slate-800 p-2 px-4 rounded-md">
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-200 font-medium">{payment.method}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-orange-400 font-medium">
+                    R$ {payment.amount.toFixed(2)}
+                  </span>
+                  <button 
+                    onClick={() => handleRemovePayment(payment.id)}
+                    className="text-slate-400 hover:text-red-400 p-1 rounded-full hover:bg-slate-700"
+                    title="Remover pagamento"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
             ))}
             <div className="flex justify-between">
@@ -1169,10 +1440,13 @@ const handleApplyTotalDiscount = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => handleCardPaymentSelect('debit')}
+                        disabled={isFullPaymentApplied() && !partialPayments.some(p => p.methodType === 'debit')}
                         className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
-                          selectedPaymentMethod === 'debit'
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                          selectedPaymentMethod === 'debit' || partialPayments.some(p => p.methodType === 'debit')
+                            ? 'bg-blue-500 text-white shadow-lg ring-2 ring-blue-300'
+                            : isFullPaymentApplied()
+                              ? 'bg-slate-800 text-slate-400 cursor-not-allowed opacity-50'
+                              : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
                         }`}
                       >
                         <Debit size={20} />
@@ -1181,10 +1455,13 @@ const handleApplyTotalDiscount = () => {
                       </button>
                       <button
                         onClick={() => handleCardPaymentSelect('debit_partial')}
+                        disabled={isFullPaymentApplied()}
                         className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
                           selectedPaymentMethod === 'debit_partial'
                             ? 'bg-blue-500 text-white'
-                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                            : isFullPaymentApplied()
+                              ? 'bg-slate-800 text-slate-400 cursor-not-allowed opacity-50'
+                              : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
                         }`}
                       >
                         <Debit size={20} />
@@ -1195,10 +1472,13 @@ const handleApplyTotalDiscount = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => handleCardPaymentSelect('credit')}
+                        disabled={isFullPaymentApplied() && !partialPayments.some(p => p.methodType === 'credit')}
                         className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
-                          selectedPaymentMethod === 'credit'
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                          selectedPaymentMethod === 'credit' || partialPayments.some(p => p.methodType === 'credit')
+                            ? 'bg-blue-500 text-white shadow-lg ring-2 ring-blue-300'
+                            : isFullPaymentApplied()
+                              ? 'bg-slate-800 text-slate-400 cursor-not-allowed opacity-50'
+                              : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
                         }`}
                       >
                         <Credit size={20} />
@@ -1207,10 +1487,13 @@ const handleApplyTotalDiscount = () => {
                       </button>
                       <button
                         onClick={() => handleCardPaymentSelect('credit_partial')}
+                        disabled={isFullPaymentApplied()}
                         className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
                           selectedPaymentMethod === 'credit_partial'
                             ? 'bg-blue-500 text-white'
-                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                            : isFullPaymentApplied()
+                              ? 'bg-slate-800 text-slate-400 cursor-not-allowed opacity-50'
+                              : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
                         }`}
                       >
                         <Credit size={20} />
@@ -1221,10 +1504,13 @@ const handleApplyTotalDiscount = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => handleCardPaymentSelect('voucher')}
+                        disabled={isFullPaymentApplied() && !partialPayments.some(p => p.methodType === 'voucher')}
                         className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
-                          selectedPaymentMethod === 'voucher'
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                          selectedPaymentMethod === 'voucher' || partialPayments.some(p => p.methodType === 'voucher')
+                            ? 'bg-blue-500 text-white shadow-lg ring-2 ring-blue-300'
+                            : isFullPaymentApplied()
+                              ? 'bg-slate-800 text-slate-400 cursor-not-allowed opacity-50'
+                              : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
                         }`}
                       >
                         <Voucher size={20} />
@@ -1233,10 +1519,13 @@ const handleApplyTotalDiscount = () => {
                       </button>
                       <button
                         onClick={() => handleCardPaymentSelect('voucher_partial')}
+                        disabled={isFullPaymentApplied()}
                         className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
                           selectedPaymentMethod === 'voucher_partial'
                             ? 'bg-blue-500 text-white'
-                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+                            : isFullPaymentApplied()
+                              ? 'bg-slate-800 text-slate-400 cursor-not-allowed opacity-50'
+                              : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
                         }`}
                       >
                         <Voucher size={20} />
@@ -1264,8 +1553,13 @@ const handleApplyTotalDiscount = () => {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => handleMoneyPaymentSelect('money_full')}
+                      disabled={isFullPaymentApplied() && !partialPayments.some(p => p.methodType === 'money_full')}
                       className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
-                        selectedPaymentMethod === 'money_full' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'
+                        selectedPaymentMethod === 'money_full' || partialPayments.some(p => p.methodType === 'money_full')
+                          ? 'bg-blue-500 text-white shadow-lg ring-2 ring-blue-300'
+                          : isFullPaymentApplied()
+                            ? 'bg-slate-800 text-slate-400 cursor-not-allowed opacity-50'
+                            : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
                       }`}
                     >
                       <Wallet size={20} className="text-slate-200" />
@@ -1273,10 +1567,9 @@ const handleApplyTotalDiscount = () => {
                       <span className="text-xs text-slate-400">À Vista</span>
                     </button>
                     <button
-                      onClick={() => handleMoneyPaymentSelect('money_partial')}
-                      className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
-                        selectedPaymentMethod === 'money_partial' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'
-                      }`}
+                      onClick={() => handleMoneyPaymentSelect('money_full')}
+                      disabled={isFullPaymentApplied()}
+                      className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${selectedPaymentMethod === 'money_full' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'} ${isFullPaymentApplied() ? 'opacity-50 cursor-not-allowed bg-slate-800 hover:bg-slate-800' : ''}`}
                     >
                       <Wallet size={20} className="text-slate-200" />
                       <span className="font-medium text-slate-200">Dinheiro</span>
@@ -1291,9 +1584,7 @@ const handleApplyTotalDiscount = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => handleMoneyPaymentSelect('money_full')}
-                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
-                          selectedPaymentMethod === 'money_full' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'
-                        }`}
+                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${selectedPaymentMethod === 'money_full' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'} ${isFullPaymentApplied() ? 'opacity-50 cursor-not-allowed bg-slate-800 hover:bg-slate-800' : ''}`}
                       >
                         <Wallet size={20} className="text-slate-200" />
                         <span className="font-medium text-slate-200">Dinheiro</span>
@@ -1301,9 +1592,8 @@ const handleApplyTotalDiscount = () => {
                       </button>
                       <button
                         onClick={() => handleMoneyPaymentSelect('money_partial')}
-                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
-                          selectedPaymentMethod === 'money_partial' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'
-                        }`}
+                        disabled={isFullPaymentApplied()}
+                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${selectedPaymentMethod === 'money_partial' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'} ${isFullPaymentApplied() ? 'opacity-50 cursor-not-allowed bg-slate-800 hover:bg-slate-800' : ''}`}
                       >
                         <Wallet size={20} className="text-slate-200" />
                         <span className="font-medium text-slate-200">Dinheiro</span>
@@ -1313,9 +1603,8 @@ const handleApplyTotalDiscount = () => {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         onClick={() => handlePaymentMethodClick('pix')}
-                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
-                          selectedPaymentMethod === 'pix' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'
-                        }`}
+                        disabled={isFullPaymentApplied() && !partialPayments.some(p => p.methodType === 'pix')}
+                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${selectedPaymentMethod === 'pix' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'} ${isFullPaymentApplied() ? 'opacity-50 cursor-not-allowed bg-slate-800 hover:bg-slate-800' : ''}`}
                       >
                         <QrCode size={20} className="text-slate-200" />
                         <span className="font-medium text-slate-200">PIX</span>
@@ -1323,9 +1612,8 @@ const handleApplyTotalDiscount = () => {
                       </button>
                       <button
                         onClick={() => handlePaymentMethodClick('pix_partial')}
-                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${
-                          selectedPaymentMethod === 'pix_partial' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'
-                        }`}
+                        disabled={isFullPaymentApplied()}
+                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-lg transition-colors ${selectedPaymentMethod === 'pix_partial' ? 'ring-2 ring-blue-500' : 'bg-slate-700 hover:bg-slate-600'} ${isFullPaymentApplied() ? 'opacity-50 cursor-not-allowed bg-slate-800 hover:bg-slate-800' : ''}`}
                       >
                         <QrCode size={20} className="text-slate-200" />
                         <span className="font-medium text-slate-200">PIX</span>
@@ -1334,18 +1622,16 @@ const handleApplyTotalDiscount = () => {
                     </div>
                     <button
                       onClick={() => handlePaymentMethodClick('card')}
-                      className={`flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-3 px-4 rounded-lg transition-colors ${
-                        selectedPaymentMethod === 'card' ? 'ring-2 ring-blue-500' : ''
-                      }`}
+                      disabled={isFullPaymentApplied()}
+                      className={`w-full bg-slate-700 hover:bg-slate-600 text-white py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 ${isFullPaymentApplied() ? 'opacity-50 cursor-not-allowed bg-slate-800 hover:bg-slate-800' : ''}`}
                     >
                       <CreditCard size={20} />
                       <span>Cartão</span>
                     </button>
                     <button
                       onClick={() => handlePaymentMethodClick('credit')}
-                      className={`flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 py-3 px-4 rounded-lg transition-colors ${
-                        selectedPaymentMethod === 'credit' ? 'ring-2 ring-blue-500' : ''
-                      }`}
+                      disabled={isFullPaymentApplied()}
+                      className={`w-full bg-slate-700 hover:bg-slate-600 text-white py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 ${isFullPaymentApplied() ? 'opacity-50 cursor-not-allowed bg-slate-800 hover:bg-slate-800' : ''}`}
                     >
                       <Receipt size={20} />
                       <span>Fiado</span>
@@ -1355,8 +1641,9 @@ const handleApplyTotalDiscount = () => {
               )}
             </div>
 
-            <div className="p-6 border-t border-slate-700">
+            <div className="border-t border-slate-700" style={{paddingLeft: '24px', paddingRight: '24px', paddingTop: '8px', paddingBottom: '8px'}}>
               <button
+                onClick={handleFinalizeSale}
                 disabled={!canFinalize}
                 className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white py-3 px-4 rounded-lg transition-all duration-200 font-medium shadow-lg shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -1581,6 +1868,22 @@ const handleApplyTotalDiscount = () => {
                       className="sr-only peer"
                       checked={pdvConfig.requireSeller}
                       onChange={() => handleConfigChange('requireSeller')}
+                    />
+                    <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
+                  <div>
+                    <h4 className="text-slate-200 font-medium">PDV em tela cheia</h4>
+                    <p className="text-sm text-slate-400">Exibir PDV em modo de tela cheia</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={pdvConfig.fullScreen}
+                      onChange={() => handleConfigChange('fullScreen')}
                     />
                     <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
                   </label>

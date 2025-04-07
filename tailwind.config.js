@@ -8,6 +8,10 @@ export default {
         sans: ['Inter', 'sans-serif'],
         brand: ['MuseoModerno', 'cursive'],
       },
+      minWidth: {
+        '20': '4.5rem', // Reduzido para 72px para caber na resolução menor
+        '16': '4rem',   // 64px
+      },
     },
   },
   plugins: [],
