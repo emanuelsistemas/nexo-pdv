@@ -1,70 +1,94 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Get environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+// Criação de um cliente Supabase adiado que não bloqueia a renderização
+let supabaseInstance: ReturnType<typeof createClient> | null = null;
 
-// Validate URL format
-let isValidUrl = false;
-try {
-  new URL(supabaseUrl);
-  isValidUrl = true;
-} catch (e) {
-  console.error('Invalid Supabase URL format:', e);
-  isValidUrl = false;
-}
+// Função para obter o cliente Supabase - inicializa lazily
+export const getSupabase = () => {
+  // Se já inicializamos, retorne a instância existente
+  if (supabaseInstance) return supabaseInstance;
+  
+  try {
+    // Get environment variables
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-if (!isValidUrl || !supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Configuração inválida do Supabase. Verifique se as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY estão configuradas corretamente no arquivo .env'
-  );
-}
-
-// Create Supabase client with enhanced error handling and retry logic
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce' as const,
-    storage: localStorage,
-    storageKey: 'supabase.auth.token',
-    debug: import.meta.env.DEV
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'supabase-js@2.39.7'
+    // Validate URL and keys
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Configuração inválida do Supabase. Variáveis de ambiente não estão definidas.');
+      return null;
     }
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
+
+    // Validate URL format
+    try { new URL(supabaseUrl); } catch (e) {
+      console.error('Invalid Supabase URL format:', e);
+      return null;
     }
-  },
-  db: {
-    schema: 'public'
-  },
-  // Add retryable fetch configuration
-  fetch: (url, options = {}) => {
-    return fetch(url, {
-      ...options,
-      // Add retry logic
-      signal: options.signal,
-      // Ensure proper credentials handling
-      credentials: 'include',
-    }).catch(error => {
-      console.error('Supabase fetch error:', error);
-      throw error;
+
+    // Create Supabase client with optimized configuration
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce' as const,
+        storage: localStorage,
+        storageKey: 'supabase.auth.token',
+        debug: false // Disable debug for performance
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'supabase-js@2.39.7'
+        }
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      },
+      db: {
+        schema: 'public'
+      },
+      // Add optimized fetch configuration
+      fetch: (url, options = {}) => {
+        return fetch(url, {
+          ...options,
+          signal: options.signal,
+          credentials: 'include',
+        }).catch(error => {
+          console.error('Supabase fetch error:', error);
+          throw error;
+        });
+      }
     });
+    
+    return supabaseInstance;
+  } catch (error) {
+    console.error('Erro ao inicializar o Supabase:', error);
+    return null;
+  }
+};
+
+// Exporta o supabase para compatibilidade com código existente
+export const supabase = new Proxy({} as ReturnType<typeof createClient>, {
+  get: (target, prop) => {
+    const client = getSupabase();
+    if (!client) {
+      console.error(`Tentativa de acessar propriedade '${String(prop)}' do Supabase, mas o cliente não foi inicializado.`);
+      return () => Promise.reject(new Error('Cliente Supabase não inicializado'));
+    }
+    return client[prop as keyof typeof client];
   }
 });
 
 // Enhanced error handling for auth redirect
 export const handleAuthRedirect = async () => {
   try {
+    // Verificamos se há um hash de autenticação na URL
     const hash = window.location.hash;
     const isRecoveryFlow = hash && hash.includes('type=recovery');
     
+    // Manipulamos o fluxo de recuperação de senha
     if (isRecoveryFlow) {
       const accessToken = new URLSearchParams(hash.substring(1)).get('access_token');
       if (accessToken) {
@@ -74,23 +98,38 @@ export const handleAuthRedirect = async () => {
       return false;
     }
 
-    const { data: { session }, error } = await supabase.auth.getSession();
-    
-    if (error) {
-      console.error('Session error:', error);
-      // Check if error is due to network issues
-      if (error.message?.includes('Failed to fetch')) {
-        console.error('Network error - please check your connection and Supabase configuration');
-      }
+    // Inicializamos o Supabase apenas quando necessário
+    const client = getSupabase();
+    if (!client) {
+      console.error('Cliente Supabase não inicializado durante o redirecionamento de autenticação');
       return false;
     }
+
+    // Utilizamos um timeout para não bloquear a interface
+    const timeoutPromise = new Promise<false>((resolve) => setTimeout(() => resolve(false), 3000));
     
-    if (session) {
-      window.location.hash = '';
-      return true;
-    }
+    // Obtemos a sessão com timeout
+    const sessionPromise = client.auth.getSession()
+      .then(({ data: { session }, error }) => {
+        if (error) {
+          console.error('Session error:', error);
+          return false;
+        }
+        
+        if (session) {
+          window.location.hash = '';
+          return true;
+        }
+        
+        return false;
+      })
+      .catch(error => {
+        console.error('Auth redirect error:', error);
+        return false;
+      });
     
-    return false;
+    // Retornamos o primeiro resultado (seja o timeout ou a resposta da API)
+    return Promise.race([sessionPromise, timeoutPromise]);
   } catch (error) {
     console.error('Auth redirect error:', error);
     return false;

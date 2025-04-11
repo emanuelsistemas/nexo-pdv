@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "clean": "rm -rf node_modules/.vite dist .eslintcache",
+    "reset": "rm -rf node_modules && pnpm install",
+    "start": "vite --force"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",

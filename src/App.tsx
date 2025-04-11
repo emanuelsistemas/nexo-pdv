@@ -1,23 +1,25 @@
-import React, { useEffect, createContext, useState, useContext } from 'react';
+import React, { useEffect, createContext, useState, useContext, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import { Copy } from 'lucide-react';
 import 'react-toastify/dist/ReactToastify.css';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import PDV from './pages/PDV';
-import Orcamento from './pages/Orcamento';
-import Produtos from './pages/Produtos';
-import Unidade from './pages/Unidade';
-import Grupo from './pages/Grupo';
-import Clientes from './pages/Clientes';
-import PasswordRecovery from './pages/PasswordRecovery';
-import ResetPassword from './pages/ResetPassword';
-import ResendConfirmation from './pages/ResendConfirmation';
-import ManualConfirmation from './pages/ManualConfirmation';
-import { handleAuthRedirect } from './lib/supabase';
-import { AIChat } from './components/AIChat';
+import { handleAuthRedirect, getSupabase } from './lib/supabase';
+
+// Implementando lazy loading para as páginas
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const PDV = lazy(() => import('./pages/PDV'));
+const Orcamento = lazy(() => import('./pages/Orcamento'));
+const Produtos = lazy(() => import('./pages/Produtos'));
+const Unidade = lazy(() => import('./pages/Unidade'));
+const Grupo = lazy(() => import('./pages/Grupo'));
+const Clientes = lazy(() => import('./pages/Clientes'));
+const PasswordRecovery = lazy(() => import('./pages/PasswordRecovery'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const ResendConfirmation = lazy(() => import('./pages/ResendConfirmation'));
+const ManualConfirmation = lazy(() => import('./pages/ManualConfirmation'));
+const AIChat = lazy(() => import('./components/AIChat').then(module => ({ default: module.AIChat })));
 
 // Criando context para o tema
 type Theme = 'dark' | 'light';
@@ -132,7 +134,38 @@ function AppToastContainer() {
   );
 }
 
+// Componente de Loading para usar durante carregamento lazy
+function LoadingFallback() {
+  return (
+    <div className="flex items-center justify-center h-screen w-full bg-slate-900">
+      <div className="text-center">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-white text-lg">Carregando...</p>
+      </div>
+    </div>
+  );
+}
+
+// Inicializar o Supabase em segundo plano - evita bloquear a renderização
+const initSupabase = () => {
+  // Tentamos inicializar o Supabase depois de um pequeno atraso
+  setTimeout(() => {
+    try {
+      // Inicializar o Supabase em background
+      getSupabase();
+    } catch (error) {
+      console.error('Erro ao inicializar Supabase em background:', error);
+    }
+  }, 100);
+};
+
 function App() {
+  // Inicializar Supabase em background sem bloquear a renderização
+  useEffect(() => {
+    initSupabase();
+  }, []);
+  
+  // Usando useEffect com o segundo argumento [] para executar apenas uma vez
   useEffect(() => {
     // REDIRECIONAMENTO DE DOMÍNIO - detectar redirecionamentos do domínio antigo
     const currentHost = window.location.hostname;
@@ -146,71 +179,57 @@ function App() {
       return;
     }
     
-    // Verifica se há parâmetros de autenticação na URL
-    const hash = window.location.hash;
-    
-    // Se for um link de recuperação de senha
-    if (hash && hash.includes('type=recovery')) {
-      // Extrair o token de acesso do hash
-      const accessToken = new URLSearchParams(hash.substring(1)).get('access_token');
-      if (accessToken) {
-        // Armazenar o token no localStorage
-        localStorage.setItem('recovery_token', accessToken);
-        
-        // Limpar o hash e redirecionar para a página de reset de senha
-        window.location.replace('/reset-password');
-      }
-    } else if (hash && hash.includes('type=signup') || hash.includes('type=email_change')) {
-      handleAuthRedirect().then((success) => {
-        if (!success) {
-          window.location.href = '/login';
-        }
-      });
-    }
-    
-    // Outra solução: Verificar se estamos em uma URL de confirmação e guardar o token
-    if (hash && hash.includes('access_token=')) {
-      const accessToken = new URLSearchParams(hash.substring(1)).get('access_token');
-      const tokenType = new URLSearchParams(hash.substring(1)).get('type');
+    // Otimiza a lógica de processamento da URL
+    const processUrlHash = () => {
+      const hash = window.location.hash;
+      if (!hash) return;
       
-      if (accessToken) {
-        console.log('Token detectado:', tokenType);
-        if (tokenType === 'recovery') {
-          localStorage.setItem('recovery_token', accessToken);
-          window.location.replace('/reset-password');
-        } else if (tokenType === 'signup') {
-          // Tentar lidar com confirmação de email
-          localStorage.setItem('access_token', accessToken);
-          handleAuthRedirect().then((success) => {
-            if (!success) {
-              window.location.href = '/login';
-            }
-          });
-        }
+      const params = new URLSearchParams(hash.substring(1));
+      const accessToken = params.get('access_token');
+      const tokenType = params.get('type');
+      
+      if (!accessToken) return;
+      
+      if (tokenType === 'recovery') {
+        localStorage.setItem('recovery_token', accessToken);
+        window.location.replace('/reset-password');
+        return;
       }
-    }
+      
+      if (tokenType === 'signup' || tokenType === 'email_change') {
+        localStorage.setItem('access_token', accessToken);
+        handleAuthRedirect().then(success => {
+          if (!success) window.location.href = '/login';
+        });
+      }
+    };
+    
+    // Processamos a URL apenas uma vez na inicialização
+    processUrlHash();
   }, []);
 
   return (
     <ThemeProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/pdv" element={<PDV />} />
-          <Route path="/orcamento" element={<Orcamento />} />
-          <Route path="/produtos" element={<Produtos />} />
-          <Route path="/unidade" element={<Unidade />} />
-          <Route path="/grupo" element={<Grupo />} />
-          <Route path="/clientes" element={<Clientes />} />
-          <Route path="/password-recovery" element={<PasswordRecovery />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/resend-confirmation" element={<ResendConfirmation />} />
-          <Route path="/manual-confirmation" element={<ManualConfirmation />} />
-          <Route path="/" element={<Navigate to="/login" replace />} />
-        </Routes>
-        <AIChatWrapper />
+        <Suspense fallback={<LoadingFallback />}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/pdv" element={<PDV />} />
+            <Route path="/orcamento" element={<Orcamento />} />
+            <Route path="/produtos" element={<Produtos />} />
+            <Route path="/unidade" element={<Unidade />} />
+            <Route path="/grupo" element={<Grupo />} />
+            <Route path="/clientes" element={<Clientes />} />
+            <Route path="/password-recovery" element={<PasswordRecovery />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/resend-confirmation" element={<ResendConfirmation />} />
+            <Route path="/manual-confirmation" element={<ManualConfirmation />} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
+          </Routes>
+          <AIChatWrapper />
+        </Suspense>
         <AppToastContainer />
       </BrowserRouter>
     </ThemeProvider>
