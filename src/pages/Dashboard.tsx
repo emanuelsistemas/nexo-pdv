@@ -8,6 +8,7 @@ import 'react-grid-layout/css/styles.css';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 import { CompanySlidePanel } from '../components/CompanySlidePanel';
+import { HumanVerification } from '../components/HumanVerification';
 
 interface GridItem {
   i: string;
@@ -39,6 +40,7 @@ function Dashboard() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showHumanVerification, setShowHumanVerification] = useState(true);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const logoutConfirmRef = useRef<HTMLDivElement>(null);
   const { theme, toggleTheme } = useTheme();
@@ -79,6 +81,17 @@ function Dashboard() {
         setIsFullscreen(false);
       }
     }
+  };
+
+  const handleHumanVerified = () => {
+    setShowHumanVerification(false);
+    // Ativa o modo de tela cheia automaticamente após a verificação
+    setTimeout(() => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+        setIsFullscreen(true);
+      }
+    }, 500);
   };
 
   useEffect(() => {
@@ -665,6 +678,11 @@ function Dashboard() {
           }
         }}
       />
+
+      {/* Human Verification Popup */}
+      {showHumanVerification && (
+        <HumanVerification onVerified={handleHumanVerified} />
+      )}
     </div>
   );
 }
