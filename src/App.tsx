@@ -4,6 +4,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import { Copy } from 'lucide-react';
 import 'react-toastify/dist/ReactToastify.css';
 import { handleAuthRedirect, getSupabase } from './lib/supabase';
+import { isUserLoggedIn } from './utils/authUtils';
 
 // Implementando lazy loading para as páginas
 const Landing = lazy(() => import('./pages/Landing'));
@@ -72,8 +73,31 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await getSupabase().auth.getSession();
-      setIsAuthenticated(!!session);
+      // Verificação dupla: localStorage + Supabase
+      const localAuth = isUserLoggedIn();
+      
+      // Verifica a sessão no Supabase - usando abordagem tipo-segura
+      const authResponse = await getSupabase().auth.getSession();
+      const session = authResponse.data.session;
+      const supabaseAuth = !!session;
+      
+      // Usuário está autenticado se AMBOS retornarem verdadeiro ou se pelo menos um deles for verdadeiro
+      // Isso mantém compatibilidade com usuários autenticados apenas via Supabase
+      // mas também reconhece usuários autenticados via localStorage
+      setIsAuthenticated(localAuth || supabaseAuth);
+      
+      // Se há uma sessão válida no Supabase, mas não no localStorage, 
+      // atualiza o localStorage para manter as coisas sincronizadas
+      if (supabaseAuth && !localAuth && session && session.user && session.user.email) {
+        try {
+          // Importação dinâmica para evitar problemas cíclicos
+          const { saveLoginState } = await import('./utils/authUtils');
+          saveLoginState(session.user.email);
+          console.log('Sincronizando estado de login para localStorage');
+        } catch (err) {
+          console.error('Erro ao salvar estado de login:', err);
+        }
+      }
     };
     checkAuth();
   }, []);
@@ -83,7 +107,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return <Navigate to="/" state={{ from: location }} replace />;
   }
 
   return <>{children}</>;
@@ -96,8 +120,28 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { session } } = await getSupabase().auth.getSession();
-      setIsAuthenticated(!!session);
+      // Verificação dupla: localStorage + Supabase
+      const localAuth = isUserLoggedIn();
+      
+      // Verifica a sessão no Supabase - usando abordagem tipo-segura
+      const authResponse = await getSupabase().auth.getSession();
+      const session = authResponse.data.session;
+      const supabaseAuth = !!session;
+      
+      // Usuário está autenticado se qualquer um dos métodos retornar verdadeiro
+      setIsAuthenticated(localAuth || supabaseAuth);
+      
+      // Sincroniza os estados de autenticação, se necessário
+      if (supabaseAuth && !localAuth && session && session.user && session.user.email) {
+        try {
+          // Importação dinâmica para evitar problemas cíclicos
+          const { saveLoginState } = await import('./utils/authUtils');
+          saveLoginState(session.user.email);
+          console.log('Sincronizando estado de login para localStorage');
+        } catch (err) {
+          console.error('Erro ao salvar estado de login:', err);
+        }
+      }
     };
     checkAuth();
   }, []);
