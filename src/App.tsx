@@ -1,4 +1,4 @@
-import React, { useEffect, createContext, useState, useContext, lazy, Suspense } from 'react';
+import React, { useState, useEffect, createContext, useContext, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ToastContainer, toast } from 'react-toastify';
 import { Copy } from 'lucide-react';
@@ -6,6 +6,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { handleAuthRedirect, getSupabase } from './lib/supabase';
 
 // Implementando lazy loading para as páginas
+const Landing = lazy(() => import('./pages/Landing'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -38,10 +39,8 @@ export const useTheme = () => useContext(ThemeContext);
 
 // Provider do tema
 const ThemeProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
-  // Inicializa com o tema salvo no localStorage ou dark como padrão
   const [theme, setTheme] = useState<Theme>('dark');
 
-  // Carrega o tema salvo no localStorage apenas se existir
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'light' || savedTheme === 'dark') {
@@ -49,14 +48,12 @@ const ThemeProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     }
   }, []);
 
-  // Atualiza o atributo data-theme no HTML quando o tema mudar
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     document.body.className = theme === 'light' ? 'bg-white' : 'bg-gradient-to-br from-slate-900 to-slate-800';
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Função para alternar entre temas
   const toggleTheme = () => {
     setTheme(prevTheme => prevTheme === 'dark' ? 'light' : 'dark');
   };
@@ -66,6 +63,59 @@ const ThemeProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
       {children}
     </ThemeContext.Provider>
   );
+};
+
+// Protected Route Component
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const location = useLocation();
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await getSupabase().auth.getSession();
+      setIsAuthenticated(!!session);
+    };
+    checkAuth();
+  }, []);
+
+  if (isAuthenticated === null) {
+    return <LoadingFallback />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// Public Route Component (redirects to dashboard if authenticated)
+const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const location = useLocation();
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await getSupabase().auth.getSession();
+      setIsAuthenticated(!!session);
+    };
+    checkAuth();
+  }, []);
+
+  if (isAuthenticated === null) {
+    return <LoadingFallback />;
+  }
+
+  // Allow access to landing page even when authenticated
+  if (location.pathname === '/') {
+    return <>{children}</>;
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
 };
 
 // Override default toast error configuration
@@ -113,7 +163,6 @@ function AIChatWrapper() {
   return <AIChat />;
 }
 
-// Componente para o ToastContainer que usa o hook useTheme
 function AppToastContainer() {
   const { theme } = useTheme();
   
@@ -134,7 +183,6 @@ function AppToastContainer() {
   );
 }
 
-// Componente de Loading para usar durante carregamento lazy
 function LoadingFallback() {
   return (
     <div className="flex items-center justify-center h-screen w-full bg-slate-900">
@@ -146,12 +194,9 @@ function LoadingFallback() {
   );
 }
 
-// Inicializar o Supabase em segundo plano - evita bloquear a renderização
 const initSupabase = () => {
-  // Tentamos inicializar o Supabase depois de um pequeno atraso
   setTimeout(() => {
     try {
-      // Inicializar o Supabase em background
       getSupabase();
     } catch (error) {
       console.error('Erro ao inicializar Supabase em background:', error);
@@ -160,26 +205,21 @@ const initSupabase = () => {
 };
 
 function App() {
-  // Inicializar Supabase em background sem bloquear a renderização
   useEffect(() => {
     initSupabase();
   }, []);
   
-  // Usando useEffect com o segundo argumento [] para executar apenas uma vez
   useEffect(() => {
-    // REDIRECIONAMENTO DE DOMÍNIO - detectar redirecionamentos do domínio antigo
     const currentHost = window.location.hostname;
     const oldDomain = 'nexopdv.appbr.io';
     const newDomain = 'nexopdv.emasoftware.io';
     
-    // Se o domínio atual é o antigo, redirecionar para o novo com todos os parâmetros
     if (currentHost === oldDomain) {
       const newUrl = window.location.href.replace(oldDomain, newDomain);
       window.location.href = newUrl;
       return;
     }
     
-    // Otimiza a lógica de processamento da URL
     const processUrlHash = () => {
       const hash = window.location.hash;
       if (!hash) return;
@@ -204,7 +244,6 @@ function App() {
       }
     };
     
-    // Processamos a URL apenas uma vez na inicialização
     processUrlHash();
   }, []);
 
@@ -213,20 +252,23 @@ function App() {
       <BrowserRouter>
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/pdv" element={<PDV />} />
-            <Route path="/orcamento" element={<Orcamento />} />
-            <Route path="/produtos" element={<Produtos />} />
-            <Route path="/unidade" element={<Unidade />} />
-            <Route path="/grupo" element={<Grupo />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/password-recovery" element={<PasswordRecovery />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/resend-confirmation" element={<ResendConfirmation />} />
-            <Route path="/manual-confirmation" element={<ManualConfirmation />} />
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            {/* Public routes */}
+            <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
+            <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+            <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+            <Route path="/password-recovery" element={<PublicRoute><PasswordRecovery /></PublicRoute>} />
+            <Route path="/reset-password" element={<PublicRoute><ResetPassword /></PublicRoute>} />
+            <Route path="/resend-confirmation" element={<PublicRoute><ResendConfirmation /></PublicRoute>} />
+            <Route path="/manual-confirmation" element={<PublicRoute><ManualConfirmation /></PublicRoute>} />
+
+            {/* Protected routes */}
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/pdv" element={<ProtectedRoute><PDV /></ProtectedRoute>} />
+            <Route path="/orcamento" element={<ProtectedRoute><Orcamento /></ProtectedRoute>} />
+            <Route path="/produtos" element={<ProtectedRoute><Produtos /></ProtectedRoute>} />
+            <Route path="/unidade" element={<ProtectedRoute><Unidade /></ProtectedRoute>} />
+            <Route path="/grupo" element={<ProtectedRoute><Grupo /></ProtectedRoute>} />
+            <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
           </Routes>
           <AIChatWrapper />
         </Suspense>
