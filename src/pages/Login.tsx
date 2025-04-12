@@ -4,6 +4,7 @@ import { Eye, EyeOff, LogIn, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Logo } from '../components/Logo';
 import { supabase } from '../lib/supabase';
+import { openKioskWindow } from '../utils/windowUtils';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -76,7 +77,28 @@ export default function Login() {
       }
 
       toast.success('Login realizado com sucesso!');
-      navigate('/dashboard');
+      
+      // Abre o dashboard em uma janela em modo quiosque
+      try {
+        const dashboardWindow = openKioskWindow(window.location.origin + '/dashboard');
+        
+        // Verifica se a janela foi aberta com sucesso
+        if (!dashboardWindow) {
+          console.warn('Não foi possível abrir a janela do Dashboard em modo quiosque.');
+          toast.warn('O bloqueador de pop-ups pode estar ativo. Por favor, permita pop-ups para este site.');
+          // Fallback para navegação direta caso não seja possível abrir a janela
+          navigate('/dashboard');
+          return;
+        }
+      } catch (error) {
+        console.error('Erro ao abrir janela em modo quiosque:', error);
+        // Fallback para navegação direta caso ocorra algum erro
+        navigate('/dashboard');
+        return;
+      }
+      
+      // Redireciona a janela atual para a página inicial
+      navigate('/', { replace: true });
     } catch (error: any) {
       console.error('Erro completo:', error);
       toast.error('Erro ao conectar com o servidor. Por favor, tente novamente');
