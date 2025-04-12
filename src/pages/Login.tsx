@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { Logo } from '../components/Logo';
 import { supabase } from '../lib/supabase';
 import { openKioskWindow } from '../utils/windowUtils';
+import { saveLoginState } from '../utils/authUtils';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -77,6 +78,9 @@ export default function Login() {
       }
 
       toast.success('Login realizado com sucesso!');
+      
+      // Salva o estado de login no localStorage
+      saveLoginState(formData.email);
       
       // Abre o dashboard em uma janela em modo quiosque
       try {

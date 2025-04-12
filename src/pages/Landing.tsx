@@ -1,9 +1,61 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Receipt, ArrowRight, Check, Shield, Zap, Clock, Users, BarChart } from 'lucide-react';
+import { ShoppingCart, Receipt, ArrowRight, Check, Shield, Zap, Clock, Users, BarChart, LogIn } from 'lucide-react';
 import { Logo } from '../components/Logo';
+import { isUserLoggedIn } from '../utils/authUtils';
+import { openKioskWindow } from '../utils/windowUtils';
 
 export default function Landing() {
+  const [userLoggedIn, setUserLoggedIn] = useState(false);
+  
+  useEffect(() => {
+    // Verifica se o usuário está logado ao carregar a página
+    const checkLoginStatus = () => {
+      const isLogged = isUserLoggedIn();
+      setUserLoggedIn(isLogged);
+      console.log('Status de login verificado:', isLogged ? 'Logado' : 'Deslogado');
+    };
+    
+    // Verifica o status inicial
+    checkLoginStatus();
+    
+    // Configurar um listener para storage events (detecta mudanças no localStorage)
+    const handleStorageChange = (event: StorageEvent) => {
+      // Verifica se a alteração foi relacionada ao login state
+      if (event.key === 'nexo_pdv_login_state' || event.key === null) {
+        checkLoginStatus();
+      }
+    };
+    
+    // Verifica quando a página recebe foco (usuário retorna a esta aba)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkLoginStatus();
+      }
+    };
+    
+    // Configura um intervalo para verificar o status de login periodicamente
+    // Isso é útil para casos onde o evento de storage não é disparado corretamente
+    const intervalId = setInterval(checkLoginStatus, 5000); // Verifica a cada 5 segundos
+    
+    // Adiciona os event listeners
+    window.addEventListener('storage', handleStorageChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', checkLoginStatus);
+    
+    // Limpa os event listeners ao desmontar o componente
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('storage', handleStorageChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', checkLoginStatus);
+    };
+  }, []);
+  
+  // Função para abrir o dashboard para usuários já logados
+  const handleReturnToSystem = () => {
+    openKioskWindow(window.location.origin + '/dashboard');
+  };
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
       {/* Header/Nav */}
@@ -16,18 +68,30 @@ export default function Landing() {
               <a href="#about" className="text-slate-300 hover:text-white transition-colors">Sobre</a>
             </nav>
             <div className="flex items-center gap-4">
-              <Link 
-                to="/login"
-                className="text-slate-300 hover:text-white transition-colors"
-              >
-                Login
-              </Link>
-              <Link 
-                to="/register"
-                className="bg-blue-500 hover:bg-blue-400 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                Começar Grátis
-              </Link>
+              {userLoggedIn ? (
+                <button
+                  onClick={handleReturnToSystem}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg transition-colors"
+                >
+                  <LogIn size={18} />
+                  Retornar ao Sistema
+                </button>
+              ) : (
+                <>
+                  <Link 
+                    to="/login"
+                    className="text-slate-300 hover:text-white transition-colors"
+                  >
+                    Login
+                  </Link>
+                  <Link 
+                    to="/register"
+                    className="bg-blue-500 hover:bg-blue-400 text-white px-4 py-2 rounded-lg transition-colors"
+                  >
+                    Começar Grátis
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -43,13 +107,23 @@ export default function Landing() {
             Sistema completo de PDV na nuvem para sua empresa. Controle vendas, estoque e finanças em um só lugar.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link 
-              to="/register"
-              className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white px-8 py-3 rounded-lg transition-all duration-200 font-medium shadow-lg shadow-blue-500/25"
-            >
-              Começar Agora
-              <ArrowRight size={20} />
-            </Link>
+            {userLoggedIn ? (
+              <button 
+                onClick={handleReturnToSystem}
+                className="flex items-center gap-2 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white px-8 py-3 rounded-lg transition-all duration-200 font-medium shadow-lg shadow-green-500/25"
+              >
+                Acessar o Sistema
+                <LogIn size={20} />
+              </button>
+            ) : (
+              <Link 
+                to="/register"
+                className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white px-8 py-3 rounded-lg transition-all duration-200 font-medium shadow-lg shadow-blue-500/25"
+              >
+                Começar Agora
+                <ArrowRight size={20} />
+              </Link>
+            )}
             <a 
               href="#demo"
               className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-8 py-3 rounded-lg transition-colors"

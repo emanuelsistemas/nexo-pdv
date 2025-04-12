@@ -9,6 +9,9 @@ import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
 import { CompanySlidePanel } from '../components/CompanySlidePanel';
 import { HumanVerification } from '../components/HumanVerification';
+import LogoutOverlay from '../components/LogoutOverlay';
+import { closeWindow } from '../utils/windowUtils';
+import { clearLoginState } from '../utils/authUtils';
 
 interface GridItem {
   i: string;
@@ -41,6 +44,7 @@ function Dashboard() {
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showHumanVerification, setShowHumanVerification] = useState(true);
+  const [showLogoutOverlay, setShowLogoutOverlay] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const logoutConfirmRef = useRef<HTMLDivElement>(null);
   const { theme, toggleTheme } = useTheme();
@@ -94,13 +98,77 @@ function Dashboard() {
     }, 500);
   };
 
+  // Função para realizar logout automaticamente
+  const performAutoLogout = async () => {
+    try {
+      console.log('Realizando logout automático...');
+      // Limpa o estado de login no localStorage
+      clearLoginState();
+      // Faz logout da sessão no Supabase
+      await supabase.auth.signOut();
+      // Não vamos retornar nada porque a página será fechada
+    } catch (error) {
+      console.error('Erro ao realizar logout automático:', error);
+    }
+  };
+
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
     };
 
+    // Esta função executa o logout quando o botão fechar é clicado, sem mostrar confirmação
+    const handleBeforeUnload = () => {
+      // Apenas faz o logout silenciosamente quando a janela está fechando
+      // sem mostrar nenhum diálogo de confirmação para evitar confusão
+      
+      // Executa o logout sem confirmação
+      const silentLogout = () => {
+        // Limpa o localStorage de login
+        clearLoginState();
+        
+        // Tenta usar sendBeacon para garantir que o logout seja processado mesmo se a janela já estiver fechando
+        try {
+          const logoutUrl = `${window.location.origin}/api/auto-logout`;
+          const blob = new Blob([JSON.stringify({ action: 'logout' })], { type: 'application/json' });
+          navigator.sendBeacon(logoutUrl, blob);
+        } catch (error) {
+          console.error('Erro ao enviar beacon de logout:', error);
+          // Fallback: tenta fazer um logout síncrono como último recurso
+          try {
+            supabase.auth.signOut();
+          } catch (innerError) {
+            console.error('Falha no logout de fallback:', innerError);
+          }
+        }
+      };
+      
+      // Registra um listener para o evento visibilitychange para detectar quando a janela está sendo fechada
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') {
+          silentLogout();
+        }
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      // Realiza o logout silenciosamente
+      clearLoginState();
+      // Não usa performAutoLogout() que pode demorar muito
+      
+      // NÃO mostra diálogo de confirmação
+      // Não faz e.preventDefault() para permitir que a janela feche normalmente
+    };
+
+    // Registra os event listeners
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Remove os event listeners ao desmontar o componente
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
   useEffect(() => {
@@ -168,10 +236,40 @@ function Dashboard() {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
-      navigate('/login');
+      // Fecha o modal de confirmação
+      setShowLogoutConfirm(false);
+      
+      // Mostra o overlay escuro com loading de saída
+      setShowLogoutOverlay(true);
+      
+      // Aguarda um momento para mostrar o overlay antes de prosseguir
+      setTimeout(async () => {
+        try {
+          // Executa o logout e aguarda a conclusão
+          const { error } = await supabase.auth.signOut();
+          
+          if (error) {
+            throw error;
+          }
+          
+          // Limpa o estado de login no localStorage
+          clearLoginState();
+          
+          // Espera um curto período para garantir que o logout seja processado
+          // O overlay continua visível durante todo esse processo
+          setTimeout(() => {
+            // Após o logout bem-sucedido, fecha a janela
+            closeWindow();
+          }, 1000);
+        } catch (innerError: any) {
+          // Em caso de erro, esconde o overlay e mostra mensagem de erro
+          setShowLogoutOverlay(false);
+          toast.error('Erro ao sair: ' + innerError.message);
+        }
+      }, 500); // Aguarda meio segundo para que o overlay apareça antes de iniciar o processo
     } catch (error: any) {
-      toast.error('Erro ao sair: ' + error.message);
+      setShowLogoutOverlay(false);
+      toast.error('Erro ao iniciar processo de saída: ' + error.message);
     }
   };
 
@@ -683,6 +781,9 @@ function Dashboard() {
       {showHumanVerification && (
         <HumanVerification onVerified={handleHumanVerified} />
       )}
+
+      {/* Logout Overlay */}
+      <LogoutOverlay visible={showLogoutOverlay} />
     </div>
   );
 }
