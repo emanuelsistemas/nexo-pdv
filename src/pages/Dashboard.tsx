@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../App';
-import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Cog, Users, FileBarChart2, Moon, Sun, Bug, Maximize2, Minimize2, RefreshCw } from 'lucide-react';
+import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Users, FileBarChart2, Moon, Sun, Bug, Maximize2, Minimize2, RefreshCw } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import GridLayout from 'react-grid-layout';
@@ -10,6 +10,7 @@ import { Logo } from '../components/Logo';
 import { CompanySlidePanel } from '../components/CompanySlidePanel';
 import { HumanVerification } from '../components/HumanVerification';
 import LogoutOverlay from '../components/LogoutOverlay';
+import { SystemConfigPanel } from '../components/SystemConfigPanel';
 import { closeWindow } from '../utils/windowUtils';
 import { clearLoginState } from '../utils/authUtils';
 
@@ -43,8 +44,15 @@ function Dashboard() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showHumanVerification, setShowHumanVerification] = useState(true);
+  // Verifica se o usuário já passou pela verificação de segurança
+  const [showHumanVerification, setShowHumanVerification] = useState(() => {
+    // Obtém o estado da verificação do localStorage
+    const verified = localStorage.getItem('humanVerified');
+    // Se o usuário já foi verificado, não mostra a tela
+    return verified !== 'true';
+  });
   const [showLogoutOverlay, setShowLogoutOverlay] = useState(false);
+  const [showSystemConfigPanel, setShowSystemConfigPanel] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const logoutConfirmRef = useRef<HTMLDivElement>(null);
   const { theme, toggleTheme } = useTheme();
@@ -63,11 +71,9 @@ function Dashboard() {
     { i: 'produtos-app', x: 0, y: 0, w: 1, h: 1, type: 'app', icon: <Package className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Produtos.app', parent: 'produtos' },
     { i: 'grupos-app', x: 1, y: 0, w: 1, h: 1, type: 'app', icon: <Grid2X2 className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Grupos.app', parent: 'produtos' },
     { i: 'unidade-app', x: 2, y: 0, w: 1, h: 1, type: 'app', icon: <Ruler className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Unidade.app', parent: 'produtos' },
-    { i: 'produtos-config', x: 3, y: 0, w: 1, h: 1, type: 'file', icon: <Cog className="text-slate-400 group-hover:text-slate-300" size={40} />, title: 'Configuracao.config', parent: 'produtos' },
     // Clientes folder items
     { i: 'clientes-app', x: 0, y: 0, w: 1, h: 1, type: 'app', icon: <Users className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Clientes.app', parent: 'clientes' },
-    { i: 'clientes-relatorios', x: 1, y: 0, w: 1, h: 1, type: 'app', icon: <FileBarChart2 className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Relatorios.app', parent: 'clientes' },
-    { i: 'clientes-config', x: 2, y: 0, w: 1, h: 1, type: 'file', icon: <Cog className="text-slate-400 group-hover:text-slate-300" size={40} />, title: 'Configuracao.config', parent: 'clientes' }
+    { i: 'clientes-relatorios', x: 1, y: 0, w: 1, h: 1, type: 'app', icon: <FileBarChart2 className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Relatorios.app', parent: 'clientes' }
   ];
 
   const [layout, setLayout] = useState(() => {
@@ -88,7 +94,12 @@ function Dashboard() {
   };
 
   const handleHumanVerified = () => {
+    // Marca no localStorage que o usuário já passou pela verificação
+    localStorage.setItem('humanVerified', 'true');
+    
+    // Atualiza o estado para não mostrar mais a verificação
     setShowHumanVerification(false);
+    
     // Ativa o modo de tela cheia automaticamente após a verificação
     setTimeout(() => {
       if (!document.fullscreenElement) {
@@ -102,8 +113,10 @@ function Dashboard() {
   const performAutoLogout = async () => {
     try {
       console.log('Realizando logout automático...');
-      // Limpa o estado de login no localStorage
+      // Limpa o estado de login e a verificação de segurança no localStorage
       clearLoginState();
+      // Remove a verificação humana para que seja exibida no próximo login
+      localStorage.removeItem('humanVerified');
       // Faz logout da sessão no Supabase
       await supabase.auth.signOut();
       // Não vamos retornar nada porque a página será fechada
@@ -255,6 +268,9 @@ function Dashboard() {
           // Limpa o estado de login no localStorage
           clearLoginState();
           
+          // Remove a verificação humana para que seja exibida no próximo login
+          localStorage.removeItem('humanVerified');
+          
           // Espera um curto período para garantir que o logout seja processado
           // O overlay continua visível durante todo esse processo
           setTimeout(() => {
@@ -370,6 +386,9 @@ function Dashboard() {
     } else if (item.type === 'file') {
       if (item.i === 'empresa-config') {
         setShowCompanyPanel(true);
+      } else if (item.i === 'sistema-config') {
+        // Quando o usuário clica em Sistema.config, abre o painel de configurações do sistema
+        setShowSystemConfigPanel(true);
       }
       const parentFolder = layout.find((l: GridItem) => l.i === item.parent);
       if (parentFolder) {
@@ -784,6 +803,12 @@ function Dashboard() {
 
       {/* Logout Overlay */}
       <LogoutOverlay visible={showLogoutOverlay} />
+
+      {/* System Configuration Panel */}
+      <SystemConfigPanel 
+        isOpen={showSystemConfigPanel} 
+        onClose={() => setShowSystemConfigPanel(false)} 
+      />
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ShoppingCart, Trash2, Plus, Minus, Receipt, CreditCard, Wallet, QrCode, X, CreditCard as Credit, Smartphone as Debit, Ticket as Voucher, Loader2, ArrowLeft, Percent, DollarSign, Tag, FileText, MoreHorizontal, ClipboardList, RotateCcw, Save, Settings, DollarSign as Dollar, ArrowDownCircle, ArrowUpCircle, Bike, User, UserPlus, UserSearch } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, Plus, Minus, Receipt, CreditCard, Wallet, QrCode, X, CreditCard as Credit, Smartphone as Debit, Ticket as Voucher, Loader2, ArrowLeft, Percent, DollarSign, Tag, FileText, RotateCcw, Save, Settings, DollarSign as Dollar, ArrowDownCircle, ArrowUpCircle, Bike, User, UserPlus, UserSearch, Maximize2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 import { Logo } from '../components/Logo';
+import { SystemConfigPanel } from '../components/SystemConfigPanel';
 
 interface Product {
   id: string;
@@ -45,8 +46,9 @@ export default function PDV() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [discountType, setDiscountType] = useState<'percentage' | 'value'>('percentage');
   const [discountAmount, setDiscountAmount] = useState<string>('');
-  const [showExpandedMenu, setShowExpandedMenu] = useState(false);
-  const [showSecondMenu, setShowSecondMenu] = useState(false);
+  // Menus are handled by SystemConfigPanel now
+  // const [showExpandedMenu, setShowExpandedMenu] = useState(false);
+  // const [showSecondMenu, setShowSecondMenu] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState('');
   const [showPartialPaymentPopup, setShowPartialPaymentPopup] = useState(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -56,7 +58,8 @@ export default function PDV() {
   const [selectedClient, setSelectedClient] = useState<{id: string, name: string} | null>(null);
   const [showClientSearch, setShowClientSearch] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState('');
-  const [filteredClients, setFilteredClients] = useState<{id: string, name: string, document: string}[]>([]);
+  // Client filtering is handled elsewhere
+  // const [filteredClients, setFilteredClients] = useState<{id: string, name: string, document: string}[]>([]);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState('');
   const [partialPaymentMethod, setPartialPaymentMethod] = useState<string | null>(null);
   const [partialPayments, setPartialPayments] = useState<{id: string, method: string, amount: number, methodType: string}[]>([]);
@@ -66,26 +69,133 @@ export default function PDV() {
   const [appliedTotalDiscount, setAppliedTotalDiscount] = useState<{type: 'percentage' | 'value', amount: number} | null>(null);
   const [showItemNotFoundPopup, setShowItemNotFoundPopup] = useState(false);
   const [notFoundItemCode, setNotFoundItemCode] = useState('');
-  const [showConfigPopup, setShowConfigPopup] = useState(false);
+  const [showSystemConfigPanel, setShowSystemConfigPanel] = useState(false);
+  const [operatorName, setOperatorName] = useState('Carregando...');
+  
+  // Estados para controle de caixa
+  const [showCashierOpenDialog, setShowCashierOpenDialog] = useState(false);
+  const [showCashierCloseDialog, setShowCashierCloseDialog] = useState(false);
+  const [cashierOpenAmount, setCashierOpenAmount] = useState('');
+  const [cashierCloseAmount, setCashierCloseAmount] = useState('');
+  const [isCashierOpen, setIsCashierOpen] = useState(false);
+  const [currentCashierId, setCurrentCashierId] = useState<string | null>(null);
   const [pdvConfig, setPdvConfig] = useState({
     groupItems: false,
     controlCashier: false,
     requireSeller: false,
-    fullScreen: false,
     configId: null as string | null // ID da configuração no banco de dados
   });
 
-  // Cria a tabela de configurações do PDV se necessário
-  const createPdvConfigurationsTable = async () => {
+  // A criação da tabela de configurações foi movida para SystemConfigPanel
+
+  // Carrega o nome do usuário logado (mesmo método usado no Dashboard)
+  const loadOperatorName = async () => {
     try {
-      // Usar SQL bruto para criar a tabela
-      const { error } = await supabase.rpc('create_pdv_config_table');
+      const { data: { user } } = await supabase.auth.getUser();
       
-      if (error) {
-        console.error('Erro ao criar tabela de configurações:', error);
+      if (!user) {
+        setOperatorName('Usuário');
+        return;
+      }
+      
+      // Buscar o nome diretamente da tabela profiles (mesmo do Dashboard)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', user.id)
+        .single();
+        
+      if (profile?.name) {
+        // Usar o nome do perfil como no Dashboard
+        setOperatorName(profile.name);
+      } else {
+        // Fallback para "Usuário" se não tiver nome
+        setOperatorName('Usuário');
       }
     } catch (error) {
-      console.error('Erro ao executar SQL para criar tabela:', error);
+      console.error('Erro ao carregar nome do operador:', error);
+      setOperatorName('Usuário');
+    }
+  };
+
+  // Função que gera uma chave única para o localStorage baseada no usuário e empresa
+  const getPdvStateKey = async () => {
+    try {
+      // Obter o usuário atual
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+      
+      // Obter o ID da empresa
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (!profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+      
+      // Retorna chave única combinando ID do usuário e da empresa
+      return `pdvState_${user.id}_${profile.company_id}`;
+    } catch (error) {
+      console.error('Erro ao obter chave para localStorage:', error);
+      return null;
+    }
+  };
+
+  // Carrega o estado do PDV usando a chave especifica para o usuário/empresa
+  const loadPdvState = async () => {
+    try {
+      const stateKey = await getPdvStateKey();
+      
+      if (!stateKey) {
+        return; // Não foi possível obter a chave
+      }
+      
+      // Recupera o estado salvo do PDV com a chave específica
+      const savedPdvState = localStorage.getItem(stateKey);
+      
+      if (savedPdvState) {
+        const parsedState = JSON.parse(savedPdvState);
+        
+        // Restaura os itens do carrinho
+        if (parsedState.items && Array.isArray(parsedState.items)) {
+          setItems(parsedState.items);
+        }
+        
+        // Restaura os pagamentos parciais
+        if (parsedState.partialPayments && Array.isArray(parsedState.partialPayments)) {
+          setPartialPayments(parsedState.partialPayments);
+        }
+        
+        // Restaura o desconto total aplicado
+        if (parsedState.appliedTotalDiscount) {
+          setAppliedTotalDiscount(parsedState.appliedTotalDiscount);
+        }
+        
+        // Restaura o cliente selecionado
+        if (parsedState.selectedClient) {
+          setSelectedClient(parsedState.selectedClient);
+        }
+        
+        // Toast informativo apenas se houver itens
+        if (parsedState.items && parsedState.items.length > 0) {
+          toast.info('Estado anterior do PDV restaurado', {
+            autoClose: 3000
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar estado do PDV:', error);
+      // Em caso de erro, tenta limpar o localStorage para este usuário/empresa
+      const stateKey = await getPdvStateKey();
+      if (stateKey) {
+        localStorage.removeItem(stateKey);
+      }
     }
   };
 
@@ -126,11 +236,10 @@ export default function PDV() {
 
         if (config) {
           setPdvConfig({
-            groupItems: config.group_items,
-            controlCashier: config.control_cashier,
-            requireSeller: config.require_seller,
-            fullScreen: config.full_screen,
-            configId: config.id
+            groupItems: Boolean(config.group_items),
+            controlCashier: Boolean(config.control_cashier),
+            requireSeller: Boolean(config.require_seller),
+            configId: config.id ? String(config.id) : null
           });
           return;
         }
@@ -142,11 +251,13 @@ export default function PDV() {
       const savedConfig = localStorage.getItem('pdvConfig');
       if (savedConfig) {
         try {
-          const parsedConfig = JSON.parse(savedConfig);
-          setPdvConfig(prev => ({
-            ...parsedConfig,
-            configId: prev.configId
-          }));
+          const parsed = JSON.parse(savedConfig);
+          setPdvConfig({
+            groupItems: Boolean(parsed.groupItems),
+            controlCashier: Boolean(parsed.controlCashier),
+            requireSeller: Boolean(parsed.requireSeller),
+            configId: parsed.configId ? String(parsed.configId) : null
+          });
         } catch (e) {
           console.error('Erro ao analisar configurações do localStorage:', e);
         }
@@ -171,54 +282,214 @@ export default function PDV() {
 
 
   // Carrega o estado do PDV quando o componente é montado
-  useEffect(() => {
-    if (searchInputRef.current) {
-      searchInputRef.current.focus();
-    }
-    
-    // Carregar configurações do PDV
-    loadPdvConfig();
-
+  // Função para verificar se o caixa está aberto consultando a tabela pdv_cashiers
+  const checkCashierStatus = async () => {
     try {
-      // Recupera o estado salvo do PDV
-      const savedPdvState = localStorage.getItem('pdvState');
+      console.log('Verificando status do caixa com configuração:', pdvConfig);
       
-      if (savedPdvState) {
-        const parsedState = JSON.parse(savedPdvState);
-        
-        // Restaura os itens do carrinho
-        if (parsedState.items && Array.isArray(parsedState.items)) {
-          setItems(parsedState.items);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) return;
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (!profile?.company_id) return;
+      
+      // Verificar status do caixa para o usuário atual
+      const { data: cashierData } = await supabase
+        .from('pdv_cashiers')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('company_id', profile.company_id)
+        .order('opened_at', { ascending: false })
+        .limit(1);
+      
+      // Armazenar o ID do caixa atual (se existir) para usar em operações futuras
+      if (cashierData && cashierData.length > 0) {
+        const currentCashier = cashierData[0];
+        // Garantir que o ID do caixa seja uma string válida
+        if (currentCashier && typeof currentCashier.id === 'string') {
+          setCurrentCashierId(currentCashier.id);
         }
         
-        // Restaura os pagamentos parciais
-        if (parsedState.partialPayments && Array.isArray(parsedState.partialPayments)) {
-          setPartialPayments(parsedState.partialPayments);
-        }
+        console.log('Status do caixa encontrado:', currentCashier.status);
         
-        // Restaura o desconto total aplicado
-        if (parsedState.appliedTotalDiscount) {
-          setAppliedTotalDiscount(parsedState.appliedTotalDiscount);
+        // Verificar o status do caixa diretamente pela coluna status
+        if (currentCashier.status === 'open') {
+          setIsCashierOpen(true);
+        } else {
+          // Caixa está fechado
+          setIsCashierOpen(false);
+          
+          // Forçar exibição do popup se o controle de caixa estiver ativado
+          if (pdvConfig.controlCashier) {
+            console.log('Controle de caixa está ativado. Exibindo popup de abertura.');
+            setShowCashierOpenDialog(true);
+          }
         }
+      } else {
+        // Não há registro de caixa para o usuário/empresa
+        console.log('Nenhum registro de caixa encontrado para o usuário');
+        setIsCashierOpen(false);
+        setCurrentCashierId(null);
         
-        // Restaura o cliente selecionado
-        if (parsedState.selectedClient) {
-          setSelectedClient(parsedState.selectedClient);
-        }
-        
-        // Toast informativo apenas se houver itens
-        if (parsedState.items && parsedState.items.length > 0) {
-          toast.info('Estado anterior do PDV restaurado', {
-            autoClose: 3000
-          });
+        // Forçar exibição do popup se o controle de caixa estiver ativado
+        if (pdvConfig.controlCashier) {
+          console.log('Controle de caixa está ativado. Exibindo popup de abertura.');
+          setShowCashierOpenDialog(true);
         }
       }
     } catch (error) {
-      console.error('Erro ao carregar estado do PDV:', error);
-      // Em caso de erro, limpa o localStorage para evitar problemas futuros
-      localStorage.removeItem('pdvState');
+      console.error('Erro ao verificar status do caixa:', error);
+      setIsCashierOpen(false);
     }
+  };
+  
+  // Função para abrir o caixa
+  const handleOpenCashier = async () => {
+    try {
+      // Usar valor 0,00 como padrão se não informar
+      let valorAbertura = 0;
+      
+      // Se valor foi informado e é válido, usar o valor informado
+      if (cashierOpenAmount && !isNaN(parseFloat(cashierOpenAmount)) && parseFloat(cashierOpenAmount) >= 0) {
+        valorAbertura = parseFloat(cashierOpenAmount);
+      }
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast.error('Usuário não autenticado');
+        return;
+      }
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (!profile?.company_id) {
+        toast.error('Empresa não encontrada');
+        return;
+      }
+      
+      // Inserir registro de abertura de caixa
+      const { error } = await supabase
+        .from('pdv_cashiers')
+        .insert({
+          user_id: user.id,
+          company_id: profile.company_id,
+          initial_amount: valorAbertura,
+          status: 'open',
+          opened_at: new Date().toISOString(),
+          closed_at: null,
+          final_amount: null
+        });
+      
+      if (error) {
+        toast.error('Erro ao abrir o caixa: ' + error.message);
+        return;
+      }
+      
+      // Atualizar status do caixa
+      setIsCashierOpen(true);
+      setShowCashierOpenDialog(false);
+      setCashierOpenAmount('');
+      
+      toast.success('Caixa aberto com sucesso!');
+    } catch (error) {
+      console.error('Erro ao abrir caixa:', error);
+      toast.error('Erro ao abrir o caixa');
+    }
+  };
+  
+  // Função para cancelar a abertura do caixa e sair do PDV
+  const handleCancelCashierOpen = () => {
+    setShowCashierOpenDialog(false);
+    navigate('/dashboard'); // Volta para o dashboard
+  };
+  
+  // Função para fechar o caixa
+  const handleCloseCashier = async () => {
+    try {
+      // Validar valor de fechamento
+      if (!cashierCloseAmount || isNaN(parseFloat(cashierCloseAmount)) || parseFloat(cashierCloseAmount) < 0) {
+        toast.error('Informe um valor válido para fechamento do caixa');
+        return;
+      }
+      
+      // Verificar se há um caixa aberto (usando o ID armazenado)
+      if (!currentCashierId) {
+        toast.error('Não há caixa aberto para fechar');
+        return;
+      }
+      
+      // Atualizar o registro para fechado diretamente pelo ID armazenado
+      const { error } = await supabase
+        .from('pdv_cashiers')
+        .update({
+          status: 'closed', // Altera o status na tabela para 'closed'
+          closed_at: new Date().toISOString(),
+          final_amount: parseFloat(cashierCloseAmount)
+        })
+        .eq('id', currentCashierId);
+      
+      if (error) {
+        toast.error('Erro ao fechar o caixa: ' + error.message);
+        return;
+      }
+      
+      // Atualizar status do caixa
+      setIsCashierOpen(false);
+      setCurrentCashierId(null); // Limpar o ID do caixa atual
+      setShowCashierCloseDialog(false);
+      setCashierCloseAmount('');
+      
+      // Se o controle de caixa estiver ativado, mostra o diálogo de abertura novamente
+      if (pdvConfig.controlCashier) {
+        setShowCashierOpenDialog(true);
+      }
+      
+      toast.success('Caixa fechado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao fechar caixa:', error);
+      toast.error('Erro ao fechar o caixa');
+    }
+  };
+  
+  useEffect(() => {
+    // Define função de inicialização assíncrona
+    const initializePdv = async () => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+      }
+      
+      // Carregar configurações do PDV
+      await loadPdvConfig();
+      
+      // Carregar estado do PDV com isolamento por usuário/empresa
+      await loadPdvState();
+      
+      // Carregar nome do operador
+      await loadOperatorName();
+    };
+    
+    // Executa inicialização
+    initializePdv();
   }, []);
+  
+  // Efeito separado para verificar o status do caixa APÓS as configurações serem carregadas
+  useEffect(() => {
+    // Só verificar o status do caixa quando as configurações estiverem carregadas
+    if (pdvConfig) {
+      checkCashierStatus();
+    }
+  }, [pdvConfig]);
 
   useEffect(() => {
     // Inicializa e atualiza a data/hora
@@ -323,47 +594,52 @@ export default function PDV() {
 
   // Salva o estado do PDV no localStorage sempre que houver mudanças relevantes
   useEffect(() => {
-    // Só salva se houver itens no carrinho (evita salvar um carrinho vazio)
-    if (items.length > 0 || partialPayments.length > 0) {
-      try {
-        const pdvState = {
-          items,
-          partialPayments,
-          appliedTotalDiscount,
-          selectedClient
-        };
-        
-        localStorage.setItem('pdvState', JSON.stringify(pdvState));
-      } catch (error) {
-        console.error('Erro ao salvar estado do PDV:', error);
+    // Função interna para salvar o estado com a chave correta
+    const savePdvState = async () => {
+      const stateKey = await getPdvStateKey();
+      
+      if (!stateKey) {
+        return; // Não foi possível obter a chave
       }
-    } else {
-      // Se não há itens nem pagamentos, limpa o estado salvo
-      localStorage.removeItem('pdvState');
-    }
-  }, [items, partialPayments, appliedTotalDiscount, selectedClient]);
-  
-  // Efeito para controlar o modo de tela cheia
-  useEffect(() => {
-    const toggleFullScreen = async () => {
-      try {
-        if (pdvConfig.fullScreen) {
-          if (!document.fullscreenElement) {
-            await document.documentElement.requestFullscreen();
-          }
-        } else {
-          if (document.fullscreenElement) {
-            await document.exitFullscreen();
-          }
+      
+      // Só salva se houver itens no carrinho (evita salvar um carrinho vazio)
+      if (items.length > 0 || partialPayments.length > 0) {
+        try {
+          const pdvState = {
+            items,
+            partialPayments,
+            appliedTotalDiscount,
+            selectedClient,
+            timestamp: new Date().toISOString() // Adiciona timestamp para auditoria
+          };
+          
+          localStorage.setItem(stateKey, JSON.stringify(pdvState));
+        } catch (error) {
+          console.error('Erro ao salvar estado do PDV:', error);
         }
-      } catch (error) {
-        console.error('Erro ao alternar modo de tela cheia:', error);
-        toast.error('Não foi possível alternar o modo de tela cheia');
+      } else {
+        // Se não há itens nem pagamentos, limpa o estado salvo
+        localStorage.removeItem(stateKey);
       }
     };
-
-    toggleFullScreen();
-  }, [pdvConfig.fullScreen]);
+    
+    savePdvState();
+  }, [items, partialPayments, appliedTotalDiscount, selectedClient]);
+  
+  // Função para alternar manualmente entre tela cheia e normal 
+  // (Opção automática via configuração foi removida)
+  const toggleFullScreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (error) {
+      console.error('Erro ao alternar modo de tela cheia:', error);
+      toast.error('Não foi possível alternar o modo de tela cheia');
+    }
+  };
 
   useEffect(() => {
     loadProducts();
@@ -466,17 +742,18 @@ export default function PDV() {
         .eq('company_id', profile.company_id);
 
       if (productsError) {
-        throw productsError;
+        console.error('Erro ao carregar produtos:', productsError);
+        throw new Error('Falha ao carregar produtos');
       }
 
       const formattedProducts = productsData.map(product => ({
-        id: product.id,
-        code: product.code,
-        name: product.name,
-        selling_price: product.selling_price,
-        stock: product.stock,
-        status: product.status,
-        unit_code: product.product_units?.code || 'UN'
+        id: String(product.id),
+        code: String(product.code),
+        name: String(product.name),
+        selling_price: Number(product.selling_price),
+        stock: Number(product.stock),
+        status: product.status as 'active' | 'inactive',
+        unit_code: product.product_units?.code ? String(product.product_units.code) : 'UN'
       }));
 
       setProducts(formattedProducts);
@@ -489,6 +766,13 @@ export default function PDV() {
   };
 
   const handleProductSelect = (product: Product) => {
+    // Validar se o caixa está aberto quando o controle de caixa estiver ativado
+    if (pdvConfig.controlCashier && !isCashierOpen) {
+      toast.error('O caixa está fechado. Por favor, abra o caixa para realizar vendas.');
+      setShowCashierOpenDialog(true);
+      return;
+    }
+    
     // Verifica se o produto já existe no carrinho
     const existingItem = items.find(item => item.id === product.id);
 
@@ -709,115 +993,15 @@ const handleApplyTotalDiscount = () => {
     }
   };
 
-  const handleConfigChange = (configKey: keyof typeof pdvConfig) => {
-    setPdvConfig(prev => ({
-      ...prev,
-      [configKey]: !prev[configKey]
-    }));
-  };
+  // Config changes are now handled by SystemConfigPanel
+  // const handleConfigChange = (configKey: keyof typeof pdvConfig) => {
+  //   setPdvConfig(prev => ({
+  //     ...prev,
+  //     [configKey]: !prev[configKey]
+  //   }));
+  // };
 
-  // Salva as configurações no Supabase e no localStorage como backup
-  const handleSaveConfig = async () => {
-    try {
-      // Obter o usuário logado
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('Usuário não autenticado');
-      }
-
-      // Obter o ID da empresa do perfil
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('id', user.id)
-        .single();
-      
-      if (!profile?.company_id) {
-        throw new Error('Empresa não encontrada');
-      }
-
-      // Verificar se a tabela pdv_configurations existe
-      const { error: tableCheckError } = await supabase
-        .from('pdv_configurations')
-        .select('id')
-        .limit(1)
-        .maybeSingle();
-
-      // Se a tabela não existir, criá-la
-      if (tableCheckError && tableCheckError.message.includes('does not exist')) {
-        await createPdvConfigurationsTable();
-      }
-
-      const configData = {
-        user_id: user.id,
-        company_id: profile.company_id,
-        group_items: pdvConfig.groupItems,
-        control_cashier: pdvConfig.controlCashier,
-        require_seller: pdvConfig.requireSeller,
-        full_screen: pdvConfig.fullScreen
-      };
-
-      let result;
-      
-      // Se já existe um ID de configuração, atualizar
-      if (pdvConfig.configId) {
-        result = await supabase
-          .from('pdv_configurations')
-          .update(configData)
-          .eq('id', pdvConfig.configId)
-          .select();
-      } else {
-        // Verificar se já existe configuração para este usuário e empresa
-        const { data: existingConfig } = await supabase
-          .from('pdv_configurations')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('company_id', profile.company_id)
-          .maybeSingle();
-
-        if (existingConfig) {
-          // Atualizar configuração existente
-          result = await supabase
-            .from('pdv_configurations')
-            .update(configData)
-            .eq('id', existingConfig.id)
-            .select();
-        } else {
-          // Criar nova configuração
-          result = await supabase
-            .from('pdv_configurations')
-            .insert(configData)
-            .select();
-        }
-      }
-
-      if (result.error) {
-        throw result.error;
-      }
-
-      if (result.data?.[0]) {
-        // Atualizar o config ID
-        setPdvConfig(prev => ({
-          ...prev,
-          configId: result.data[0].id
-        }));
-      }
-
-      // Salvar no localStorage como backup
-      localStorage.setItem('pdvConfig', JSON.stringify(pdvConfig));
-      
-      toast.success('Configurações salvas com sucesso');
-      setShowConfigPopup(false);
-    } catch (error) {
-      console.error('Erro ao salvar configurações:', error);
-      toast.error('Erro ao salvar configurações. Tentando salvar localmente...');
-      
-      // Fallback para localStorage se falhar
-      localStorage.setItem('pdvConfig', JSON.stringify(pdvConfig));
-      setShowConfigPopup(false);
-    }
-  };
+  // A função de salvar configurações foi movida para SystemConfigPanel
 
   const getItemDiscountValue = (item: CartItem) => {
     if (!item.discount) return 0;
@@ -843,6 +1027,13 @@ const handleApplyTotalDiscount = () => {
   };
 
   const handlePaymentMethodClick = (method: string) => {
+    // Validar se o caixa está aberto quando o controle de caixa estiver ativado
+    if (pdvConfig.controlCashier && !isCashierOpen) {
+      toast.error('O caixa está fechado. Por favor, abra o caixa para realizar vendas.');
+      setShowCashierOpenDialog(true);
+      return;
+    }
+    
     // Se já existe um pagamento à vista que zerou o total, não permite selecionar outro
     // A menos que seja um método parcial
     if (isFullPaymentApplied() && !method.includes('_partial') && 
@@ -1090,15 +1281,25 @@ const handleApplyTotalDiscount = () => {
         user_id: user.id,
         sale_number: nextSaleNumber,
         date: new Date().toISOString(),
-        total_amount: calculateTotal(),
-        discount_amount: calculateTotalDiscount(),
+        total_amount: items.reduce((sum, item) => sum + (getItemFinalPrice(item) * item.quantity), 0) - (appliedTotalDiscount ? calculateTotalDiscountValue() : 0),
+        discount_amount: calculateTotalDiscountValue(),
         payment_method: selectedPaymentMethod,
         status: 'completed',
-        // Outros campos relevantes para a venda
+        items: items.map(item => ({
+          product_id: item.id,
+          quantity: item.quantity,
+          price: item.price,
+          discount: item.discount ? JSON.stringify(item.discount) : null
+        })),
+        payments: partialPayments.map(payment => ({
+          method: payment.method,
+          amount: payment.amount
+        })),
+        client_id: selectedClient?.id || null
       };
       
       // 3. Tenta inserir a venda com o número calculado
-      const { data: newSale, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('sales')
         .insert([saleData])
         .select()
@@ -1122,7 +1323,7 @@ const handleApplyTotalDiscount = () => {
             saleData.sale_number = realNextNumber;
             
             // Tentar novamente com o novo número
-            const { data: retryNewSale, error: retryError } = await supabase
+            const { error: retryError } = await supabase
               .from('sales')
               .insert([saleData])
               .select()
@@ -1158,8 +1359,18 @@ const handleApplyTotalDiscount = () => {
       setAppliedTotalDiscount(null);
       setSelectedClient(null);
       
-      // Limpa o estado salvo no localStorage
-      localStorage.removeItem('pdvState');
+      // Limpa o estado salvo no localStorage (com a chave específica do usuário/empresa)
+      const clearPdvState = async () => {
+        try {
+          const stateKey = await getPdvStateKey();
+          if (stateKey) {
+            localStorage.removeItem(stateKey);
+          }
+        } catch (error) {
+          console.error('Erro ao limpar estado do PDV:', error);
+        }
+      };
+      clearPdvState();
       
       // Restaura o foco no campo de busca para nova venda
       if (searchInputRef.current) {
@@ -1174,8 +1385,8 @@ const handleApplyTotalDiscount = () => {
     }
   };
   
-  // Função para cancelar a venda atual
-  const handleCancelSale = () => {
+  // Função para cancelar a venda atual - usada no botão de cancelar
+  const handleCancelSale = async () => {
     if (items.length === 0 && partialPayments.length === 0) {
       toast.info('Não há venda em andamento para cancelar');
       return;
@@ -1191,8 +1402,15 @@ const handleApplyTotalDiscount = () => {
       setAppliedTotalDiscount(null);
       setSelectedClient(null);
       
-      // Limpa o localStorage
-      localStorage.removeItem('pdvState');
+      // Limpa o estado do PDV no localStorage (com a chave específica do usuário/empresa)
+      try {
+        const stateKey = await getPdvStateKey();
+        if (stateKey) {
+          localStorage.removeItem(stateKey);
+        }
+      } catch (error) {
+        console.error('Erro ao limpar estado do PDV:', error);
+      }
       
       toast.success('Venda cancelada com sucesso!');
       
@@ -1445,6 +1663,7 @@ const handleApplyTotalDiscount = () => {
 
 
 
+                {pdvConfig.controlCashier && (
                 <button
                   className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
@@ -1453,7 +1672,9 @@ const handleApplyTotalDiscount = () => {
                   <ArrowDownCircle size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Suprimento</span>
                 </button>
+                )}
 
+                {pdvConfig.controlCashier && (
                 <button
                   className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
                   onClick={() => toast.info('Função em desenvolvimento')}
@@ -1462,10 +1683,22 @@ const handleApplyTotalDiscount = () => {
                   <ArrowUpCircle size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
                   <span className="text-xs font-medium truncate w-full text-center">Sangria</span>
                 </button>
+                )}
+                
+                {pdvConfig.controlCashier && (
+                <button
+                  className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
+                  onClick={() => setShowCashierCloseDialog(true)}
+                >
+                  <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                  <DollarSign size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
+                  <span className="text-xs font-medium truncate w-full text-center">Fechamento</span>
+                </button>
+                )}
 
                 <button
                   className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
-                  onClick={() => setShowConfigPopup(true)}
+                  onClick={() => setShowSystemConfigPanel(true)}
                 >
                   <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   <Settings size={18} className="mb-1 group-hover:text-blue-400 transition-colors" />
@@ -1521,28 +1754,45 @@ const handleApplyTotalDiscount = () => {
       {/* Área de pagamento à direita com largura fixa de 350px para se ajustar à resolução mínima */}
       <div className="w-[350px] min-w-[350px] flex-shrink-0 bg-slate-800 border-l border-slate-700 flex flex-col">
         <div className="px-6 pt-3 pb-2 border-b border-slate-700">
-          {/* Primeira linha: Data e X */}
+          {/* Primeira linha: Data, Botão de Maximizar e X */}
           <div className="flex items-center justify-between mb-1">
             <div className="flex-1">
               <span className="text-white text-lg font-bold tracking-wide whitespace-nowrap">{currentDateTime}</span>
             </div>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-red-400 hover:text-red-300 ml-3 flex-shrink-0"
-            >
-              <X size={20} />
-            </button>
+            <div className="flex items-center">
+              <button
+                onClick={toggleFullScreen}
+                className="text-blue-400 hover:text-blue-300 mr-3 flex-shrink-0 p-1 hover:bg-slate-700 rounded transition-colors"
+                title="Maximizar tela"
+              >
+                <Maximize2 size={18} />
+              </button>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="text-red-400 hover:text-red-300 flex-shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
 
-          {/* Segunda linha: Caixa e Operador */}
+          {/* Segunda linha: Caixa (quando ativado) e Operador */}
           <div className="flex items-center justify-between text-sm mb-1.5">
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400">Caixa:</span>
-              <span className="text-green-400">Aberto</span>
-            </div>
-            <div className="flex items-center gap-2">
+            {pdvConfig.controlCashier && (
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">Caixa:</span>
+                {isCashierOpen ? (
+                  <span className="text-green-400">Aberto</span>
+                ) : (
+                  <span className="text-red-400">Fechado</span>
+                )}
+              </div>
+            )}
+            <div className="flex items-center gap-2 ml-auto">
               <span className="text-slate-400">Operador:</span>
-              <span className="text-slate-200">João Silva</span>
+              <span className="text-slate-200">
+                {operatorName.length > 15 ? `${operatorName.substring(0, 15)}...` : operatorName}
+              </span>
             </div>
           </div>
 
@@ -2105,105 +2355,12 @@ const handleApplyTotalDiscount = () => {
         </div>
       )}
 
-      {/* Popup de Configuração do PDV */}
-      {showConfigPopup && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-lg p-6 w-[400px] border border-slate-700 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-slate-200 text-lg font-medium">Configurações do PDV</h3>
-              <button
-                onClick={() => setShowConfigPopup(false)}
-                className="text-slate-400 hover:text-slate-200"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
-                  <div>
-                    <h4 className="text-slate-200 font-medium">Agrupamentos de Itens</h4>
-                    <p className="text-sm text-slate-400">Agrupar itens iguais no carrinho</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="sr-only peer"
-                      checked={pdvConfig.groupItems}
-                      onChange={() => handleConfigChange('groupItems')}
-                    />
-                    <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
-                  <div>
-                    <h4 className="text-slate-200 font-medium">Controla Caixa</h4>
-                    <p className="text-sm text-slate-400">Controlar abertura e fechamento de caixa</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="sr-only peer"
-                      checked={pdvConfig.controlCashier}
-                      onChange={() => handleConfigChange('controlCashier')}
-                    />
-                    <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
-                  <div>
-                    <h4 className="text-slate-200 font-medium">Solicita Vendedor na Venda</h4>
-                    <p className="text-sm text-slate-400">Solicitar vendedor ao iniciar uma venda</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="sr-only peer"
-                      checked={pdvConfig.requireSeller}
-                      onChange={() => handleConfigChange('requireSeller')}
-                    />
-                    <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-slate-700 rounded-lg">
-                  <div>
-                    <h4 className="text-slate-200 font-medium">PDV em tela cheia</h4>
-                    <p className="text-sm text-slate-400">Exibir PDV em modo de tela cheia</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="sr-only peer"
-                      checked={pdvConfig.fullScreen}
-                      onChange={() => handleConfigChange('fullScreen')}
-                    />
-                    <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
-                  </label>
-                </div>
-              </div>
-
-              <div className="pt-4 flex gap-3">
-                <button
-                  onClick={() => setShowConfigPopup(false)}
-                  className="flex-1 bg-slate-600 hover:bg-slate-500 text-slate-200 py-2 px-4 rounded-lg transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSaveConfig}
-                  className="flex-1 bg-blue-500 hover:bg-blue-400 text-white py-2 px-4 rounded-lg transition-colors"
-                >
-                  Salvar Configurações
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* System Config Panel */}
+      <SystemConfigPanel 
+        isOpen={showSystemConfigPanel} 
+        onClose={() => setShowSystemConfigPanel(false)} 
+        initialTab="caixa"
+      />
 
       {/* Popup de Item Não Encontrado */}
       {showItemNotFoundPopup && (
@@ -2289,6 +2446,90 @@ const handleApplyTotalDiscount = () => {
                   Aplicar Pagamento Parcial
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Diálogo de Abertura de Caixa (não pode ser fechado sem abrir o caixa) */}
+      {showCashierOpenDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center">
+          <div className="bg-slate-800 p-6 rounded-lg shadow-xl w-96 border border-slate-700">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xl font-semibold text-white">Abertura de Caixa</h2>
+              {/* Status indicador */}
+              <div className="px-2 py-1 bg-red-600 text-xs font-semibold text-white rounded">
+                Status: Fechado
+              </div>
+            </div>
+            
+            <p className="text-slate-300 mb-4">Informe o valor inicial em caixa para iniciar as operações. Você só poderá realizar vendas com o caixa aberto.</p>
+            
+            <div className="mb-4">
+              <label className="block text-slate-300 mb-2">Valor Inicial (R$)</label>
+              <input 
+                type="number" 
+                value={cashierOpenAmount}
+                onChange={(e) => setCashierOpenAmount(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-700 text-white rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="0,00"
+                min="0"
+                step="0.01"
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                onClick={handleCancelCashierOpen}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-md"
+              >
+                Sair
+              </button>
+              <button 
+                onClick={handleOpenCashier}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md"
+              >
+                Abrir Caixa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Diálogo de Fechamento de Caixa */}
+      {showCashierCloseDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-slate-800 p-6 rounded-lg shadow-xl w-96 border border-slate-700">
+            <h2 className="text-xl font-semibold text-white mb-4">Fechamento de Caixa</h2>
+            <p className="text-slate-300 mb-4">Informe o valor final em caixa para encerrar as operações.</p>
+            
+            <div className="mb-4">
+              <label className="block text-slate-300 mb-2">Valor Final (R$)</label>
+              <input 
+                type="number" 
+                value={cashierCloseAmount}
+                onChange={(e) => setCashierCloseAmount(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-700 text-white rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="0,00"
+                min="0"
+                step="0.01"
+              />
+            </div>
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                onClick={() => setShowCashierCloseDialog(false)}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-md"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleCloseCashier}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md"
+              >
+                Fechar Caixa
+              </button>
             </div>
           </div>
         </div>
