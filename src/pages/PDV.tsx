@@ -544,19 +544,9 @@ export default function PDV() {
 
   // Função para verificar se pode rolar para esquerda ou direita
   const checkScrollability = () => {
-    const container = document.getElementById('menu-container');
-    if (!container) return;
-    
-    // Selecionamos apenas os elementos de botão que são filhos diretos do container
-    const menuButtons = Array.from(container.querySelectorAll(':scope > button'));
-    
-    // Verifica se pode rolar para a esquerda (se não está na primeira página)
-    setCanScrollLeft(currentPage > 0);
-
-    // Verifica se pode rolar para a direita (se não está na última página)
-    const totalPages = Math.ceil(menuButtons.length / buttonsPerPage);
-    console.log(`Paginação: página ${currentPage + 1} de ${totalPages} (${menuButtons.length} botões total)`);
-    setCanScrollRight(currentPage < totalPages - 1);
+    // Simplificamos esta função para chamar diretamente applyPagination
+    // que já contém toda a lógica para verificar e aplicar a navegação
+    applyPagination();
   };
 
   // Efeito para verificar a scrollabilidade quando a página atual mudar
@@ -568,7 +558,26 @@ export default function PDV() {
   // Função para navegar para a página anterior
   const goToPreviousPage = () => {
     if (currentPage > 0) {
-      setCurrentPage(currentPage - 1);
+      const container = document.getElementById('menu-container');
+      if (!container) return;
+      
+      // Adicionamos classe para animação de saída
+      container.classList.add('slide-right-out');
+      
+      // Aguardar a animação de saída terminar antes de mudar a página
+      setTimeout(() => {
+        setCurrentPage(currentPage - 1);
+        console.log(`Voltando para a página ${currentPage}`);
+        
+        // Remover classe de saída e adicionar classe de entrada
+        container.classList.remove('slide-right-out');
+        container.classList.add('slide-left-in');
+        
+        // Remover classe de entrada após a animação terminar
+        setTimeout(() => {
+          container.classList.remove('slide-left-in');
+        }, 300);
+      }, 150); // Metade da duração da animação para tornar suave
     }
   };
 
@@ -577,55 +586,102 @@ export default function PDV() {
     const container = document.getElementById('menu-container');
     if (!container) return;
     
-    // Selecionamos apenas os elementos de botão que são filhos diretos do container
-    const menuButtons = Array.from(container.querySelectorAll(':scope > button'));
-
-    const totalPages = Math.ceil(menuButtons.length / buttonsPerPage);
+    // Adicionamos classe para animação de saída
+    container.classList.add('slide-left-out');
+    
+    // Contamos sem modificar a visibilidade
+    const navigableButtons = countNavigableButtons();
+    const totalPages = Math.ceil(navigableButtons.length / buttonsPerPage);
+    
     if (currentPage < totalPages - 1) {
-      setCurrentPage(currentPage + 1);
-      console.log(`Avançando para a página ${currentPage + 2} de ${totalPages}`);
+      // Aguardar a animação de saída terminar antes de mudar a página
+      setTimeout(() => {
+        setCurrentPage(currentPage + 1);
+        console.log(`Avançando para a página ${currentPage + 2} de ${totalPages}`);
+        
+        // Remover classe de saída e adicionar classe de entrada
+        container.classList.remove('slide-left-out');
+        container.classList.add('slide-right-in');
+        
+        // Remover classe de entrada após a animação terminar
+        setTimeout(() => {
+          container.classList.remove('slide-right-in');
+        }, 300);
+      }, 150); // Metade da duração da animação para tornar suave
     }
   };
 
-  // Efeito para aplicar a paginação quando a página atual mudar - versão melhorada
-  useEffect(() => {
+  // Função para contar botões navegáveis sem alterar sua visibilidade
+  const countNavigableButtons = () => {
+    const container = document.getElementById('menu-container');
+    if (!container) return [];
+    
+    return Array.from(container.children).filter(element => {
+      return element.tagName.toLowerCase() === 'button' && 
+             !element.classList.contains('hidden');
+    });
+  };
+  
+  // Função para aplicar a paginação - separada para poder ser chamada de vários lugares
+  const applyPagination = () => {
     const container = document.getElementById('menu-container');
     if (!container) return;
     
-    // Primeiro, vamos identificar todos os botões de menu de forma confiável
-    // Selecionamos apenas os elementos de botão que são filhos diretos do container
-    const menuButtons = Array.from(container.querySelectorAll(':scope > button'));
+    // Selecionamos todos os botões que DEVERIAM estar visíveis (base nas configurações, não no estilo)
+    const navigableButtons = Array.from(container.children).filter(element => {
+      // Verificar se é um botão e está potencialmente disponível (conforme configurações)
+      return element.tagName.toLowerCase() === 'button' && 
+             !element.classList.contains('hidden');
+    }) as HTMLElement[];
     
-    // Agora atribuimos um data-menu-index a cada botão para identificar sua posição real
-    // Isso garante que a paginação seja consistente
-    menuButtons.forEach((button, index) => {
-      button.setAttribute('data-menu-index', index.toString());
-    });
-    
-    // Apenas para depuração - log do total de botões
-    console.log(`Total de botões no menu: ${menuButtons.length}`);
+    // Log para depuração
+    console.log(`Total de botões navegáveis no menu: ${navigableButtons.length}`);
 
-    // Calcular página atual e índices
+    // Calculamos quantas páginas precisamos baseado no número de botões navegáveis
+    const totalPages = Math.max(1, Math.ceil(navigableButtons.length / buttonsPerPage));
+    console.log(`Total de páginas: ${totalPages} (${buttonsPerPage} botões por página)`);
+    
+    // Garantir que a página atual seja válida
+    if (currentPage >= totalPages) {
+      console.log(`Ajustando página atual de ${currentPage} para ${totalPages - 1} (total de páginas: ${totalPages})`);
+      setCurrentPage(totalPages - 1);
+      return; // Sair e deixar o useEffect ser chamado novamente com a página corrigida
+    }
+
+    // Calcular índices da página atual
     const start = currentPage * buttonsPerPage;
     const end = start + buttonsPerPage;
 
-    // Aplicar visibilidade baseada no índice real de cada botão
-    menuButtons.forEach((button, index) => {
-      // Type casting para HTMLElement para acessar propriedade style
-      const htmlButton = button as HTMLElement;
-      
+    // Aplicar visibilidade baseada no índice
+    navigableButtons.forEach((button, index) => {
       if (index >= start && index < end) {
-        htmlButton.style.display = 'flex';
-        console.log(`Mostrando botão ${index}: ${htmlButton.textContent?.trim()}`);
+        button.style.display = 'flex';
+        console.log(`Mostrando botão ${index}: ${button.textContent?.trim()}`);
       } else {
-        htmlButton.style.display = 'none';
-        console.log(`Ocultando botão ${index}: ${htmlButton.textContent?.trim()}`);
+        button.style.display = 'none';
+        console.log(`Ocultando botão ${index}: ${button.textContent?.trim()}`);
       }
     });
 
-    // Verifica a scrollabilidade após a mudança
-    checkScrollability();
+    // Verificar se os botões de navegação devem ser exibidos
+    const canGoBack = currentPage > 0;
+    const canGoForward = currentPage < totalPages - 1;
+    
+    setCanScrollLeft(canGoBack);
+    setCanScrollRight(canGoForward);
+    
+    console.log(`Navegação: ${canGoBack ? 'Pode voltar' : 'Não pode voltar'} | ${canGoForward ? 'Pode avançar' : 'Não pode avançar'}`);
+  };
+  
+  // Efeito para aplicar a paginação quando a página atual mudar
+  useEffect(() => {
+    applyPagination();
   }, [currentPage]);
+  
+  // Efeito para recalcular a paginação quando as configurações mudarem
+  useEffect(() => {
+    applyPagination();
+  }, [pdvConfig]);
 
   useEffect(() => {
     // Carregar configurações do localStorage
