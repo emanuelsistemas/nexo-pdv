@@ -94,8 +94,52 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
     }
   };
 
+  // Verifica se o caixa está aberto consultando a tabela pdv_cashiers
+  const isCashierOpen = async (): Promise<boolean> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) return false;
+      
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (!profile?.company_id) return false;
+      
+      // Verificar status do caixa para o usuário atual
+      const { data } = await supabase
+        .from('pdv_cashiers')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('company_id', profile.company_id)
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1);
+      
+      // Se há dados e o status é 'open', o caixa está aberto
+      return Boolean(data && data.length > 0);
+    } catch (error) {
+      console.error('Erro ao verificar status do caixa:', error);
+      return false;
+    }
+  };
+
   // Alterna o estado de uma configuração
-  const handleConfigChange = (configKey: keyof Omit<PdvConfig, 'configId'>) => {
+  const handleConfigChange = async (configKey: keyof Omit<PdvConfig, 'configId'>) => {
+    // Verificação especial para impedir desativação do controle de caixa quando o caixa está aberto
+    if (configKey === 'controlCashier' && pdvConfig.controlCashier) {
+      // Verifica se o caixa está aberto antes de permitir desativar
+      const cashierOpen = await isCashierOpen();
+      if (cashierOpen) {
+        toast.error('Não é possível desativar o Controle de Caixa enquanto o caixa estiver aberto. Feche o caixa primeiro.');
+        return;
+      }
+    }
+    
+    // Procede com a mudança normalmente se não houver restrições
     setPdvConfig(prev => ({
       ...prev,
       [configKey]: !prev[configKey]
@@ -105,6 +149,33 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
   // Salva as configurações no Supabase e no localStorage como backup
   const handleSaveConfig = async () => {
     try {
+      // Verificação adicional antes de salvar: impedir desativar controle de caixa quando o caixa está aberto
+      // Busca o estado atual da configuração para comparar
+      const savedConfig = localStorage.getItem('pdvConfig');
+      let oldControlCashier = false;
+      
+      if (savedConfig) {
+        try {
+          const parsedConfig = JSON.parse(savedConfig);
+          oldControlCashier = Boolean(parsedConfig.controlCashier);
+        } catch (e) {
+          console.error('Erro ao analisar configurações do localStorage:', e);
+        }
+      }
+      
+      // Se está tentando desativar o controle de caixa, verifica se o caixa está aberto
+      if (oldControlCashier && !pdvConfig.controlCashier) {
+        const cashierOpen = await isCashierOpen();
+        if (cashierOpen) {
+          toast.error('Não é possível desativar o Controle de Caixa enquanto o caixa estiver aberto. Feche o caixa primeiro.');
+          // Reverte a mudança na interface
+          setPdvConfig(prev => ({
+            ...prev,
+            controlCashier: true
+          }));
+          return;
+        }
+      }
       // Obter o usuário logado
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -162,6 +233,12 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
 
       // Salvar no localStorage como backup
       localStorage.setItem('pdvConfig', JSON.stringify(pdvConfig));
+      
+      // Disparar um evento personalizado para notificar outros componentes sobre a mudança
+      const configChangeEvent = new CustomEvent('pdvConfigChanged', { 
+        detail: { pdvConfig } 
+      });
+      window.dispatchEvent(configChangeEvent);
       
       toast.success('Configurações salvas com sucesso');
     } catch (error) {

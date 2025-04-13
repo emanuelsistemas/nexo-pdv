@@ -78,6 +78,13 @@ export default function PDV() {
   const [cashierOpenAmount, setCashierOpenAmount] = useState('');
   const [cashierCloseAmount, setCashierCloseAmount] = useState('');
   const [isCashierOpen, setIsCashierOpen] = useState(false);
+  
+  // Estados para valores de fechamento por forma de pagamento
+  const [closeAmountMoney, setCloseAmountMoney] = useState('');
+  const [closeAmountDebit, setCloseAmountDebit] = useState('');
+  const [closeAmountCredit, setCloseAmountCredit] = useState('');
+  const [closeAmountPix, setCloseAmountPix] = useState('');
+  const [closeAmountVoucher, setCloseAmountVoucher] = useState('');
   const [currentCashierId, setCurrentCashierId] = useState<string | null>(null);
   const [pdvConfig, setPdvConfig] = useState({
     groupItems: false,
@@ -417,9 +424,18 @@ export default function PDV() {
   // Função para fechar o caixa
   const handleCloseCashier = async () => {
     try {
-      // Validar valor de fechamento
-      if (!cashierCloseAmount || isNaN(parseFloat(cashierCloseAmount)) || parseFloat(cashierCloseAmount) < 0) {
-        toast.error('Informe um valor válido para fechamento do caixa');
+      // Calcular o valor total do fechamento a partir de todas as formas de pagamento
+      const moneyValue = parseFloat(closeAmountMoney) || 0;
+      const debitValue = parseFloat(closeAmountDebit) || 0;
+      const creditValue = parseFloat(closeAmountCredit) || 0;
+      const pixValue = parseFloat(closeAmountPix) || 0;
+      const voucherValue = parseFloat(closeAmountVoucher) || 0;
+      
+      // Total de todos os campos
+      const totalValue = moneyValue + debitValue + creditValue + pixValue + voucherValue;
+      
+      if (totalValue <= 0) {
+        toast.error('Informe pelo menos um valor de fechamento válido');
         return;
       }
       
@@ -435,7 +451,12 @@ export default function PDV() {
         .update({
           status: 'closed', // Altera o status na tabela para 'closed'
           closed_at: new Date().toISOString(),
-          final_amount: parseFloat(cashierCloseAmount)
+          final_amount: totalValue,
+          final_amount_money: moneyValue,
+          final_amount_debit: debitValue,
+          final_amount_credit: creditValue,
+          final_amount_pix: pixValue,
+          final_amount_voucher: voucherValue
         })
         .eq('id', currentCashierId);
       
@@ -448,7 +469,13 @@ export default function PDV() {
       setIsCashierOpen(false);
       setCurrentCashierId(null); // Limpar o ID do caixa atual
       setShowCashierCloseDialog(false);
-      setCashierCloseAmount('');
+      
+      // Limpar todos os campos de fechamento
+      setCloseAmountMoney('');
+      setCloseAmountDebit('');
+      setCloseAmountCredit('');
+      setCloseAmountPix('');
+      setCloseAmountVoucher('');
       
       // Se o controle de caixa estiver ativado, mostra o diálogo de abertura novamente
       if (pdvConfig.controlCashier) {
@@ -518,16 +545,18 @@ export default function PDV() {
   // Função para verificar se pode rolar para esquerda ou direita
   const checkScrollability = () => {
     const container = document.getElementById('menu-container');
-    const menuButtons = container?.querySelectorAll('button');
+    if (!container) return;
+    
+    // Selecionamos apenas os elementos de botão que são filhos diretos do container
+    const menuButtons = Array.from(container.querySelectorAll(':scope > button'));
+    
+    // Verifica se pode rolar para a esquerda (se não está na primeira página)
+    setCanScrollLeft(currentPage > 0);
 
-    if (container && menuButtons) {
-      // Verifica se pode rolar para a esquerda (se não está na primeira página)
-      setCanScrollLeft(currentPage > 0);
-
-      // Verifica se pode rolar para a direita (se não está na última página)
-      const totalPages = Math.ceil(menuButtons.length / buttonsPerPage);
-      setCanScrollRight(currentPage < totalPages - 1);
-    }
+    // Verifica se pode rolar para a direita (se não está na última página)
+    const totalPages = Math.ceil(menuButtons.length / buttonsPerPage);
+    console.log(`Paginação: página ${currentPage + 1} de ${totalPages} (${menuButtons.length} botões total)`);
+    setCanScrollRight(currentPage < totalPages - 1);
   };
 
   // Efeito para verificar a scrollabilidade quando a página atual mudar
@@ -546,50 +575,94 @@ export default function PDV() {
   // Função para navegar para a próxima página
   const goToNextPage = () => {
     const container = document.getElementById('menu-container');
-    const menuButtons = container?.querySelectorAll('button');
+    if (!container) return;
+    
+    // Selecionamos apenas os elementos de botão que são filhos diretos do container
+    const menuButtons = Array.from(container.querySelectorAll(':scope > button'));
 
-    if (menuButtons) {
-      const totalPages = Math.ceil(menuButtons.length / buttonsPerPage);
-      if (currentPage < totalPages - 1) {
-        setCurrentPage(currentPage + 1);
-      }
+    const totalPages = Math.ceil(menuButtons.length / buttonsPerPage);
+    if (currentPage < totalPages - 1) {
+      setCurrentPage(currentPage + 1);
+      console.log(`Avançando para a página ${currentPage + 2} de ${totalPages}`);
     }
   };
 
-  // Efeito para aplicar a paginação quando a página atual mudar
+  // Efeito para aplicar a paginação quando a página atual mudar - versão melhorada
   useEffect(() => {
     const container = document.getElementById('menu-container');
-    const menuButtons = container?.querySelectorAll('button');
+    if (!container) return;
+    
+    // Primeiro, vamos identificar todos os botões de menu de forma confiável
+    // Selecionamos apenas os elementos de botão que são filhos diretos do container
+    const menuButtons = Array.from(container.querySelectorAll(':scope > button'));
+    
+    // Agora atribuimos um data-menu-index a cada botão para identificar sua posição real
+    // Isso garante que a paginação seja consistente
+    menuButtons.forEach((button, index) => {
+      button.setAttribute('data-menu-index', index.toString());
+    });
+    
+    // Apenas para depuração - log do total de botões
+    console.log(`Total de botões no menu: ${menuButtons.length}`);
 
-    if (container && menuButtons) {
-      // Oculta todos os botões
-      menuButtons.forEach((button, index) => {
-        const start = currentPage * buttonsPerPage;
-        const end = start + buttonsPerPage;
+    // Calcular página atual e índices
+    const start = currentPage * buttonsPerPage;
+    const end = start + buttonsPerPage;
 
-        if (index >= start && index < end) {
-          button.style.display = 'flex';
-        } else {
-          button.style.display = 'none';
-        }
-      });
+    // Aplicar visibilidade baseada no índice real de cada botão
+    menuButtons.forEach((button, index) => {
+      // Type casting para HTMLElement para acessar propriedade style
+      const htmlButton = button as HTMLElement;
+      
+      if (index >= start && index < end) {
+        htmlButton.style.display = 'flex';
+        console.log(`Mostrando botão ${index}: ${htmlButton.textContent?.trim()}`);
+      } else {
+        htmlButton.style.display = 'none';
+        console.log(`Ocultando botão ${index}: ${htmlButton.textContent?.trim()}`);
+      }
+    });
 
-      // Verifica a scrollabilidade após a mudança
-      checkScrollability();
-    }
+    // Verifica a scrollabilidade após a mudança
+    checkScrollability();
   }, [currentPage]);
 
   useEffect(() => {
     // Carregar configurações do localStorage
-    const savedConfig = localStorage.getItem('pdvConfig');
-    if (savedConfig) {
-      try {
-        const parsedConfig = JSON.parse(savedConfig);
-        setPdvConfig(parsedConfig);
-      } catch (error) {
-        console.error('Erro ao carregar configurações:', error);
+    const loadConfigFromLocalStorage = () => {
+      const savedConfig = localStorage.getItem('pdvConfig');
+      if (savedConfig) {
+        try {
+          const parsedConfig = JSON.parse(savedConfig);
+          setPdvConfig(parsedConfig);
+          console.log('Configurações carregadas:', parsedConfig);
+        } catch (error) {
+          console.error('Erro ao carregar configurações:', error);
+        }
       }
-    }
+    };
+    
+    // Carregar configurações iniciais
+    loadConfigFromLocalStorage();
+    
+    // Adicionar listener para atualizações de configuração em tempo real
+    const handleConfigChange = (event: CustomEvent) => {
+      console.log('Evento de mudança de configuração detectado:', event.detail);
+      if (event.detail && event.detail.pdvConfig) {
+        setPdvConfig(event.detail.pdvConfig);
+      } else {
+        // Se o evento não contiver os detalhes, recarregar do localStorage
+        loadConfigFromLocalStorage();
+      }
+    };
+    
+    // Adicionar o listener (usando any para evitar problemas com TypeScript)
+    window.addEventListener('pdvConfigChanged', handleConfigChange as any);
+    
+    // Remover o listener quando o componente for desmontado
+    return () => {
+      window.removeEventListener('pdvConfigChanged', handleConfigChange as any);
+    };
   }, []);
 
   // Salva o estado do PDV no localStorage sempre que houver mudanças relevantes
@@ -1661,8 +1734,6 @@ const handleApplyTotalDiscount = () => {
                   <span className="text-xs font-medium truncate w-full text-center">Devolução</span>
                 </button>
 
-
-
                 {pdvConfig.controlCashier && (
                 <button
                   className="flex flex-col items-center justify-center min-w-16 w-full h-16 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors px-2 border-r border-slate-600 relative group"
@@ -2500,21 +2571,110 @@ const handleApplyTotalDiscount = () => {
       {/* Diálogo de Fechamento de Caixa */}
       {showCashierCloseDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-          <div className="bg-slate-800 p-6 rounded-lg shadow-xl w-96 border border-slate-700">
+          <div className="bg-slate-800 p-6 rounded-lg shadow-xl max-w-md w-full border border-slate-700">
             <h2 className="text-xl font-semibold text-white mb-4">Fechamento de Caixa</h2>
-            <p className="text-slate-300 mb-4">Informe o valor final em caixa para encerrar as operações.</p>
+            <p className="text-slate-300 mb-4">Informe os valores finais para cada forma de pagamento.</p>
             
-            <div className="mb-4">
-              <label className="block text-slate-300 mb-2">Valor Final (R$)</label>
-              <input 
-                type="number" 
-                value={cashierCloseAmount}
-                onChange={(e) => setCashierCloseAmount(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-700 text-white rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="0,00"
-                min="0"
-                step="0.01"
-              />
+            <div className="space-y-4 mb-4">
+              {/* Dinheiro */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Wallet size={16} className="text-green-400" />
+                  <label className="text-slate-300">Dinheiro em Caixa (R$)</label>
+                </div>
+                <input 
+                  type="number" 
+                  value={closeAmountMoney}
+                  onChange={(e) => setCloseAmountMoney(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="0,00"
+                  min="0"
+                  step="0.01"
+                  autoFocus
+                />
+              </div>
+              
+              {/* Cartão de Débito */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Debit size={16} className="text-blue-400" />
+                  <label className="text-slate-300">Cartão de Débito (R$)</label>
+                </div>
+                <input 
+                  type="number" 
+                  value={closeAmountDebit}
+                  onChange={(e) => setCloseAmountDebit(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="0,00"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              
+              {/* Cartão de Crédito */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Credit size={16} className="text-purple-400" />
+                  <label className="text-slate-300">Cartão de Crédito (R$)</label>
+                </div>
+                <input 
+                  type="number" 
+                  value={closeAmountCredit}
+                  onChange={(e) => setCloseAmountCredit(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="0,00"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              
+              {/* PIX */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <QrCode size={16} className="text-yellow-400" />
+                  <label className="text-slate-300">PIX (R$)</label>
+                </div>
+                <input 
+                  type="number" 
+                  value={closeAmountPix}
+                  onChange={(e) => setCloseAmountPix(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="0,00"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              
+              {/* Voucher/Vale */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Voucher size={16} className="text-orange-400" />
+                  <label className="text-slate-300">Voucher/Vale (R$)</label>
+                </div>
+                <input 
+                  type="number" 
+                  value={closeAmountVoucher}
+                  onChange={(e) => setCloseAmountVoucher(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700 text-white rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="0,00"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+              
+              {/* Total Calculado */}
+              <div className="pt-2 border-t border-slate-700">
+                <div className="flex justify-between items-center text-white font-medium">
+                  <span>Total:</span>
+                  <span className="text-xl">R$ {(
+                    (Number(closeAmountMoney) || 0) + 
+                    (Number(closeAmountDebit) || 0) + 
+                    (Number(closeAmountCredit) || 0) + 
+                    (Number(closeAmountPix) || 0) + 
+                    (Number(closeAmountVoucher) || 0)
+                  ).toFixed(2)}</span>
+                </div>
+              </div>
             </div>
             
             <div className="flex justify-end gap-3 mt-6">
