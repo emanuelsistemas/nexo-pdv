@@ -76,15 +76,16 @@ export default function PDV() {
   const [showCashierOpenDialog, setShowCashierOpenDialog] = useState(false);
   const [showCashierCloseDialog, setShowCashierCloseDialog] = useState(false);
   const [cashierOpenAmount, setCashierOpenAmount] = useState('');
-  const [cashierCloseAmount, setCashierCloseAmount] = useState('');
+  // Variável removida pois não estava sendo utilizada
+  // const [cashierCloseAmount, setCashierCloseAmount] = useState('');
   const [isCashierOpen, setIsCashierOpen] = useState(false);
   
   // Estados para valores de fechamento por forma de pagamento
-  const [closeAmountMoney, setCloseAmountMoney] = useState('');
-  const [closeAmountDebit, setCloseAmountDebit] = useState('');
-  const [closeAmountCredit, setCloseAmountCredit] = useState('');
-  const [closeAmountPix, setCloseAmountPix] = useState('');
-  const [closeAmountVoucher, setCloseAmountVoucher] = useState('');
+  const [closeAmountMoney, setCloseAmountMoney] = useState('0.00');
+  const [closeAmountDebit, setCloseAmountDebit] = useState('0.00');
+  const [closeAmountCredit, setCloseAmountCredit] = useState('0.00');
+  const [closeAmountPix, setCloseAmountPix] = useState('0.00');
+  const [closeAmountVoucher, setCloseAmountVoucher] = useState('0.00');
   const [currentCashierId, setCurrentCashierId] = useState<string | null>(null);
   const [pdvConfig, setPdvConfig] = useState({
     groupItems: false,
@@ -434,10 +435,12 @@ export default function PDV() {
       // Total de todos os campos
       const totalValue = moneyValue + debitValue + creditValue + pixValue + voucherValue;
       
-      if (totalValue <= 0) {
-        toast.error('Informe pelo menos um valor de fechamento válido');
-        return;
-      }
+      // Removida a validação que impedia fechar o caixa com valores zerados
+      // Agora é possível fechar o caixa mesmo com valor 0,00
+      // if (totalValue <= 0) {
+      //   toast.error('Informe pelo menos um valor de fechamento válido');
+      //   return;
+      // }
       
       // Verificar se há um caixa aberto (usando o ID armazenado)
       if (!currentCashierId) {
@@ -471,11 +474,11 @@ export default function PDV() {
       setShowCashierCloseDialog(false);
       
       // Limpar todos os campos de fechamento
-      setCloseAmountMoney('');
-      setCloseAmountDebit('');
-      setCloseAmountCredit('');
-      setCloseAmountPix('');
-      setCloseAmountVoucher('');
+      setCloseAmountMoney('0.00');
+      setCloseAmountDebit('0.00');
+      setCloseAmountCredit('0.00');
+      setCloseAmountPix('0.00');
+      setCloseAmountVoucher('0.00');
       
       // Se o controle de caixa estiver ativado, mostra o diálogo de abertura novamente
       if (pdvConfig.controlCashier) {
@@ -875,15 +878,33 @@ export default function PDV() {
         throw new Error('Falha ao carregar produtos');
       }
 
-      const formattedProducts = productsData.map(product => ({
-        id: String(product.id),
-        code: String(product.code),
-        name: String(product.name),
-        selling_price: Number(product.selling_price),
-        stock: Number(product.stock),
-        status: product.status as 'active' | 'inactive',
-        unit_code: product.product_units?.code ? String(product.product_units.code) : 'UN'
-      }));
+      // Tratar corretamente o caso em que product_units pode ser um erro ou indefinido
+      const formattedProducts = productsData.map(product => {
+        // Verificar se product_units é um objeto válido e não um erro
+        let unitCode = 'UN'; // Valor padrão
+        
+        try {
+          // Verificar se o valor existe e é um objeto com uma propriedade code
+          if (product.product_units && 
+              typeof product.product_units === 'object' && 
+              'code' in product.product_units) {
+            unitCode = String(product.product_units.code);
+          }
+        } catch (e) {
+          console.log('Erro ao acessar product_units:', e);
+          // Continuar usando o valor padrão
+        }
+        
+        return {
+          id: String(product.id),
+          code: String(product.code),
+          name: String(product.name),
+          selling_price: Number(product.selling_price),
+          stock: Number(product.stock),
+          status: product.status as 'active' | 'inactive',
+          unit_code: unitCode
+        };
+      });
 
       setProducts(formattedProducts);
     } catch (error: any) {
