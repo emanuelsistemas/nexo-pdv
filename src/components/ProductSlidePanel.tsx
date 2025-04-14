@@ -421,8 +421,11 @@ export function ProductSlidePanel({ isOpen, onClose, initialTab = 'produto', pro
       }
 
       // Converte valores com vírgula para ponto antes de salvar
-      const cost_price = formData.cost_price.replace(',', '.');
-      const profit_margin = formData.profit_margin.replace(',', '.');
+      // Se os campos estiverem vazios, usar '0' como valor padrão
+      const cost_price = formData.cost_price && formData.cost_price.trim() !== '' ? 
+        formData.cost_price.replace(',', '.') : '0';
+      const profit_margin = formData.profit_margin && formData.profit_margin.trim() !== '' ? 
+        formData.profit_margin.replace(',', '.') : '0';
       const selling_price = formData.selling_price.replace(',', '.');
       const stock = formData.stock.replace(',', '.');
 

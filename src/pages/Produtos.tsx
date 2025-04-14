@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Plus, Package, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, ArrowUpDown, Tag, Loader2, ArrowDownAZ, ArrowUpAZ, Copy } from 'lucide-react';
+import { Search, Plus, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, ArrowUpDown, Loader2, ArrowDownAZ, ArrowUpAZ, Copy } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { ProductSlidePanel } from '../components/ProductSlidePanel';
 import { supabase } from '../lib/supabase';
@@ -47,11 +47,77 @@ export default function Produtos() {
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [sortField, setSortField] = useState<string | null>('code');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  
+  // Configurações de exibição dos campos adicionais
+  const [productConfig, setProductConfig] = useState({
+    showBarcode: false,
+    showNcm: false, 
+    showCfop: false,
+    showCst: false,
+    showPis: false,
+    showCofins: false
+  });
 
   useEffect(() => {
     loadProducts();
     loadGroups();
+    loadProductConfig();
   }, []);
+
+  const loadProductConfig = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.warn('Usuário não autenticado');
+        return; // Encerra a função para prevenir erros
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile?.company_id) {
+        console.warn('Empresa não encontrada');
+        return; // Encerra a função para prevenir erros
+      }
+
+      // Buscar configurações de produtos no banco de dados
+      const { data, error } = await supabase
+        .from('products_configurations')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('company_id', profile.company_id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') { // PGRST116 = Resultado não encontrado
+          console.log('Nenhuma configuração de produto encontrada, usando padrões');
+        } else {
+          console.error('Erro ao buscar configurações:', error);
+        }
+        return; // Continua usando as configurações padrão
+      }
+
+      // Se encontrar configuração no banco, usar ela
+      if (data) {
+        // Tratamento seguro para evitar erros de tipo
+        setProductConfig({
+          showBarcode: Boolean(data.show_barcode),
+          showNcm: Boolean(data.show_ncm), 
+          showCfop: Boolean(data.show_cfop),
+          showCst: Boolean(data.show_cst),
+          showPis: Boolean(data.show_pis),
+          showCofins: Boolean(data.show_cofins)
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configurações de produtos:', error);
+      // Não lança erro para cima para não interromper o carregamento da página
+    }
+  };
 
   const loadGroups = async () => {
     try {
@@ -79,7 +145,10 @@ export default function Produtos() {
 
       if (error) throw error;
 
-      setGroups(groups || []);
+      setGroups(groups ? groups.map(g => ({
+        id: g.id as string,
+        name: g.name as string
+      })) : []);
     } catch (error) {
       console.error('Erro ao carregar grupos:', error);
       toast.error('Erro ao carregar grupos');
@@ -151,12 +220,30 @@ export default function Produtos() {
       // Transform the data to include unit and group information
       const transformedData = productsData.map(product => {
         const unit = unitMap.get(product.unit_id);
+        // Garante que todos os campos necessários existam para evitar erros
         return {
-          ...product,
+          id: product.id || '',
+          code: product.code || '',
+          name: product.name || '',
+          barcode: product.barcode || null,
+          unit_id: product.unit_id || '',
+          group_id: product.group_id || null,
+          cost_price: typeof product.cost_price === 'number' ? product.cost_price : 0,
+          profit_margin: typeof product.profit_margin === 'number' ? product.profit_margin : 0,
+          selling_price: typeof product.selling_price === 'number' ? product.selling_price : 0,
+          stock: typeof product.stock === 'number' ? product.stock : 0,
+          cst: product.cst || '',
+          pis: product.pis || '',
+          cofins: product.cofins || '',
+          ncm: product.ncm || '',
+          cfop: product.cfop || '',
+          status: product.status || 'active',
+          created_at: product.created_at || new Date().toISOString(),
+          // Campos adicionais para exibição
           unit_name: unit?.name || '-',
           unit_code: unit?.code || '-',
-          group_name: product.group_id ? groupMap.get(product.group_id) : '-'
-        };
+          group_name: product.group_id ? (groupMap.get(product.group_id) || '-') : '-'
+        } as Product;
       });
 
       setProducts(transformedData);
@@ -247,7 +334,7 @@ export default function Produtos() {
 
       // Extrair todos os códigos numéricos para encontrar o próximo disponível
       const numericCodes = existingProducts
-        .map(p => parseInt(p.code))
+        .map(p => parseInt(p.code as string))
         .filter(code => !isNaN(code));
 
       // Organizar os códigos em ordem crescente
@@ -302,7 +389,27 @@ export default function Produtos() {
       
       if (newProducts && newProducts.length > 0) {
         // Abrir o produto clonado para edição
-        setProductToEdit(newProducts[0]);
+        const newProduct = newProducts[0];
+        // Convertendo para o tipo Product com todas as propriedades necessárias
+        setProductToEdit({
+          id: newProduct.id as string,
+          code: newProduct.code as string,
+          name: newProduct.name as string,
+          barcode: newProduct.barcode as string | null,
+          unit_id: newProduct.unit_id as string,
+          group_id: newProduct.group_id as string | null,
+          cost_price: newProduct.cost_price as number,
+          profit_margin: newProduct.profit_margin as number,
+          selling_price: newProduct.selling_price as number,
+          stock: newProduct.stock as number,
+          cst: newProduct.cst as string,
+          pis: newProduct.pis as string,
+          cofins: newProduct.cofins as string,
+          ncm: newProduct.ncm as string,
+          cfop: newProduct.cfop as string,
+          status: newProduct.status as 'active' | 'inactive',
+          created_at: newProduct.created_at as string
+        });
         setShowProductPanel(true);
         setInitialTabState('produto');
       }
@@ -558,7 +665,49 @@ export default function Produtos() {
                       )}
                     </div>
                   </th>
+                  {productConfig.showBarcode && (
+                    <th className="text-left p-4 text-slate-400 font-medium">
+                      <div className="flex items-center gap-1">
+                        Código de Barras
+                      </div>
+                    </th>
+                  )}
                   <th className="text-left p-4 text-slate-400 font-medium">Un.</th>
+                  {productConfig.showNcm && (
+                    <th className="text-left p-4 text-slate-400 font-medium">
+                      <div className="flex items-center gap-1">
+                        NCM
+                      </div>
+                    </th>
+                  )}
+                  {productConfig.showCfop && (
+                    <th className="text-left p-4 text-slate-400 font-medium">
+                      <div className="flex items-center gap-1">
+                        CFOP
+                      </div>
+                    </th>
+                  )}
+                  {productConfig.showCst && (
+                    <th className="text-left p-4 text-slate-400 font-medium">
+                      <div className="flex items-center gap-1">
+                        CST
+                      </div>
+                    </th>
+                  )}
+                  {productConfig.showPis && (
+                    <th className="text-left p-4 text-slate-400 font-medium">
+                      <div className="flex items-center gap-1">
+                        PIS
+                      </div>
+                    </th>
+                  )}
+                  {productConfig.showCofins && (
+                    <th className="text-left p-4 text-slate-400 font-medium">
+                      <div className="flex items-center gap-1">
+                        COFINS
+                      </div>
+                    </th>
+                  )}
                   <th className="text-right p-4 text-slate-400 font-medium">
                     <div className="flex items-center justify-end gap-1 cursor-pointer" onClick={() => handleSort('cost_price')}>
                       Preço Custo
@@ -621,7 +770,9 @@ export default function Produtos() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="p-4 text-center">
+                    <td colSpan={7 + (productConfig.showBarcode ? 1 : 0) + (productConfig.showNcm ? 1 : 0) + 
+                        (productConfig.showCfop ? 1 : 0) + (productConfig.showCst ? 1 : 0) + 
+                        (productConfig.showPis ? 1 : 0) + (productConfig.showCofins ? 1 : 0)} className="p-4 text-center">
                       <div className="flex items-center justify-center text-slate-400">
                         <Loader2 size={24} className="animate-spin mr-2" />
                         <span>Carregando produtos...</span>
@@ -630,7 +781,9 @@ export default function Produtos() {
                   </tr>
                 ) : filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="p-4 text-center text-slate-400">
+                    <td colSpan={7 + (productConfig.showBarcode ? 1 : 0) + (productConfig.showNcm ? 1 : 0) + 
+                        (productConfig.showCfop ? 1 : 0) + (productConfig.showCst ? 1 : 0) + 
+                        (productConfig.showPis ? 1 : 0) + (productConfig.showCofins ? 1 : 0)} className="p-4 text-center text-slate-400">
                       Nenhum produto encontrado
                     </td>
                   </tr>
@@ -640,7 +793,25 @@ export default function Produtos() {
                       <td className="p-4 text-slate-200">{product.code}</td>
                       <td className="p-4 text-slate-200">{product.name}</td>
                       <td className="p-4 text-slate-200">{product.group_name}</td>
+                      {productConfig.showBarcode && (
+                        <td className="p-4 text-slate-200">{product.barcode || '---'}</td>
+                      )}
                       <td className="p-4 text-slate-200">{product.unit_code}</td>
+                      {productConfig.showNcm && (
+                        <td className="p-4 text-slate-200">{product.ncm || '---'}</td>
+                      )}
+                      {productConfig.showCfop && (
+                        <td className="p-4 text-slate-200">{product.cfop || '---'}</td>
+                      )}
+                      {productConfig.showCst && (
+                        <td className="p-4 text-slate-200">{product.cst || '---'}</td>
+                      )}
+                      {productConfig.showPis && (
+                        <td className="p-4 text-slate-200">{product.pis || '---'}</td>
+                      )}
+                      {productConfig.showCofins && (
+                        <td className="p-4 text-slate-200">{product.cofins || '---'}</td>
+                      )}
                       <td className="p-4 text-slate-200 text-right">{formatCurrency(product.cost_price)}</td>
                       <td className="p-4 text-slate-200 text-right">{formatCurrency(product.selling_price)}</td>
                       <td className="p-4 text-slate-200 text-right">
