@@ -1,25 +1,284 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, UserPlus, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, UserPlus, Loader2, Search, ArrowLeft, ArrowRight } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Logo } from '../components/Logo';
 import { supabase } from '../lib/supabase';
 
+// Lista de segmentos disponíveis
+const SEGMENTS = [
+  'Açougue',
+  'Adega',
+  'Bar',
+  'Cafeteria',
+  'Casa de Carnes',
+  'Distribuidora',
+  'Doceria',
+  'Farmácia',
+  'Hortifruti',
+  'Lanchonete',
+  'Livraria',
+  'Loja de Conveniência',
+  'Loja de Roupas',
+  'Mercearia',
+  'Padaria',
+  'Papelaria',
+  'Petshop',
+  'Pizzaria',
+  'Quitanda',
+  'Restaurante',
+  'Sorveteria',
+  'Supermercado',
+  'Varejo em Geral'
+];
+
+// Lista de regimes tributários
+const TAX_REGIMES = [
+  'Simples Nacional',
+  'Normal'
+];
+
+// Lista de estados brasileiros
+const STATES = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+  'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+];
+
 export default function Register() {
   const navigate = useNavigate();
+  const [currentStep, setCurrentStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [searchSegment, setSearchSegment] = useState('');
+  const [showSegmentDropdown, setShowSegmentDropdown] = useState(false);
+  const [searchingCNPJ, setSearchingCNPJ] = useState(false);
+
+  // Form data state
   const [formData, setFormData] = useState({
+    // Step 1 - User data
     name: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    
+    // Step 2 - Company basic info
+    segment: '',
+    documentType: 'CNPJ',
+    documentNumber: '',
+    legalName: '',
+    tradeName: '',
+    taxRegime: '',
+    whatsapp: '',
+    
+    // Step 3 - Address
+    cep: '',
+    street: '',
+    number: '',
+    complement: '',
+    district: '',
+    city: '',
+    state: ''
   });
-  
+
+  // Filtered segments based on search
+  const filteredSegments = SEGMENTS.filter(segment =>
+    segment.toLowerCase().includes(searchSegment.toLowerCase())
+  );
+
+  const isValidCNPJ = (cnpj: string) => {
+    cnpj = cnpj.replace(/[^\d]/g, '');
+    
+    if (cnpj.length !== 14) return false;
+    
+    // Check if all digits are the same
+    if (/^(\d)\1+$/.test(cnpj)) return false;
+    
+    // Validate check digits
+    let size = cnpj.length - 2;
+    let numbers = cnpj.substring(0, size);
+    const digits = cnpj.substring(size);
+    let sum = 0;
+    let pos = size - 7;
+    
+    for (let i = size; i >= 1; i--) {
+      sum += parseInt(numbers.charAt(size - i)) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    
+    let result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+    if (result !== parseInt(digits.charAt(0))) return false;
+    
+    size = size + 1;
+    numbers = cnpj.substring(0, size);
+    sum = 0;
+    pos = size - 7;
+    
+    for (let i = size; i >= 1; i--) {
+      sum += parseInt(numbers.charAt(size - i)) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    
+    result = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+    if (result !== parseInt(digits.charAt(1))) return false;
+    
+    return true;
+  };
+
+  const formatDocument = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    
+    if (formData.documentType === 'CNPJ') {
+      return numbers
+        .replace(/^(\d{2})(\d)/, '$1.$2')
+        .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/\.(\d{3})(\d)/, '.$1/$2')
+        .replace(/(\d{4})(\d)/, '$1-$2')
+        .slice(0, 18);
+    } else {
+      return numbers
+        .replace(/^(\d{3})(\d)/, '$1.$2')
+        .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/\.(\d{3})(\d)/, '.$1-$2')
+        .slice(0, 14);
+    }
+  };
+
+  const formatWhatsApp = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    return numbers
+      .replace(/^(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d)(\d{4})$/, '$1-$2')
+      .slice(0, 15);
+  };
+
+  const formatCEP = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    return numbers
+      .replace(/^(\d{2})(\d)/, '$1.$2')
+      .replace(/\.(\d{3})(\d)/, '.$1-$2')
+      .slice(0, 10);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    let formattedValue = value;
+    
+    // Apply masks based on field
+    switch (name) {
+      case 'documentNumber':
+        formattedValue = formatDocument(value);
+        break;
+      case 'whatsapp':
+        formattedValue = formatWhatsApp(value);
+        break;
+      case 'cep':
+        formattedValue = formatCEP(value);
+        break;
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      [name]: formattedValue
+    }));
+  };
+
+  const handleSegmentSelect = (segment: string) => {
+    setFormData(prev => ({ ...prev, segment }));
+    setShowSegmentDropdown(false);
+    setSearchSegment('');
+  };
+
+  const searchCNPJ = async () => {
+    try {
+      const cnpj = formData.documentNumber.replace(/[^\d]/g, '');
+      
+      if (!isValidCNPJ(cnpj)) {
+        toast.error('CNPJ inválido. Verifique os números digitados.');
+        return;
+      }
+
+      setSearchingCNPJ(true);
+      
+      const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          toast.error('CNPJ não encontrado na base de dados.');
+        } else {
+          toast.error('Erro ao consultar CNPJ. Tente novamente mais tarde.');
+        }
+        return;
+      }
+      
+      const data = await response.json();
+      
+      // Update form data with API response
+      setFormData(prev => ({
+        ...prev,
+        legalName: data.razao_social || '',
+        tradeName: data.nome_fantasia || '',
+        cep: data.cep?.replace(/[^\d]/g, '').replace(/^(\d{2})(\d{3})(\d{3})$/, '$1.$2-$3') || '',
+        street: data.logradouro || '',
+        number: data.numero || '',
+        complement: data.complemento || '',
+        district: data.bairro || '',
+        city: data.municipio || '',
+        state: data.uf || ''
+      }));
+
+      // If CEP was returned, trigger CEP search to ensure all address fields are filled
+      if (data.cep) {
+        await searchCEP();
+      }
+
+      toast.success('Dados da empresa carregados com sucesso!');
+    } catch (error) {
+      console.error('Erro ao consultar CNPJ:', error);
+      toast.error('Erro ao processar a consulta. Verifique sua conexão e tente novamente.');
+    } finally {
+      setSearchingCNPJ(false);
+    }
+  };
+
+  const searchCEP = async () => {
+    const cep = formData.cep.replace(/\D/g, '');
+    if (cep.length !== 8) {
+      toast.error('CEP inválido');
+      return;
+    }
+
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await response.json();
+
+      if (data.erro) {
+        toast.error('CEP não encontrado');
+        return;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        street: data.logradouro,
+        district: data.bairro,
+        city: data.localidade,
+        state: data.uf,
+      }));
+    } catch (error) {
+      toast.error('Erro ao buscar CEP');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (currentStep < 3) {
+      setCurrentStep(prev => prev + 1);
+      return;
+    }
+    
+    // Final submission
     if (formData.password !== formData.confirmPassword) {
       toast.error('As senhas não correspondem');
       return;
@@ -28,8 +287,6 @@ export default function Register() {
     try {
       setLoading(true);
 
-      // Tentamos criar o usuário diretamente, deixando o Supabase verificar se o email existe
-      console.log('Tentando criar usuário com email:', formData.email);
       const signUpResult = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -37,52 +294,18 @@ export default function Register() {
           data: {
             name: formData.name,
           },
-          emailRedirectTo: 'https://nexopdv.emasoftware.io/login' // URL para redirecionamento após confirmação de email
+          emailRedirectTo: 'https://nexopdv.emasoftware.io/login'
         }
       });
 
-      // Extrair dados e erro
       const { data: authData, error: authError } = signUpResult;
       
-      console.log('Resultado do signUp:', JSON.stringify({
-        success: !!authData?.user,
-        errorMessage: authError?.message
-      }));
-
       if (authError) {
-        console.error('Erro de autenticação:', authError);
-        
-        // Tratamento específico para cada tipo de erro
-        if (authError.message.includes('already registered') || 
-            authError.message.includes('already been registered') || 
-            authError.message.includes('duplicate') ||
-            authError.message.includes('uniqueness') ||
-            authError.message.includes('already exists') ||
-            authError.message.includes('User already exists') ||
-            authError.message.includes('email address is already taken')) {
+        if (authError.message.includes('already registered')) {
           toast.error('Este e-mail já está cadastrado. Por favor, faça login ou use outro e-mail.');
           return;
         }
-
-        // Outros tipos de erro específicos
-        switch (authError.message) {
-          case 'Password should be at least 6 characters':
-            toast.error('A senha deve ter pelo menos 6 caracteres.');
-            break;
-          case 'Unable to validate email address: invalid format':
-            toast.error('O e-mail informado é inválido. Por favor, verifique e tente novamente.');
-            break;
-          case 'Password is too weak':
-            toast.error('A senha é muito fraca. Use uma combinação de letras, números e caracteres especiais.');
-            break;
-          case 'Rate limit exceeded':
-            toast.error('Muitas tentativas de cadastro. Por favor, aguarde alguns minutos e tente novamente.');
-            break;
-          default:
-            console.error('Erro detalhado:', authError);
-            toast.error('Erro ao criar usuário. Por favor, tente novamente.');
-        }
-        return;
+        throw authError;
       }
 
       if (!authData.user) {
@@ -90,37 +313,21 @@ export default function Register() {
         return;
       }
 
-      // Aguarda um pequeno intervalo para garantir que o usuário foi criado
       await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Tenta criar o perfil com log detalhado
-      // Simplesmente inserir os dados obrigatórios sem email
-      // já que pode estar causando conflito
-      // SOLUÇÃO SIMPLIFICADA: Foco na experiência do usuário
-      // Se chegamos até aqui, o usuário foi criado com sucesso na autenticação
-
-      // Para resolver o problema de "campo obrigatório" e garantir uma boa experiência,
-      // vamos usar a abordagem mais simples e direta possível
       const profileData = {
         id: authData.user.id,
         name: formData.name,
         status_cad_empresa: 'N',
-        email: formData.email // Adicionando email para garantir que ele seja registrado
+        email: formData.email
       };
-      
-      console.log('Tentando inserir perfil com dados:', profileData);
       
       const { error: profileError } = await supabase
         .from('profiles')
         .insert([profileData]);
 
-      // Independentemente do erro, queremos que o cadastro seja bem-sucedido neste ponto
-      // O usuário já foi criado na autenticação, então consideramos o cadastro concluído
-      
       if (profileError) {
-        // Apenas logamos o erro para debug, mas não exibimos mensagem de erro para o usuário
-        console.error('Erro no perfil (para debug):', profileError);
-        // Continuamos o fluxo normal, pois o cadastro na auth foi bem sucedido
+        console.error('Erro no perfil:', profileError);
       }
 
       toast.success(
@@ -128,7 +335,6 @@ export default function Register() {
         { autoClose: 8000 }
       );
 
-      // Navegar para a página de login com um indicador de que o usuário acabou de se registrar
       navigate('/login', { 
         state: { 
           justRegistered: true,
@@ -137,28 +343,396 @@ export default function Register() {
       });
     } catch (error: any) {
       console.error('Erro completo:', error);
-      
-      // Mensagens de erro mais amigáveis e específicas
-      if (error.message?.includes('network')) {
-        toast.error('Erro de conexão. Por favor, verifique sua internet e tente novamente.');
-      } else if (error.message?.includes('timeout')) {
-        toast.error('O servidor está demorando para responder. Por favor, tente novamente em alguns instantes.');
-      } else {
-        toast.error('Erro ao criar usuário. Por favor, tente novamente.');
-      }
+      toast.error('Erro ao criar usuário. Por favor, tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+  const renderStep = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Nome completo
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                placeholder="Seu nome"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                placeholder="seu@email.com"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Senha
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  placeholder="••••••••"
+                  required
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Confirmar Senha
+              </label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  placeholder="••••••••"
+                  required
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
+                >
+                  {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 2:
+        return (
+          <div className="space-y-6">
+            {/* Segmento com pesquisa */}
+            <div className="relative">
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Segmento
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={formData.segment || searchSegment}
+                  onChange={(e) => {
+                    if (!formData.segment) {
+                      setSearchSegment(e.target.value);
+                    }
+                    setShowSegmentDropdown(true);
+                  }}
+                  onClick={() => setShowSegmentDropdown(true)}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  placeholder="Selecione ou pesquise um segmento"
+                  required
+                />
+                {showSegmentDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredSegments.map((segment) => (
+                      <button
+                        key={segment}
+                        type="button"
+                        className="w-full px-4 py-2 text-left text-slate-200 hover:bg-slate-700 transition-colors"
+                        onClick={() => handleSegmentSelect(segment)}
+                      >
+                        {segment}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tipo de Documento */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Tipo de Documento
+              </label>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, documentType: 'CNPJ' }))}
+                  className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
+                    formData.documentType === 'CNPJ'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  CNPJ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, documentType: 'CPF' }))}
+                  className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
+                    formData.documentType === 'CPF'
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  CPF
+                </button>
+              </div>
+            </div>
+
+            {/* Número do Documento */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                {formData.documentType}
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  name="documentNumber"
+                  value={formData.documentNumber}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  placeholder={formData.documentType === 'CNPJ' ? '00.000.000/0000-00' : '000.000.000-00'}
+                  required
+                />
+                {formData.documentType === 'CNPJ' && (
+                  <button
+                    type="button"
+                    onClick={searchCNPJ}
+                    disabled={searchingCNPJ || !formData.documentNumber}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors disabled:opacity-50"
+                  >
+                    {searchingCNPJ ? (
+                      <Loader2 size={20} className="animate-spin" />
+                    ) : (
+                      <Search size={20} />
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Razão Social */}
+            {formData.documentType === 'CNPJ' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Razão Social
+                </label>
+                <input
+                  type="text"
+                  name="legalName"
+                  value={formData.legalName}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  required
+                />
+              </div>
+            )}
+
+            {/* Nome Fantasia */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Nome Fantasia
+              </label>
+              <input
+                type="text"
+                name="tradeName"
+                value={formData.tradeName}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            {/* Regime Tributário */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Regime Tributário
+              </label>
+              <select
+                name="taxRegime"
+                value={formData.taxRegime}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              >
+                <option value="">Selecione um regime tributário</option>
+                {TAX_REGIMES.map(regime => (
+                  <option key={regime} value={regime}>{regime}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* WhatsApp */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                WhatsApp
+              </label>
+              <input
+                type="tel"
+                name="whatsapp"
+                value={formData.whatsapp}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                placeholder="(00) 0 0000-0000"
+                required
+              />
+            </div>
+          </div>
+        );
+
+      case 3:
+        return (
+          <div className="space-y-6">
+            {/* CEP */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                CEP
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  name="cep"
+                  value={formData.cep}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  placeholder="00.000-000"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={searchCEP}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
+                >
+                  <Search size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Endereço */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Endereço
+              </label>
+              <input
+                type="text"
+                name="street"
+                value={formData.street}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            {/* Número */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Número
+              </label>
+              <input
+                type="text"
+                name="number"
+                value={formData.number}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            {/* Complemento */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Complemento
+              </label>
+              <input
+                type="text"
+                name="complement"
+                value={formData.complement}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              />
+            </div>
+
+            {/* Bairro */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Bairro
+              </label>
+              <input
+                type="text"
+                name="district"
+                value={formData.district}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            {/* Cidade */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Cidade
+              </label>
+              <input
+                type="text"
+                name="city"
+                value={formData.city}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              />
+            </div>
+
+            {/* Estado */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Estado
+              </label>
+              <select
+                name="state"
+                value={formData.state}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                required
+              >
+                <option value="">Selecione um estado</option>
+                {STATES.map(state => (
+                  <option key={state} value={state}>{state}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        );
+    }
   };
-  
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 to-slate-800">
       <div className="w-full max-w-md space-y-8 auth-form p-8 rounded-xl">
@@ -166,105 +740,75 @@ export default function Register() {
           <Logo />
           <p className="text-slate-400 mt-3">Crie sua conta</p>
         </div>
+
+        {/* Step Indicator */}
+        <div className="flex items-center justify-between mb-8">
+          {[1, 2, 3].map((step) => (
+            <React.Fragment key={step}>
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                  step === currentStep
+                    ? 'bg-blue-500 text-white'
+                    : step < currentStep
+                    ? 'bg-green-500 text-white'
+                    : 'bg-slate-700 text-slate-400'
+                }`}
+              >
+                {step}
+              </div>
+              {step < 3 && (
+                <div
+                  className={`flex-1 h-1 mx-2 ${
+                    step < currentStep ? 'bg-green-500' : 'bg-slate-700'
+                  }`}
+                />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
         
         <form className="space-y-6" onSubmit={handleSubmit}>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Nome completo
-            </label>
-            <input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-              placeholder="Seu nome"
-              required
-            />
-          </div>
+          {renderStep()}
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-              placeholder="seu@email.com"
-              required
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Senha
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="••••••••"
-                required
-                minLength={6}
-              />
+          <div className="flex justify-between gap-4">
+            {currentStep > 1 && (
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
+                onClick={() => setCurrentStep(prev => prev - 1)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 transition-colors"
               >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                <ArrowLeft size={20} />
+                Voltar
               </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Confirmar Senha
-            </label>
-            <div className="relative">
-              <input
-                type={showConfirmPassword ? "text" : "password"}
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="••••••••"
-                required
-                minLength={6}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
-              >
-                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white py-2.5 px-4 rounded-lg transition-all duration-200 font-medium shadow-lg shadow-blue-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <>
-                <Loader2 size={20} className="animate-spin" />
-                <span>Criando conta...</span>
-              </>
-            ) : (
-              <>
-                <UserPlus size={20} />
-                <span>Criar conta</span>
-              </>
             )}
-          </button>
+            
+            <button
+              type="submit"
+              disabled={loading}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 font-medium ${
+                currentStep === 3
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white shadow-lg shadow-blue-500/25'
+                  : 'bg-blue-500 text-white hover:bg-blue-400'
+              } ${loading ? 'opacity-50 cursor-not-allowed' : ''} ml-auto`}
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  <span>Processando...</span>
+                </>
+              ) : currentStep === 3 ? (
+                <>
+                  <UserPlus size={20} />
+                  <span>Criar conta</span>
+                </>
+              ) : (
+                <>
+                  <span>Próximo</span>
+                  <ArrowRight size={20} />
+                </>
+              )}
+            </button>
+          </div>
         </form>
 
         <p className="text-center text-sm text-slate-400">
