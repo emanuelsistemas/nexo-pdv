@@ -246,12 +246,13 @@ export default function Register() {
         state: data.uf || ''
       }));
 
-      // Se tiver CEP, buscar dados adicionais do endereço após um pequeno delay
-      if (formattedCep) {
-        setTimeout(async () => {
-          await searchCEP();
-        }, 500);
-      }
+      // Não precisamos buscar o CEP novamente, pois já temos os dados do endereço da API do CNPJ
+      // Comentado para evitar o erro de "CEP inválido"
+      // if (formattedCep) {
+      //   setTimeout(async () => {
+      //     await searchCEP();
+      //   }, 500);
+      // }
 
       toast.success('Dados da empresa carregados com sucesso!');
     } catch (error) {
@@ -263,30 +264,42 @@ export default function Register() {
   };
 
   const searchCEP = async () => {
+    // Remove caracteres não numéricos do CEP
     const cep = formData.cep.replace(/\D/g, '');
+    
+    // Valida o comprimento do CEP
     if (cep.length !== 8) {
-      toast.error('CEP inválido');
+      toast.warning('Digite um CEP válido com 8 dígitos');
       return;
     }
 
     try {
+      // Mostra um toast informativo de que a busca está em andamento
+      toast.info('Buscando endereço...', { autoClose: 2000 });
+      
+      // Faz a requisição para a API ViaCEP
       const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
       const data = await response.json();
 
+      // Verifica se a API retornou erro
       if (data.erro) {
-        toast.error('CEP não encontrado');
+        toast.error('CEP não encontrado na base de dados');
         return;
       }
 
+      // Atualiza os campos do formulário com os dados retornados
       setFormData(prev => ({
         ...prev,
-        street: data.logradouro,
-        district: data.bairro,
-        city: data.localidade,
-        state: data.uf,
+        street: data.logradouro || prev.street,
+        district: data.bairro || prev.district,
+        city: data.localidade || prev.city,
+        state: data.uf || prev.state,
       }));
+      
+      toast.success('Endereço encontrado com sucesso!');
     } catch (error) {
-      toast.error('Erro ao buscar CEP');
+      console.error('Erro ao buscar CEP:', error);
+      toast.error('Erro na consulta de CEP. Verifique sua conexão e tente novamente.');
     }
   };
 
@@ -561,7 +574,11 @@ export default function Register() {
                 {formData.documentType === 'CNPJ' && (
                   <button
                     type="button"
-                    onClick={searchCNPJ}
+                    onClick={(e) => {
+                      e.preventDefault(); // Impede que o formulário seja submetido
+                      e.stopPropagation(); // Impede propagação do evento
+                      searchCNPJ();
+                    }}
                     disabled={searchingCNPJ || !formData.documentNumber}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors disabled:opacity-50"
                   >
@@ -807,26 +824,29 @@ export default function Register() {
         <form className="space-y-6" onSubmit={handleSubmit}>
           {renderStep()}
 
-          <div className="flex justify-between gap-4">
+          {/* Botões de navegação */}
+          <div className="flex flex-col gap-4 mt-6">
+            {/* Botão Voltar */}
             {currentStep > 1 && (
               <button
                 type="button"
                 onClick={() => setCurrentStep(prev => prev - 1)}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 transition-colors"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 transition-colors w-full sm:w-auto"
               >
                 <ArrowLeft size={20} />
                 Voltar
               </button>
             )}
             
+            {/* Botão de Ação Principal */}
             <button
               type="submit"
               disabled={loading}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 font-medium ${
+              className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-all duration-200 font-medium w-full ${
                 currentStep === 3
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white shadow-lg shadow-blue-500/25'
+                  ? 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white shadow-lg shadow-blue-500/25 text-lg'
                   : 'bg-blue-500 text-white hover:bg-blue-400'
-              } ${loading ? 'opacity-50 cursor-not-allowed' : ''} ml-auto`}
+              } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {loading ? (
                 <>
