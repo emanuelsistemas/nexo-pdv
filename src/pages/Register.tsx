@@ -63,7 +63,7 @@ export default function Register() {
     confirmPassword: '',
     
     // Step 2 - Company basic info
-    resellerId: '', // Mantemos o campo, mas ele sempre será vazio por enquanto
+    resellerId: '',
     segment: '',
     documentType: 'CNPJ',
     documentNumber: '',
@@ -214,17 +214,29 @@ export default function Register() {
       }
       
       const data = await response.json();
+      console.log('Dados do CNPJ:', data); // Log para debug
 
       // Formatar o CEP antes de atualizar o estado
       const formattedCep = data.cep 
         ? data.cep.replace(/[^\d]/g, '').replace(/^(\d{2})(\d{3})(\d{3})$/, '$1.$2-$3')
         : '';
+
+      // Determinar o regime tributário com base nos dados da API
+      let taxRegime = 'Normal';
+      // Verifica se o campo simples_nacional existe e é true (pode vir como booleano ou string)
+      if (data.opcao_pelo_simples === true || data.opcao_pelo_simples === 'true' || 
+          data.opcao_pelo_simples === 'Sim' || data.opcao_pelo_simples === 'S' ||
+          data.simples_nacional === true || data.simples_nacional === 'true' || 
+          data.simples_nacional === 'Sim' || data.simples_nacional === 'S') {
+        taxRegime = 'Simples Nacional';
+      }
       
       // Atualizar o estado com os dados formatados
       setFormData(prev => ({
         ...prev,
         legalName: data.razao_social || '',
         tradeName: data.nome_fantasia || '',
+        taxRegime: taxRegime,
         cep: formattedCep,
         street: data.logradouro || '',
         number: data.numero || '',
