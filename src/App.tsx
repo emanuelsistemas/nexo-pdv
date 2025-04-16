@@ -21,6 +21,8 @@ const PasswordRecovery = lazy(() => import('./pages/PasswordRecovery'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const ResendConfirmation = lazy(() => import('./pages/ResendConfirmation'));
 const ManualConfirmation = lazy(() => import('./pages/ManualConfirmation'));
+const AdminLogin = lazy(() => import('./pages/AdminLogin'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const AIChat = lazy(() => import('./components/AIChat').then(module => ({ default: module.AIChat })));
 
 // Criando context para o tema
@@ -304,6 +306,10 @@ function App() {
             <Route path="/reset-password" element={<PublicRoute><ResetPassword /></PublicRoute>} />
             <Route path="/resend-confirmation" element={<PublicRoute><ResendConfirmation /></PublicRoute>} />
             <Route path="/manual-confirmation" element={<PublicRoute><ManualConfirmation /></PublicRoute>} />
+
+            {/* Admin routes */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
 
             {/* Protected routes */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
