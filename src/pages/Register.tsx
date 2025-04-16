@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, UserPlus, Loader2, Search, ArrowLeft, ArrowRight } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -63,6 +63,7 @@ export default function Register() {
     confirmPassword: '',
     
     // Step 2 - Company basic info
+    resellerId: '', // Mantemos o campo, mas ele sempre será vazio por enquanto
     segment: '',
     documentType: 'CNPJ',
     documentNumber: '',
@@ -213,13 +214,18 @@ export default function Register() {
       }
       
       const data = await response.json();
+
+      // Formatar o CEP antes de atualizar o estado
+      const formattedCep = data.cep 
+        ? data.cep.replace(/[^\d]/g, '').replace(/^(\d{2})(\d{3})(\d{3})$/, '$1.$2-$3')
+        : '';
       
-      // Update form data with API response
+      // Atualizar o estado com os dados formatados
       setFormData(prev => ({
         ...prev,
         legalName: data.razao_social || '',
         tradeName: data.nome_fantasia || '',
-        cep: data.cep?.replace(/[^\d]/g, '').replace(/^(\d{2})(\d{3})(\d{3})$/, '$1.$2-$3') || '',
+        cep: formattedCep,
         street: data.logradouro || '',
         number: data.numero || '',
         complement: data.complemento || '',
@@ -228,9 +234,11 @@ export default function Register() {
         state: data.uf || ''
       }));
 
-      // If CEP was returned, trigger CEP search to ensure all address fields are filled
-      if (data.cep) {
-        await searchCEP();
+      // Se tiver CEP, buscar dados adicionais do endereço após um pequeno delay
+      if (formattedCep) {
+        setTimeout(async () => {
+          await searchCEP();
+        }, 500);
       }
 
       toast.success('Dados da empresa carregados com sucesso!');
@@ -439,6 +447,22 @@ export default function Register() {
       case 2:
         return (
           <div className="space-y-6">
+            {/* Revendedor - Simplificado */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Revendedor
+              </label>
+              <select
+                name="resellerId"
+                value={formData.resellerId}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                disabled
+              >
+                <option value="">Sem revendedor</option>
+              </select>
+            </div>
+
             {/* Segmento com pesquisa */}
             <div className="relative">
               <label className="block text-sm font-medium text-slate-300 mb-1">
@@ -755,6 +779,7 @@ export default function Register() {
                 }`}
               >
                 {step}
+              
               </div>
               {step < 3 && (
                 <div
