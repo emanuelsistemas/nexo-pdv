@@ -106,10 +106,10 @@ export default function AdminDashboard() {
     if (!companyToDelete) return;
 
     try {
-      // Call the RPC function to delete company and all related data
+      // Call the RPC function with the correct parameter name
       const { error } = await supabase
         .rpc('delete_company_and_related_data', {
-          company_id: companyToDelete.id
+          target_company_id: companyToDelete.id
         });
 
       if (error) throw error;
