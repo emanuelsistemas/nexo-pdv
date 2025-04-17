@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, ArrowUpDown, Loader2, ArrowDownAZ, ArrowUpAZ, Copy } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { ProductSlidePanel } from '../components/ProductSlidePanel';
+import { AppFooter } from '../components/AppFooter';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -889,6 +890,9 @@ export default function Produtos() {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <AppFooter />
 
       {/* Product Form Panel */}
       <ProductSlidePanel

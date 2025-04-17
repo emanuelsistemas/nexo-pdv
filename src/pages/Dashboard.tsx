@@ -138,6 +138,13 @@ function Dashboard() {
     { i: 'configuracoes', x: 0, y: 1, w: 1, h: 1, type: 'folder', icon: <Settings className="text-blue-400 group-hover:text-blue-300" size={40} />, title: 'Configurações' },
     { i: 'empresa-config', x: 0, y: 2, w: 1, h: 1, type: 'file', icon: <File className="text-slate-400 group-hover:text-slate-300" size={40} />, title: 'Empresa.config', parent: 'configuracoes' },
     { i: 'sistema-config', x: 1, y: 2, w: 1, h: 1, type: 'file', icon: <File className="text-slate-400 group-hover:text-slate-300" size={40} />, title: 'Sistema.config', parent: 'configuracoes' },
+    // Produtos folder items
+    { i: 'produtos-app', x: 0, y: 0, w: 1, h: 1, type: 'app', icon: <Package className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Produtos.app', parent: 'produtos' },
+    { i: 'grupo-app', x: 1, y: 0, w: 1, h: 1, type: 'app', icon: <Grid2X2 className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Grupos.app', parent: 'produtos' },
+    { i: 'unidade-app', x: 2, y: 0, w: 1, h: 1, type: 'app', icon: <Ruler className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Unidades.app', parent: 'produtos' },
+    // Clientes folder items
+    { i: 'clientes-app', x: 0, y: 0, w: 1, h: 1, type: 'app', icon: <Users className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Clientes.app', parent: 'clientes' },
+    { i: 'clientes-relatorios', x: 1, y: 0, w: 1, h: 1, type: 'app', icon: <FileBarChart2 className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Relatórios.app', parent: 'clientes' },
   ];
 
   const [layout, setLayout] = useState(initialLayout);
@@ -236,6 +243,14 @@ function Dashboard() {
   const handleHumanVerified = () => {
     setShowHumanVerification(false);
     localStorage.setItem('humanVerified', 'true');
+    
+    // Entrar automaticamente em modo de tela cheia após verificação
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Erro ao entrar em modo tela cheia: ${err.message}`);
+      });
+      setIsFullscreen(true);
+    }
   };
 
   // Lidar com pesquisa

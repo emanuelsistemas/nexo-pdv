@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, FileText, Calendar, Filter, X, ChevronLeft, ChevronRight, MoreVertical, Printer, Trash2, Copy, Edit, ArrowUpDown, ArrowDownAZ, ArrowUpAZ } from 'lucide-react';
 import { Logo } from '../components/Logo';
+import { AppFooter } from '../components/AppFooter';
 
 export default function Orcamento() {
   const navigate = useNavigate();
@@ -397,6 +398,9 @@ export default function Orcamento() {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <AppFooter />
     </div>
   );
 }

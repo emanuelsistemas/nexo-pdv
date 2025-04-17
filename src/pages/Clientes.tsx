@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, Users, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, Mail, Phone } from 'lucide-react';
 import { Logo } from '../components/Logo';
+import { AppFooter } from '../components/AppFooter';
 
 export default function Clientes() {
   const navigate = useNavigate();
@@ -279,6 +280,9 @@ export default function Clientes() {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <AppFooter />
     </div>
   );
 }
