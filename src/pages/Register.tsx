@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, UserPlus, Loader2, Search, ArrowLeft, ArrowRight } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -320,14 +320,14 @@ export default function Register() {
     try {
       setLoading(true);
 
+      // 1. Registrar o usuário no Supabase Auth (sem validação por email)
       const signUpResult = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
         options: {
           data: {
             name: formData.name,
-          },
-          emailRedirectTo: 'https://nexopdv.emasoftware.io/login'
+          }
         }
       });
 
@@ -346,13 +346,57 @@ export default function Register() {
         return;
       }
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 2. Criar o registro da empresa
+      const companyDataToInsert = {
+        segment: formData.segment,
+        document_type: formData.documentType,
+        document_number: formData.documentNumber.replace(/\D/g, ''),
+        legal_name: formData.legalName,
+        trade_name: formData.tradeName,
+        email: formData.email,
+        whatsapp: formData.whatsapp,
+        tax_regime: formData.taxRegime,
+        state_registration: 'S', // Conforme solicitado, definir como 'S'
+        
+        // Campos de endereço
+        address_cep: formData.cep.replace(/\D/g, ''),
+        address_street: formData.street,
+        address_number: formData.number,
+        address_complement: formData.complement,
+        address_district: formData.district,
+        address_city: formData.city,
+        address_state: formData.state,
+        address_country: 'Brasil',
+        
+        // Status padrão
+        status: 'active'
+      };
 
+      // Criar a empresa
+      const { data: companyCreated, error: companyError } = await supabase
+        .from('companies')
+        .insert(companyDataToInsert)
+        .select('*')
+        .single();
+
+      if (companyError) {
+        console.error('Erro ao criar empresa:', companyError);
+        throw new Error('Erro ao criar empresa: ' + companyError.message);
+      }
+
+      if (!companyCreated) {
+        throw new Error('Erro ao criar empresa: Nenhum dado retornado após a criação');
+      }
+
+      console.log('Empresa criada com sucesso:', companyCreated);
+
+      // 3. Vincular empresa ao perfil do usuário com status 'S'
       const profileData = {
         id: authData.user.id,
         name: formData.name,
-        status_cad_empresa: 'N',
-        email: formData.email
+        status_cad_empresa: 'S', // Alterado de 'N' para 'S' conforme solicitado
+        email: formData.email,
+        company_id: companyCreated.id
       };
       
       const { error: profileError } = await supabase
@@ -361,22 +405,127 @@ export default function Register() {
 
       if (profileError) {
         console.error('Erro no perfil:', profileError);
+        
+        // Tentar excluir a empresa se não conseguir vincular ao perfil
+        await supabase
+          .from('companies')
+          .delete()
+          .eq('id', companyCreated.id as string);
+
+        throw new Error('Erro ao vincular empresa ao perfil: ' + profileError.message);
+      }
+
+      // 4. Criar unidades de medida padrão para a empresa (UN e KG)
+      try {
+        // Criar diretamente as unidades de medida padrão
+        const defaultUnits = [
+          {
+            company_id: companyCreated.id,
+            code: 'UN',
+            name: 'Unidade',
+            description: 'Unidade padrão do sistema'
+          },
+          {
+            company_id: companyCreated.id,
+            code: 'KG',
+            name: 'Kilo',
+            description: 'Unidade padrão do sistema para peso em quilogramas'
+          }
+        ];
+
+        const { error: unitsError } = await supabase
+          .from('product_units')
+          .insert(defaultUnits);
+
+        if (unitsError) {
+          // Verificar se o erro é de chave duplicada
+          if (unitsError.code === '23505') { // código para violação de chave única/duplicada
+            console.log('Unidades já existem - ignorando erro');
+          } else {
+            console.error('Erro ao criar unidades de medida:', unitsError);
+          }
+        } else {
+          console.log('Unidades de medida padrão criadas com sucesso');
+        }
+      } catch (err) {
+        // Usar tipo any para evitar erro de tipo unknown
+        const error = err as any;
+        console.error('Erro ao configurar unidades de medida:', error);
+        // Não interromper o fluxo por causa deste erro
+      }
+
+      // 5. Criar grupo padrão "Diversos" para a empresa
+      try {
+        const { error: groupError } = await supabase
+          .from('product_groups')
+          .insert({
+            company_id: companyCreated.id,
+            name: 'Diversos',
+            description: 'Grupo padrão para itens diversos'
+          });
+
+        if (groupError && groupError.code !== '23505') { // Ignorar erro de chave duplicada
+          console.error('Erro ao criar grupo padrão:', groupError);
+        }
+      } catch (err) {
+        // Usar tipo any para evitar erro de tipo unknown
+        const error = err as any;
+        console.error('Erro ao configurar grupo padrão:', error);
+        // Não interromper o fluxo por causa deste erro
       }
 
       toast.success(
-        'Cadastro realizado com sucesso! Por favor, verifique seu e-mail para confirmar sua conta.',
-        { autoClose: 8000 }
+        'Cadastro realizado com sucesso! Entrando no sistema...',
+        { autoClose: 3000 }
       );
 
-      navigate('/login', { 
-        state: { 
-          justRegistered: true,
-          email: formData.email 
-        } 
+      // Fazer login automático após o cadastro
+      const { error: loginError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password
       });
+
+      if (loginError) {
+        console.error('Erro ao fazer login automático:', loginError);
+        toast.error('Erro ao fazer login automático. Por favor, faça login manualmente.');
+        navigate('/login', { 
+          state: { 
+            justRegistered: true,
+            email: formData.email 
+          } 
+        });
+        return;
+      }
+
+      // Salvar o estado de login no localStorage
+      import('../utils/authUtils').then(({ saveLoginState }) => {
+        saveLoginState(formData.email);
+      }).catch(err => console.error('Erro ao salvar estado de login:', err));
+      
+      // Abrir o dashboard em modo quiosque
+      try {
+        const { openKioskWindow } = await import('../utils/windowUtils');
+        const dashboardWindow = openKioskWindow(window.location.origin + '/dashboard');
+        
+        // Verifica se a janela foi aberta com sucesso
+        if (!dashboardWindow) {
+          console.warn('Não foi possível abrir a janela do Dashboard em modo quiosque.');
+          toast.warn('O bloqueador de pop-ups pode estar ativo. Por favor, permita pop-ups para este site.');
+          // Fallback para navegação direta caso não seja possível abrir a janela
+          navigate('/dashboard');
+          return;
+        }
+        
+        // Redirecionamos a janela original para a página inicial
+        navigate('/', { replace: true });
+      } catch (error) {
+        console.error('Erro ao abrir janela em modo quiosque:', error);
+        // Fallback para navegação direta
+        navigate('/dashboard');
+      }
     } catch (error: any) {
       console.error('Erro completo:', error);
-      toast.error('Erro ao criar usuário. Por favor, tente novamente.');
+      toast.error(error.message || 'Erro ao criar usuário. Por favor, tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -533,7 +682,37 @@ export default function Register() {
               <div className="flex gap-4">
                 <button
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, documentType: 'CNPJ' }))}
+                  onClick={() => {
+                    // Resetar campos específicos dos steps 2 e 3, mantendo step 1 e alguns campos do step 2
+                    setFormData(prev => ({
+                      // Manter dados do step 1
+                      name: prev.name,
+                      email: prev.email,
+                      password: prev.password,
+                      confirmPassword: prev.confirmPassword,
+                      
+                      // Manter campos selecionados do step 2
+                      resellerId: prev.resellerId,
+                      segment: prev.segment,
+                      
+                      // Definir tipo de documento e resetar os demais campos do step 2
+                      documentType: 'CNPJ',
+                      documentNumber: '',
+                      legalName: '',
+                      tradeName: '',
+                      taxRegime: '',
+                      whatsapp: '',
+                      
+                      // Resetar campos de endereço (step 3)
+                      cep: '',
+                      street: '',
+                      number: '',
+                      complement: '',
+                      district: '',
+                      city: '',
+                      state: ''
+                    }))
+                  }}
                   className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
                     formData.documentType === 'CNPJ'
                       ? 'bg-blue-500 text-white'
@@ -544,7 +723,37 @@ export default function Register() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, documentType: 'CPF' }))}
+                  onClick={() => {
+                    // Resetar campos específicos dos steps 2 e 3, mantendo step 1 e alguns campos do step 2
+                    setFormData(prev => ({
+                      // Manter dados do step 1
+                      name: prev.name,
+                      email: prev.email,
+                      password: prev.password,
+                      confirmPassword: prev.confirmPassword,
+                      
+                      // Manter campos selecionados do step 2
+                      resellerId: prev.resellerId,
+                      segment: prev.segment,
+                      
+                      // Definir tipo de documento e resetar os demais campos do step 2
+                      documentType: 'CPF',
+                      documentNumber: '',
+                      legalName: '',
+                      tradeName: '',
+                      taxRegime: '',
+                      whatsapp: '',
+                      
+                      // Resetar campos de endereço (step 3)
+                      cep: '',
+                      street: '',
+                      number: '',
+                      complement: '',
+                      district: '',
+                      city: '',
+                      state: ''
+                    }))
+                  }}
                   className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
                     formData.documentType === 'CPF'
                       ? 'bg-blue-500 text-white'
