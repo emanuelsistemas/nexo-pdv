@@ -4,7 +4,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import { Copy } from 'lucide-react';
 import 'react-toastify/dist/ReactToastify.css';
 import { handleAuthRedirect, getSupabase } from './lib/supabase';
-import { isUserLoggedIn } from './utils/authUtils';
+import { isUserLoggedIn, clearLoginState } from './utils/authUtils';
 
 // Implementando lazy loading para as páginas
 const Landing = lazy(() => import('./pages/Landing'));
@@ -253,6 +253,26 @@ const initSupabase = () => {
 function App() {
   useEffect(() => {
     initSupabase();
+    
+    // Adiciona listener para quando o usuário fecha o navegador
+    const handleBeforeUnload = () => {
+      // Verifica se o usuário está logado antes de fazer logout
+      if (isUserLoggedIn()) {
+        // Deslogar o usuário ao fechar o navegador
+        getSupabase().auth.signOut().catch(err => {
+          console.error('Erro ao deslogar no evento beforeunload:', err);
+        });
+        clearLoginState();
+      }
+    };
+    
+    // Adiciona o event listener
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Remove o event listener quando o componente é desmontado
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
   
   useEffect(() => {
