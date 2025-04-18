@@ -2,53 +2,187 @@
 
 ## Visão Geral
 
-Este documento detalha o processo de deleção de empresas e seus dados relacionados no sistema Nexo PDV. O processo é implementado de duas formas:
+Este documento detalha o processo de deleção de empresas e seus dados relacionados no sistema Nexo PDV. A deleção de empresas é uma operação crítica que deve remover consistentemente todos os dados associados a uma empresa, incluindo seus usuários e dados de autenticação.
 
-1. Função PostgreSQL (RPC)
-2. Script Python para casos especiais
-
-## 1. Função PostgreSQL (RPC)
+## 1. Função PostgreSQL (RPC) - Implementação Atual
 
 ### 1.1. Localização
-A função está definida em `supabase/migrations/20250416190911_scarlet_torch.sql` como `delete_company_and_related_data`.
+A função está definida como `delete_company_and_related_data` e pode ser encontrada em:
+- `supabase/Api-postgre/Supabase/complete_delete_function.sql` (implementação mais recente)
+- `supabase/migrations/XXXXXXXX_company_deletion.sql` (após migração)
 
-### 1.2. Ordem de Deleção Atual
+### 1.2. Processo de Deleção Completa
 
-A ordem de deleção é crítica para evitar violações de chave estrangeira:
+A função realiza as seguintes operações em ordem específica para evitar violações de chave estrangeira:
 
-1. Dados do PDV
-   - pdv_cashier_movements
+#### 1.2.1. Identificação
+- Verifica se a empresa existe
+- Coleta todos os IDs de usuários associados à empresa
+
+#### 1.2.2. Deleção de Dados Operacionais
+1. **Dados PDV**
+   - pdv_cashier_movements (primeiro pois referencia pdv_cashiers)
    - pdv_cashiers
    - pdv_configurations
 
-2. Dados de Produtos
+2. **Dados de Produtos**
    - product_stock_movements
-   - products
+   - products (após product_stock_movements)
    - product_groups
    - product_units
    - products_configurations
 
-3. Perfis de Usuário
-   - Atualização de profiles (remove company_id)
+#### 1.2.3. Deleção de Usuários
+3. **Perfis de Usuário**
+   - **Deleção completa** dos perfis na tabela profiles
 
-4. Empresa
-   - companies
+4. **Dados de Autenticação**
+   - Remoção dos usuários em auth.users
 
-5. Autenticação
-   - auth.users
+#### 1.2.4. Deleção da Empresa
+5. **Empresa**
+   - Remoção do registro na tabela companies
 
-### 1.3. Adicionando Novas Tabelas
+### 1.3. Características da Implementação Atual
 
-Para adicionar uma nova tabela ao processo de deleção:
+- **Tipo de Retorno:** `void` (não retorna valor)
+- **Segurança:** `SECURITY DEFINER` (executa com as permissões do criador da função)
+- **Linguagem:** `plpgsql`
+- **Tratamento de Erro:** Logs detalhados para cada operação
+- **Verificação:** Contabiliza registros afetados em cada operação
 
-1. Identifique as dependências da tabela
-2. Determine o momento correto para deleção
-3. Atualize a função RPC
+## 2. Guia para Futuras Atualizações
 
-Exemplo de adição de nova tabela:
+### 2.1. Adicionando Novas Tabelas ao Processo de Deleção
+
+Quando novas tabelas que referenciam empresas forem adicionadas ao sistema, siga estas etapas:
+
+1. **Analise a Estrutura da Tabela**:
+   - Identifique a coluna que referencia `companies` (geralmente `company_id`)
+   - Verifique se a tabela tem outras dependências
+
+2. **Determine o Posicionamento na Ordem de Deleção**:
+   - Tabelas que são referenciadas por outras devem ser deletadas por último
+   - Tabelas que referenciam outras devem ser deletadas primeiro
+
+3. **Atualize a Função RPC**:
+   ```sql
+   -- Exemplo de adição de nova tabela chamada 'new_table'
+   DELETE FROM new_table
+   WHERE company_id = target_company_id;
+   GET DIAGNOSTICS affected_rows = ROW_COUNT;
+   RAISE NOTICE 'Registros removidos de new_table: %', affected_rows;
+   ```
+
+4. **Teste a Modificação**:
+   - Teste com empresas de desenvolvimento
+   - Verifique logs para confirmar exclusão
+
+### 2.2. Trabalhando com Tabelas que têm Dependências Complexas
+
+Para tabelas com múltiplas dependências ou relacionamentos complexos:
+
+1. **Mapeie a Cadeia de Dependências**:
+   ```
+   Tabela A → Tabela B → Tabela C
+   ```
+
+2. **Delete na Ordem Inversa da Hierarquia**:
+   - Comece com as tabelas "filhas" (que dependem de outras)
+   - Termine com as tabelas "pai"
+
+3. **Use Subconsultas para Identificar Registros**:
+   ```sql
+   DELETE FROM child_table
+   WHERE parent_id IN (
+       SELECT id FROM parent_table WHERE company_id = target_company_id
+   );
+   ```
+
+### 2.3. Práticas Recomendadas
+
+1. **Sempre Mantenha Logs**:
+   ```sql
+   GET DIAGNOSTICS affected_rows = ROW_COUNT;
+   RAISE NOTICE 'Operação em tabela_x: %', affected_rows;
+   ```
+
+2. **Preserve a Ordem de Deleção**:
+   - Mantenha a estrutura atual da função
+   - Insira novas tabelas no momento apropriado da sequência
+
+3. **Documente Alterações**:
+   - Atualize este documento quando novas tabelas forem adicionadas
+   - Documente a versão da função em migrações
+
+## 3. Solução de Problemas
+
+### 3.1. Verificando se a Deleção foi Concluída Corretamente
+
+Para verificar se uma empresa foi completamente excluída:
+
+```sql
+SELECT EXISTS(SELECT 1 FROM companies WHERE id = 'ID_DA_EMPRESA');
+```
+
+### 3.2. Verificando Dados Residuais
+
+Se houver suspeita de dados remanescentes:
+
+```sql
+-- Verificar se há registros órfãos referenciando a empresa
+SELECT table_name, column_name
+FROM information_schema.columns
+WHERE column_name = 'company_id'
+  AND table_schema = 'public'
+ORDER BY table_name;
+
+-- Para cada tabela retornada, verificar:
+SELECT COUNT(*) FROM [table_name] WHERE company_id = 'ID_DA_EMPRESA';
+```
+
+### 3.3. Scripts de Diagnóstico
+
+Para diagnóstico de problemas, utilize os scripts em:
+- `/supabase/Api-postgre/Supabase/debug_delete_function.py`
+- `/supabase/Api-postgre/Supabase/test_delete_valesis_v2.py`
+
+## 4. Implementação Técnica Atual
+
+A implementação atual segue este padrão:
 
 ```sql
 CREATE OR REPLACE FUNCTION delete_company_and_related_data(target_company_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    user_ids uuid[];
+    affected_rows integer;
+BEGIN
+    -- Identificação de usuários
+    SELECT ARRAY_AGG(id) INTO user_ids 
+    FROM profiles 
+    WHERE company_id = target_company_id;
+    
+    -- 1. Deleção de dados operacionais
+    -- [aqui vão as operações DELETE...]
+    
+    -- 2. Deleção de usuários
+    DELETE FROM profiles
+    WHERE company_id = target_company_id;
+    
+    -- 3. Deleção de autenticação
+    DELETE FROM auth.users 
+    WHERE id = ANY(user_ids);
+    
+    -- 4. Deleção da empresa
+    DELETE FROM companies 
+    WHERE id = target_company_id;
+END;
+$$;
+```
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER

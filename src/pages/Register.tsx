@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, UserPlus, Loader2, Search, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Loader2, Eye, EyeOff, UserPlus, CheckCircle, ArrowLeft, ArrowRight, X, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Logo } from '../components/Logo';
 import { supabase } from '../lib/supabase';
+import ResellerSearchModal from '../components/ResellerSearchModal';
 
 // Lista de segmentos disponíveis
 const SEGMENTS = [
@@ -54,6 +55,9 @@ export default function Register() {
   const [showSegmentDropdown, setShowSegmentDropdown] = useState(false);
   const [searchingCNPJ, setSearchingCNPJ] = useState(false);
 
+  // Referência para o dropdown de segmento
+  const segmentDropdownRef = useRef<HTMLDivElement>(null);
+
   // Form data state
   const [formData, setFormData] = useState({
     // Step 1 - User data
@@ -64,6 +68,8 @@ export default function Register() {
     
     // Step 2 - Company basic info
     resellerId: '',
+    resellerCode: '',
+    resellerName: '',
     segment: '',
     documentType: 'CNPJ',
     documentNumber: '',
@@ -81,6 +87,9 @@ export default function Register() {
     city: '',
     state: ''
   });
+  
+  // Estado do modal de busca de revendedor
+  const [showResellerModal, setShowResellerModal] = useState(false);
 
   // Filtered segments based on search
   const filteredSegments = SEGMENTS.filter(segment =>
@@ -185,11 +194,31 @@ export default function Register() {
     }));
   };
 
+  // Função para selecionar um segmento
   const handleSegmentSelect = (segment: string) => {
     setFormData(prev => ({ ...prev, segment }));
     setShowSegmentDropdown(false);
     setSearchSegment('');
   };
+  
+  // Detectar clique fora do dropdown para fechá-lo
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (segmentDropdownRef.current && !segmentDropdownRef.current.contains(event.target as Node)) {
+        setShowSegmentDropdown(false);
+      }
+    };
+
+    // Adicionar listener quando o dropdown estiver aberto
+    if (showSegmentDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    // Limpar listener quando o componente for desmontado ou o dropdown for fechado
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSegmentDropdown]);
 
   const searchCNPJ = async () => {
     try {
@@ -299,471 +328,329 @@ export default function Register() {
       toast.success('Endereço encontrado com sucesso!');
     } catch (error) {
       console.error('Erro ao buscar CEP:', error);
-      toast.error('Erro na consulta de CEP. Verifique sua conexão e tente novamente.');
+      toast.error('Erro ao buscar endereço. Verifique sua conexão e tente novamente.');
     }
   };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (currentStep < 3) {
-      setCurrentStep(prev => prev + 1);
-      return;
-    }
-    
-    // Final submission
-    if (formData.password !== formData.confirmPassword) {
-      toast.error('As senhas não correspondem');
-      return;
-    }
-
-    try {
-      setLoading(true);
-
-      // 1. Registrar o usuário no Supabase Auth (sem validação por email)
-      const signUpResult = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
-            name: formData.name,
-          }
-        }
-      });
-
-      const { data: authData, error: authError } = signUpResult;
-      
-      if (authError) {
-        if (authError.message.includes('already registered')) {
-          toast.error('Este e-mail já está cadastrado. Por favor, faça login ou use outro e-mail.');
-          return;
-        }
-        throw authError;
-      }
-
-      if (!authData.user) {
-        toast.error('Erro ao criar usuário. Por favor, tente novamente.');
+  
+  const handleNextStep = () => {
+    if (currentStep === 1) {
+      // Validar step 1 - Dados do usuário
+      if (formData.password !== formData.confirmPassword) {
+        toast.error("As senhas não conferem");
         return;
       }
+      
+      if (formData.password.length < 6) {
+        toast.error("A senha deve ter no mínimo 6 caracteres");
+        return;
+      }
+      
+      setCurrentStep(2);
+      return;
+    } else if (currentStep === 2) {
+    // Validar step 2 - Dados da empresa
+    if (!formData.segment) {
+      toast.error("Selecione um segmento");
+      return;
+    }
+    
+    if (!formData.documentType) {
+      toast.error("Selecione um tipo de documento");
+      return;
+    }
+    
+    if (!formData.documentNumber) {
+      toast.error("Digite o número do documento");
+      return;
+    }
+    
+    if (formData.documentType === 'CNPJ' && !formData.legalName) {
+      toast.error("Digite a razão social");
+      return;
+    }
+    
+    if (!formData.tradeName) {
+      toast.error("Digite o nome fantasia");
+      return;
+    }
+    
+    if (!formData.taxRegime) {
+      toast.error("Selecione um regime tributário");
+      return;
+    }
+    
+    setCurrentStep(3);
+    return;
+  }
+};
 
-      // 2. Criar o registro da empresa
-      const companyDataToInsert = {
-        segment: formData.segment,
-        document_type: formData.documentType,
-        document_number: formData.documentNumber.replace(/\D/g, ''),
-        legal_name: formData.legalName,
+// Função para lidar com o registro final/submissão do formulário
+const handleRegister = async () => {
+  try {
+    setLoading(true);
+    
+    // Validar step 3 - Dados adicionais
+    if (!formData.username) {
+      toast.error("Digite um nome de usuário");
+      setLoading(false);
+      return;
+    }
+    
+    // Criar a empresa
+    const { data: companyData, error: companyError } = await supabase
+      .from('companies')
+      .insert({
         trade_name: formData.tradeName,
-        email: formData.email,
-        whatsapp: formData.whatsapp,
+        document_number: formData.documentNumber,
+        segment: formData.segment,
         tax_regime: formData.taxRegime,
-        state_registration: 'S', // Conforme solicitado, definir como 'S'
-        
-        // Campos de endereço
-        address_cep: formData.cep.replace(/\D/g, ''),
+        whatsapp: formData.whatsapp,
+        address_cep: formData.cep,
         address_street: formData.street,
         address_number: formData.number,
-        address_complement: formData.complement,
+        address_complement: formData.complement || '',
         address_district: formData.district,
         address_city: formData.city,
         address_state: formData.state,
-        address_country: 'Brasil',
-        
-        // Status padrão
+        legal_name: formData.legalName,
+        reseller_id: formData.resellerId || null,
         status: 'active'
-      };
-
-      // Criar a empresa
-      const { data: companyCreated, error: companyError } = await supabase
-        .from('companies')
-        .insert(companyDataToInsert)
-        .select('*')
-        .single();
-
-      if (companyError) {
-        console.error('Erro ao criar empresa:', companyError);
-        throw new Error('Erro ao criar empresa: ' + companyError.message);
-      }
-
-      if (!companyCreated) {
-        throw new Error('Erro ao criar empresa: Nenhum dado retornado após a criação');
-      }
-
-      console.log('Empresa criada com sucesso:', companyCreated);
-
-      // 3. Vincular empresa ao perfil do usuário com status 'S'
-      const profileData = {
-        id: authData.user.id,
-        name: formData.name,
-        status_cad_empresa: 'S', // Alterado de 'N' para 'S' conforme solicitado
-        email: formData.email,
-        company_id: companyCreated.id
-      };
-      
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([profileData]);
-
-      if (profileError) {
-        console.error('Erro no perfil:', profileError);
-        
-        // Tentar excluir a empresa se não conseguir vincular ao perfil
-        await supabase
-          .from('companies')
-          .delete()
-          .eq('id', companyCreated.id as string);
-
-        throw new Error('Erro ao vincular empresa ao perfil: ' + profileError.message);
-      }
-
-      // 4. Criar unidades de medida padrão para a empresa (UN e KG)
-      try {
-        // Criar diretamente as unidades de medida padrão
-        const defaultUnits = [
-          {
-            company_id: companyCreated.id,
-            code: 'UN',
-            name: 'Unidade',
-            description: 'Unidade padrão do sistema'
-          },
-          {
-            company_id: companyCreated.id,
-            code: 'KG',
-            name: 'Kilo',
-            description: 'Unidade padrão do sistema para peso em quilogramas'
-          }
-        ];
-
-        const { error: unitsError } = await supabase
-          .from('product_units')
-          .insert(defaultUnits);
-
-        if (unitsError) {
-          // Verificar se o erro é de chave duplicada
-          if (unitsError.code === '23505') { // código para violação de chave única/duplicada
-            console.log('Unidades já existem - ignorando erro');
-          } else {
-            console.error('Erro ao criar unidades de medida:', unitsError);
-          }
-        } else {
-          console.log('Unidades de medida padrão criadas com sucesso');
-        }
-      } catch (err) {
-        // Usar tipo any para evitar erro de tipo unknown
-        const error = err as any;
-        console.error('Erro ao configurar unidades de medida:', error);
-        // Não interromper o fluxo por causa deste erro
-      }
-
-      // 5. Criar grupo padrão "Diversos" para a empresa
-      try {
-        const { error: groupError } = await supabase
-          .from('product_groups')
-          .insert({
-            company_id: companyCreated.id,
-            name: 'Diversos',
-            description: 'Grupo padrão para itens diversos'
-          });
-
-        if (groupError && groupError.code !== '23505') { // Ignorar erro de chave duplicada
-          console.error('Erro ao criar grupo padrão:', groupError);
-        }
-      } catch (err) {
-        // Usar tipo any para evitar erro de tipo unknown
-        const error = err as any;
-        console.error('Erro ao configurar grupo padrão:', error);
-        // Não interromper o fluxo por causa deste erro
-      }
-
-      toast.success(
-        'Cadastro realizado com sucesso! Entrando no sistema...',
-        { autoClose: 3000 }
-      );
-
-      // Fazer login automático após o cadastro
-      const { error: loginError } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password
-      });
-
-      if (loginError) {
-        console.error('Erro ao fazer login automático:', loginError);
-        toast.error('Erro ao fazer login automático. Por favor, faça login manualmente.');
-        navigate('/login', { 
-          state: { 
-            justRegistered: true,
-            email: formData.email 
-          } 
-        });
-        return;
-      }
-
-      // Salvar o estado de login no localStorage
-      import('../utils/authUtils').then(({ saveLoginState }) => {
-        saveLoginState(formData.email);
-      }).catch(err => console.error('Erro ao salvar estado de login:', err));
-      
-      // Abrir o dashboard em modo quiosque
-      try {
-        const { openKioskWindow } = await import('../utils/windowUtils');
-        const dashboardWindow = openKioskWindow(window.location.origin + '/dashboard');
-        
-        // Verifica se a janela foi aberta com sucesso
-        if (!dashboardWindow) {
-          console.warn('Não foi possível abrir a janela do Dashboard em modo quiosque.');
-          toast.warn('O bloqueador de pop-ups pode estar ativo. Por favor, permita pop-ups para este site.');
-          // Fallback para navegação direta caso não seja possível abrir a janela
-          navigate('/dashboard');
-          return;
-        }
-        
-        // Redirecionamos a janela original para a página inicial
-        navigate('/', { replace: true });
-      } catch (error) {
-        console.error('Erro ao abrir janela em modo quiosque:', error);
-        // Fallback para navegação direta
-        navigate('/dashboard');
-      }
-    } catch (error: any) {
-      console.error('Erro completo:', error);
-      toast.error(error.message || 'Erro ao criar usuário. Por favor, tente novamente.');
-    } finally {
+      })
+      .select()
+      .single();
+    
+    if (companyError) {
+      console.error('Erro ao criar empresa:', companyError);
+      toast.error('Erro ao criar empresa: ' + companyError.message);
       setLoading(false);
+      return;
     }
-  };
+    
+    // Criar usuário
+    const { error: userError } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password,
+      options: {
+        data: {
+          full_name: formData.fullName,
+          company_id: companyData.id
+        }
+      }
+    });
+    
+    if (userError) {
+      console.error('Erro ao criar usuário:', userError);
+      toast.error('Erro ao criar usuário: ' + userError.message);
+      
+      // Deletar empresa se o usuário não for criado
+      await supabase
+        .from('companies')
+        .delete()
+        .eq('id', companyData.id);
+        
+      setLoading(false);
+      return;
+    }
+    
+    // Registro concluído com sucesso!
+    toast.success('Registro realizado com sucesso! Verifique seu e-mail para ativar a conta.');
+    
+    // Redirecionar para página de login após alguns segundos
+    setTimeout(() => {
+      navigate('/login');
+    }, 3000);
+    
+  } catch (error: any) {
+    console.error('Erro inesperado:', error);
+    toast.error('Ocorreu um erro inesperado: ' + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const renderStep = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Nome completo
-              </label>
+const renderStep = () => {
+  switch (currentStep) {
+    case 1:
+      return (
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Nome completo
+            </label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              placeholder="Seu nome"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              placeholder="seu@email.com"
+              required
+            />
+          </div>
+          
+          {/* Campo de senha */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Senha
+            </label>
+            <div className="relative">
               <input
-                type="text"
-                name="name"
-                value={formData.name}
+                type={showPassword ? "text" : "password"}
+                name="password"
+                value={formData.password}
                 onChange={handleChange}
                 className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="Seu nome"
+                placeholder="******"
                 required
+                minLength={6}
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="seu@email.com"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Senha
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
-                >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Confirmar Senha
-              </label>
-              <div className="relative">
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors"
-                >
-                  {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowPassword(prev => !prev)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
             </div>
           </div>
-        );
 
-      case 2:
-        return (
-          <div className="space-y-6">
-            {/* Revendedor - Simplificado */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Revendedor
-              </label>
-              <select
-                name="resellerId"
-                value={formData.resellerId}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                disabled
-              >
-                <option value="">Sem revendedor</option>
-              </select>
-            </div>
-
-            {/* Segmento com pesquisa */}
+          {/* Campo de confirmar senha */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Confirmar senha
+            </label>
             <div className="relative">
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Segmento
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={formData.segment || searchSegment}
-                  onChange={(e) => {
-                    if (!formData.segment) {
-                      setSearchSegment(e.target.value);
-                    }
-                    setShowSegmentDropdown(true);
-                  }}
-                  onClick={() => setShowSegmentDropdown(true)}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  placeholder="Selecione ou pesquise um segmento"
-                  required
-                />
-                {showSegmentDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                    {filteredSegments.map((segment) => (
-                      <button
-                        key={segment}
-                        type="button"
-                        className="w-full px-4 py-2 text-left text-slate-200 hover:bg-slate-700 transition-colors"
-                        onClick={() => handleSegmentSelect(segment)}
-                      >
-                        {segment}
-                      </button>
-                    ))}
-                  </div>
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                placeholder="******"
+                required
+                minLength={6}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(prev => !prev)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300"
+              >
+                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    case 2:
+      return (
+        <div className="space-y-6">
+          {/* Revendedor com busca por código */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Revendedor
+            </label>
+            <div className="flex">
+              <button
+                type="button"
+                onClick={() => setShowResellerModal(true)}
+                className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white flex items-center justify-between hover:bg-slate-700 transition-colors"
+              >
+                {formData.resellerName ? (
+                  <>
+                    <span>{formData.resellerName}</span>
+                    <span className="text-emerald-400 text-sm">{formData.resellerCode}</span>
+                  </>
+                ) : (
+                  <span className="text-center w-full">Selecionar Revendedor</span>
                 )}
-              </div>
+              </button>
             </div>
-
-            {/* Tipo de Documento */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Tipo de Documento
-              </label>
-              <div className="flex gap-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Resetar campos específicos dos steps 2 e 3, mantendo step 1 e alguns campos do step 2
-                    setFormData(prev => ({
-                      // Manter dados do step 1
-                      name: prev.name,
-                      email: prev.email,
-                      password: prev.password,
-                      confirmPassword: prev.confirmPassword,
-                      
-                      // Manter campos selecionados do step 2
-                      resellerId: prev.resellerId,
-                      segment: prev.segment,
-                      
-                      // Definir tipo de documento e resetar os demais campos do step 2
-                      documentType: 'CNPJ',
-                      documentNumber: '',
-                      legalName: '',
-                      tradeName: '',
-                      taxRegime: '',
-                      whatsapp: '',
-                      
-                      // Resetar campos de endereço (step 3)
-                      cep: '',
-                      street: '',
-                      number: '',
-                      complement: '',
-                      district: '',
-                      city: '',
-                      state: ''
-                    }))
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
-                    formData.documentType === 'CNPJ'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  CNPJ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Resetar campos específicos dos steps 2 e 3, mantendo step 1 e alguns campos do step 2
-                    setFormData(prev => ({
-                      // Manter dados do step 1
-                      name: prev.name,
-                      email: prev.email,
-                      password: prev.password,
-                      confirmPassword: prev.confirmPassword,
-                      
-                      // Manter campos selecionados do step 2
-                      resellerId: prev.resellerId,
-                      segment: prev.segment,
-                      
-                      // Definir tipo de documento e resetar os demais campos do step 2
-                      documentType: 'CPF',
-                      documentNumber: '',
-                      legalName: '',
-                      tradeName: '',
-                      taxRegime: '',
-                      whatsapp: '',
-                      
-                      // Resetar campos de endereço (step 3)
-                      cep: '',
-                      street: '',
-                      number: '',
-                      complement: '',
-                      district: '',
-                      city: '',
-                      state: ''
-                    }))
-                  }}
-                  className={`flex-1 px-4 py-2 rounded-lg transition-colors ${
-                    formData.documentType === 'CPF'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  CPF
-                </button>
-              </div>
+          </div>
+          
+          {/* Segmento */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Segmento
+            </label>
+            <div className="relative" ref={segmentDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setShowSegmentDropdown(prev => !prev)}
+                className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white flex items-center justify-between hover:bg-slate-700 transition-colors"
+              >
+                <span>{formData.segment || 'Selecione o segmento'}</span>
+                {showSegmentDropdown ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+              
+              {showSegmentDropdown && (
+                <div className="absolute w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-20 max-h-56 overflow-y-auto">
+                  <div className="p-2">
+                    <input
+                      type="text"
+                      value={searchSegment}
+                      onChange={(e) => setSearchSegment(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-sm"
+                      placeholder="Buscar segmento..."
+                    />
+                  </div>
+                  <div className="py-1">
+                    {filteredSegments.length > 0 ? (
+                      filteredSegments.map(segment => (
+                        <button
+                          key={segment}
+                          type="button"
+                          onClick={() => handleSegmentSelect(segment)}
+                          className="w-full text-left px-4 py-2 text-white hover:bg-slate-700 transition-colors"
+                        >
+                          {segment}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-4 py-2 text-slate-400 text-sm">Nenhum segmento encontrado</div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
+          </div>
+          
+          {/* Tipo de documento */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Tipo de Documento
+            </label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => handleChange({ target: { name: "documentType", value: "CNPJ" } } as React.ChangeEvent<HTMLInputElement>)}
+                className={`flex-1 px-4 py-2 rounded-lg border border-slate-600 transition-colors ${formData.documentType === 'CNPJ' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+              >
+                CNPJ
+              </button>
+              <button
+                type="button"
+                onClick={() => handleChange({ target: { name: "documentType", value: "CPF" } } as React.ChangeEvent<HTMLInputElement>)}
+                className={`flex-1 px-4 py-2 rounded-lg border border-slate-600 transition-colors ${formData.documentType === 'CPF' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+              >
+                CPF
+              </button>
+            </div>
+          </div>
 
             {/* Número do Documento */}
             <div>
@@ -1003,6 +890,22 @@ export default function Register() {
           <p className="text-slate-400 mt-3">Crie sua conta</p>
         </div>
 
+        {/* Modal de busca de revendedor */}
+        <ResellerSearchModal 
+          isOpen={showResellerModal}
+          onClose={() => setShowResellerModal(false)}
+          onSelect={(resellerId, resellerName, resellerCode) => {
+            setFormData(prev => ({
+              ...prev,
+              resellerId,
+              resellerName,
+              resellerCode
+            }));
+            setShowResellerModal(false);
+          }}
+          currentCode={formData.resellerCode}
+        />
+
         {/* Step Indicator */}
         <div className="flex items-center justify-between mb-8">
           {[1, 2, 3].map((step) => (
@@ -1030,7 +933,14 @@ export default function Register() {
           ))}
         </div>
         
-        <form className="space-y-6" onSubmit={handleSubmit}>
+        <form className="space-y-6" onSubmit={(e) => {
+          e.preventDefault();
+          if (currentStep < 3) {
+            handleNextStep();
+          } else {
+            handleRegister();
+          }
+        }}>
           {renderStep()}
 
           {/* Botões de navegação */}

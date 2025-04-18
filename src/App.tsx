@@ -23,6 +23,9 @@ const ResendConfirmation = lazy(() => import('./pages/ResendConfirmation'));
 const ManualConfirmation = lazy(() => import('./pages/ManualConfirmation'));
 const AdminLogin = lazy(() => import('./pages/AdminLogin'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const CompanyEdit = lazy(() => import('./pages/CompanyEdit'));
+const Resellers = lazy(() => import('./pages/Resellers'));
+const ResellerEdit = lazy(() => import('./pages/ResellerEdit'));
 const AIChat = lazy(() => import('./components/AIChat').then(module => ({ default: module.AIChat })));
 
 // Criando context para o tema
@@ -329,7 +332,11 @@ function App() {
 
             {/* Admin routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/company/:id" element={<CompanyEdit />} />
+            <Route path="/admin/resellers" element={<Resellers />} />
+            <Route path="/admin/reseller/:id" element={<ResellerEdit />} />
 
             {/* Protected routes */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
