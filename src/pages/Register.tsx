@@ -389,23 +389,69 @@ const handleRegister = async () => {
   try {
     setLoading(true);
     
-    // Validar step 3 - Dados adicionais
-    if (!formData.username) {
-      toast.error("Digite um nome de usuário");
+    // Validar dados de endereço (Step 3)
+    if (!formData.cep || !formData.street || !formData.number || !formData.district || !formData.city || !formData.state) {
+      toast.error("Preencha todos os dados de endereço");
       setLoading(false);
       return;
     }
     
+    // Buscar o ID UUID do revendedor padrão "Sem Revenda" (código 58105) se nenhum revendedor foi selecionado
+    let resellerIdToUse = null;
+    
+    if (!formData.resellerId || formData.resellerId.trim() === '') {
+      // Buscar o ID UUID do revendedor com código 58105
+      const { data: resellerData, error: resellerError } = await supabase
+        .from('resellers')
+        .select('id')
+        .eq('code', '58105')
+        .single();
+      
+      if (!resellerError && resellerData?.id) {
+        resellerIdToUse = resellerData.id;
+        console.log('Usando revendedor padrão:', resellerIdToUse);
+      } else {
+        // Se não encontrar o revendedor padrão, mostrar erro e interromper o processo
+        console.error('Revendedor padrão não encontrado:', resellerError);
+        toast.error('Não foi possível encontrar o revendedor padrão. Por favor, selecione um revendedor.');
+        setLoading(false);
+        return;
+      }
+    } else {
+      // Usar o revendedor selecionado pelo usuário
+      resellerIdToUse = formData.resellerId;
+    }
+    
+    // Primeiro criar o usuário para obter o ID
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password,
+      options: {
+        data: {
+          full_name: formData.name
+        },
+        emailRedirectTo: window.location.origin
+      }
+    });
+
+    if (authError || !authData?.user) {
+      console.error('Erro ao criar usuário:', authError);
+      toast.error('Erro ao criar usuário: ' + (authError?.message || 'Desconhecido'));
+      setLoading(false);
+      return;
+    }
+
     // Criar a empresa
     const { data: companyData, error: companyError } = await supabase
       .from('companies')
       .insert({
         trade_name: formData.tradeName,
-        document_number: formData.documentNumber,
+        document_type: formData.documentType, // Adicionar o tipo de documento (CNPJ/CPF)
+        document_number: formData.documentNumber.replace(/[^\d]/g, ''),
         segment: formData.segment,
         tax_regime: formData.taxRegime,
         whatsapp: formData.whatsapp,
-        address_cep: formData.cep,
+        address_cep: formData.cep.replace(/[^\d]/g, ''),
         address_street: formData.street,
         address_number: formData.number,
         address_complement: formData.complement || '',
@@ -413,8 +459,9 @@ const handleRegister = async () => {
         address_city: formData.city,
         address_state: formData.state,
         legal_name: formData.legalName,
-        reseller_id: formData.resellerId || null,
-        status: 'active'
+        // Removendo completamente o campo reseller_id para evitar problemas de chave estrangeira
+        status: 'active',
+        created_by: authData.user.id // Agora temos essa coluna no banco de dados
       })
       .select()
       .single();
@@ -426,30 +473,42 @@ const handleRegister = async () => {
       return;
     }
     
-    // Criar usuário
-    const { error: userError } = await supabase.auth.signUp({
-      email: formData.email,
-      password: formData.password,
-      options: {
-        data: {
-          full_name: formData.fullName,
-          company_id: companyData.id
-        }
+    // Atualizar os dados do usuário com o ID da empresa
+    const { data: updateData, error: updateError } = await supabase.auth.updateUser({
+      data: {
+        company_id: companyData.id
       }
     });
-    
-    if (userError) {
-      console.error('Erro ao criar usuário:', userError);
-      toast.error('Erro ao criar usuário: ' + userError.message);
-      
-      // Deletar empresa se o usuário não for criado
-      await supabase
-        .from('companies')
-        .delete()
-        .eq('id', companyData.id);
-        
+
+    if (updateError) {
+      console.error('Erro ao atualizar usuário:', updateError);
+      toast.error('Erro ao atualizar dados do usuário: ' + updateError.message);
       setLoading(false);
       return;
+    }
+    
+    // Se um revendedor foi selecionado, vincula a empresa a ele
+    if (formData.resellerId && formData.resellerId.trim() !== '') {
+      try {
+        console.log('Tentando vincular empresa ao revendedor:', formData.resellerId);
+        
+        // Atualizar a empresa para adicionar o revendedor
+        const { error: resellerLinkError } = await supabase
+          .from('companies')
+          .update({ reseller_id: formData.resellerId })
+          .eq('id', companyData.id);
+        
+        if (resellerLinkError) {
+          console.error('Erro ao vincular empresa ao revendedor:', resellerLinkError);
+          // Não interrompe o fluxo, apenas registra o erro
+          toast.warning('A empresa foi criada, mas não foi possível vinculá-la ao revendedor selecionado.');
+        } else {
+          console.log('Empresa vinculada ao revendedor com sucesso!');
+        }
+      } catch (error) {
+        console.error('Erro inesperado ao vincular revendedor:', error);
+        // Não interrompe o fluxo, apenas registra o erro
+      }
     }
     
     // Registro concluído com sucesso!
