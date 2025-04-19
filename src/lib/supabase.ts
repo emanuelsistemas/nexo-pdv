@@ -32,9 +32,9 @@ export const getSupabase = () => {
         persistSession: true,
         detectSessionInUrl: true,
         flowType: 'pkce' as const,
-        storage: localStorage,
-        storageKey: 'supabase.auth.token',
-        debug: false // Disable debug for performance
+        storage: window.localStorage,
+        storageKey: 'sb-auth-token', // Updated storage key
+        debug: import.meta.env.DEV // Enable debug in development
       },
       global: {
         headers: {
@@ -116,9 +116,18 @@ export const handleAuthRedirect = async () => {
           return false;
         }
         
-        if (session) {
-          window.location.hash = '';
-          return true;
+        if (session?.user?.email) {
+          try {
+            // Importação dinâmica para evitar problemas cíclicos
+            import('../utils/authUtils').then(({ saveLoginState }) => {
+              saveLoginState(session.user.email!);
+              window.location.hash = '';
+            });
+            return true;
+          } catch (error) {
+            console.error('Error saving login state:', error);
+            return false;
+          }
         }
         
         return false;

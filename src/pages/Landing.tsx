@@ -54,7 +54,8 @@ export default function Landing() {
   
   // Função para abrir o dashboard para usuários já logados
   const handleReturnToSystem = () => {
-    openKioskWindow(window.location.origin + '/dashboard');
+    const dashboardUrl = window.location.origin + '/dashboard';
+    openKioskWindow(dashboardUrl);
   };
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">

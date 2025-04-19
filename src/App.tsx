@@ -78,30 +78,34 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Verificação dupla: localStorage + Supabase
-      const localAuth = isUserLoggedIn();
-      
-      // Verifica a sessão no Supabase - usando abordagem tipo-segura
-      const authResponse = await getSupabase().auth.getSession();
-      const session = authResponse.data.session;
-      const supabaseAuth = !!session;
-      
-      // Usuário está autenticado se AMBOS retornarem verdadeiro ou se pelo menos um deles for verdadeiro
-      // Isso mantém compatibilidade com usuários autenticados apenas via Supabase
-      // mas também reconhece usuários autenticados via localStorage
-      setIsAuthenticated(localAuth || supabaseAuth);
-      
-      // Se há uma sessão válida no Supabase, mas não no localStorage, 
-      // atualiza o localStorage para manter as coisas sincronizadas
-      if (supabaseAuth && !localAuth && session && session.user && session.user.email) {
-        try {
-          // Importação dinâmica para evitar problemas cíclicos
-          const { saveLoginState } = await import('./utils/authUtils');
-          saveLoginState(session.user.email);
-          console.log('Sincronizando estado de login para localStorage');
-        } catch (err) {
-          console.error('Erro ao salvar estado de login:', err);
+      try {
+        // Verificação dupla: localStorage + Supabase
+        const localAuth = isUserLoggedIn();
+        
+        // Verifica a sessão no Supabase - usando abordagem tipo-segura
+        const authResponse = await getSupabase().auth.getSession();
+        const session = authResponse.data.session;
+        const supabaseAuth = !!session;
+        
+        // Se há uma sessão válida no Supabase, mas não no localStorage, 
+        // atualiza o localStorage para manter as coisas sincronizadas
+        if (supabaseAuth && !localAuth && session?.user?.email) {
+          try {
+            const { saveLoginState } = await import('./utils/authUtils');
+            await saveLoginState(session.user.email);
+            setIsAuthenticated(true);
+            return;
+          } catch (err) {
+            console.error('Erro ao salvar estado de login:', err);
+            setIsAuthenticated(false);
+            return;
+          }
         }
+        
+        setIsAuthenticated(localAuth || supabaseAuth);
+      } catch (error) {
+        console.error('Error checking authentication:', error);
+        setIsAuthenticated(false);
       }
     };
     checkAuth();
@@ -125,27 +129,34 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Verificação dupla: localStorage + Supabase
-      const localAuth = isUserLoggedIn();
-      
-      // Verifica a sessão no Supabase - usando abordagem tipo-segura
-      const authResponse = await getSupabase().auth.getSession();
-      const session = authResponse.data.session;
-      const supabaseAuth = !!session;
-      
-      // Usuário está autenticado se qualquer um dos métodos retornar verdadeiro
-      setIsAuthenticated(localAuth || supabaseAuth);
-      
-      // Sincroniza os estados de autenticação, se necessário
-      if (supabaseAuth && !localAuth && session && session.user && session.user.email) {
-        try {
-          // Importação dinâmica para evitar problemas cíclicos
-          const { saveLoginState } = await import('./utils/authUtils');
-          saveLoginState(session.user.email);
-          console.log('Sincronizando estado de login para localStorage');
-        } catch (err) {
-          console.error('Erro ao salvar estado de login:', err);
+      try {
+        // Verificação dupla: localStorage + Supabase
+        const localAuth = isUserLoggedIn();
+        
+        // Verifica a sessão no Supabase - usando abordagem tipo-segura
+        const authResponse = await getSupabase().auth.getSession();
+        const session = authResponse.data.session;
+        const supabaseAuth = !!session;
+        
+        // Se há uma sessão válida no Supabase, mas não no localStorage, 
+        // atualiza o localStorage para manter as coisas sincronizadas
+        if (supabaseAuth && !localAuth && session?.user?.email) {
+          try {
+            const { saveLoginState } = await import('./utils/authUtils');
+            await saveLoginState(session.user.email);
+            setIsAuthenticated(true);
+            return;
+          } catch (err) {
+            console.error('Erro ao salvar estado de login:', err);
+            setIsAuthenticated(false);
+            return;
+          }
         }
+        
+        setIsAuthenticated(localAuth || supabaseAuth);
+      } catch (error) {
+        console.error('Error checking authentication:', error);
+        setIsAuthenticated(false);
       }
     };
     checkAuth();
@@ -258,14 +269,17 @@ function App() {
     initSupabase();
     
     // Adiciona listener para quando o usuário fecha o navegador
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = async () => {
       // Verifica se o usuário está logado antes de fazer logout
       if (isUserLoggedIn()) {
-        // Deslogar o usuário ao fechar o navegador
-        getSupabase().auth.signOut().catch(err => {
+        try {
+          // Clear local storage first
+          clearLoginState();
+          // Then sign out from Supabase
+          await getSupabase().auth.signOut();
+        } catch (err) {
           console.error('Erro ao deslogar no evento beforeunload:', err);
-        });
-        clearLoginState();
+        }
       }
     };
     
