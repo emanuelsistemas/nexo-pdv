@@ -50,6 +50,24 @@ interface Reseller {
   [key: string]: any; // Para campos dinâmicos
 }
 
+// Estilo para reduzir o tamanho do ícone do relógio e ajustar espaçamento
+const timeInputStyle = `
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    width: 14px;
+    height: 14px;
+    opacity: 0.7;
+    padding: 0;
+    margin-right: -4px;
+  }
+  input[type="time"]::-webkit-datetime-edit {
+    font-size: 0.875rem;
+    padding: 0;
+  }
+  input[type="time"] {
+    padding-right: 0 !important;
+  }
+`;
+
 export default function ResellerEdit() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -89,13 +107,13 @@ export default function ResellerEdit() {
         // Campos complementares
         website: '',
         opening_hours: {
-          sunday: { active: false, open: '08:00', close: '18:00' },
           monday: { active: true, open: '08:00', close: '18:00' },
           tuesday: { active: true, open: '08:00', close: '18:00' },
           wednesday: { active: true, open: '08:00', close: '18:00' },
           thursday: { active: true, open: '08:00', close: '18:00' },
           friday: { active: true, open: '08:00', close: '18:00' },
-          saturday: { active: true, open: '08:00', close: '13:00' }
+          saturday: { active: true, open: '08:00', close: '13:00' },
+          sunday: { active: false, open: '08:00', close: '18:00' }
         },
         tech_support: [],
         sales_contacts: [],
@@ -509,6 +527,8 @@ export default function ResellerEdit() {
 
   return (
     <div className="min-h-screen bg-[#1C1C1C]">
+      {/* Estilo inline para o ícone do relógio */}
+      <style>{timeInputStyle}</style>
       <header className="bg-[#2A2A2A] border-b border-gray-800 p-6">
         <div className="flex justify-between items-center">
           <div>
@@ -759,48 +779,50 @@ export default function ResellerEdit() {
                   </div>
                   
                   {/* Horários de Funcionamento */}
-                  <div>
-                    <label className="block text-gray-400 mb-3">Horários de Funcionamento</label>
-                    <div className="space-y-3">
+                  <div className="pb-4">
+                    <label className="block text-gray-400 mb-3 text-lg font-medium">Horários de Funcionamento</label>
+                    <div className="grid grid-cols-1 gap-2">
                       {reseller.opening_hours && Object.entries(reseller.opening_hours).map(([day, hours]) => {
-                        const dayName = {
-                          monday: 'Segunda-feira',
-                          tuesday: 'Terça-feira',
-                          wednesday: 'Quarta-feira',
-                          thursday: 'Quinta-feira',
-                          friday: 'Sexta-feira',
-                          saturday: 'Sábado',
-                          sunday: 'Domingo'
-                        }[day as keyof typeof reseller.opening_hours];
-                        
+                        // Nomes dos dias removidos conforme solicitado no print
                         return (
-                          <div key={day} className="flex items-center gap-4 p-3 bg-[#1C1C1C] rounded-lg">
-                            <div className="flex items-center gap-2">
+                          <div key={day} className="flex items-center bg-[#1C1C1C] rounded-lg border border-gray-800 p-3">
+                            <div className="flex items-center mr-3" style={{ width: '40px' }}>
                               <input
                                 type="checkbox"
                                 checked={hours.active}
                                 onChange={(e) => handleOpeningHoursChange(day, 'active', e.target.checked)}
-                                className="h-5 w-5 rounded border-gray-700 text-emerald-500 focus:ring-emerald-500 bg-[#1C1C1C]"
+                                className="h-4 w-4 rounded border-gray-700 text-emerald-500 focus:ring-emerald-500 bg-[#1C1C1C] mr-2"
                               />
-                              <span className="text-white font-medium w-32">{dayName}</span>
                             </div>
                             
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="time"
-                                value={hours.open}
-                                onChange={(e) => handleOpeningHoursChange(day, 'open', e.target.value)}
-                                disabled={!hours.active}
-                                className="w-32 px-3 py-1 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50"
-                              />
-                              <span className="text-gray-400">às</span>
-                              <input
-                                type="time"
-                                value={hours.close}
-                                onChange={(e) => handleOpeningHoursChange(day, 'close', e.target.value)}
-                                disabled={!hours.active}
-                                className="w-32 px-3 py-1 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50"
-                              />
+                            <div className="flex items-center flex-1 gap-2">
+                              <div className="relative flex-1">
+                                <div className="relative">
+                                  <input
+                                    type="time"
+                                    value={hours.open}
+                                    onChange={(e) => handleOpeningHoursChange(day, 'open', e.target.value)}
+                                    disabled={!hours.active}
+                                    className="w-full bg-[#1C1C1C] border border-gray-700 rounded-lg text-white focus:ring-1 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 text-sm px-2 py-1"
+                                    style={{ colorScheme: 'dark' }}
+                                  />
+                                </div>
+                              </div>
+                              
+                              <span className="text-gray-300 text-sm">às</span>
+                              
+                              <div className="relative flex-1">
+                                <div className="relative">
+                                  <input
+                                    type="time"
+                                    value={hours.close}
+                                    onChange={(e) => handleOpeningHoursChange(day, 'close', e.target.value)}
+                                    disabled={!hours.active}
+                                    className="w-full bg-[#1C1C1C] border border-gray-700 rounded-lg text-white focus:ring-1 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 text-sm px-2 py-1"
+                                    style={{ colorScheme: 'dark' }}
+                                  />
+                                </div>
+                              </div>
                             </div>
                           </div>
                         );
