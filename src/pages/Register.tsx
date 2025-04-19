@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { Logo } from '../components/Logo';
 import { supabase } from '../lib/supabase';
 import ResellerSearchModal from '../components/ResellerSearchModal';
+import InputMask from 'react-input-mask';
 
 // Lista de segmentos disponíveis
 const SEGMENTS = [
@@ -154,14 +155,6 @@ export default function Register() {
     }
   };
 
-  const formatWhatsApp = (value: string) => {
-    const numbers = value.replace(/\D/g, '');
-    return numbers
-      .replace(/^(\d{2})(\d)/, '($1) $2')
-      .replace(/(\d)(\d{4})$/, '$1-$2')
-      .slice(0, 15);
-  };
-
   const formatCEP = (value: string) => {
     const numbers = value.replace(/\D/g, '');
     return numbers
@@ -179,9 +172,6 @@ export default function Register() {
     switch (name) {
       case 'documentNumber':
         formattedValue = formatDocument(value);
-        break;
-      case 'whatsapp':
-        formattedValue = formatWhatsApp(value);
         break;
       case 'cep':
         formattedValue = formatCEP(value);
@@ -803,13 +793,14 @@ const renderStep = () => {
               <label className="block text-sm font-medium text-slate-300 mb-1">
                 WhatsApp
               </label>
-              <input
+              <InputMask
+                mask="(99) 99999-9999"
                 type="tel"
                 name="whatsapp"
                 value={formData.whatsapp}
-                onChange={handleChange}
+                onChange={(e) => setFormData(prev => ({ ...prev, whatsapp: e.target.value }))}
                 className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="(00) 0 0000-0000"
+                placeholder="(00) 00000-0000"
                 required
               />
             </div>

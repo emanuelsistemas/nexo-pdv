@@ -72,13 +72,13 @@ export default function AdminDashboard() {
         
         // Se a empresa tem revenda associada, buscar os dados da revenda
         if (company.reseller_id) {
-          const { data: resellerData, error: resellerError } = await supabase
+          const { data: resellerData } = await supabase
             .from('resellers')
             .select('trade_name, code')
             .eq('id', company.reseller_id)
-            .single();
+            .maybeSingle();
             
-          if (!resellerError && resellerData) {
+          if (resellerData) {
             resellerInfo = `${resellerData.trade_name} (${resellerData.code})`;
           }
         }
@@ -276,6 +276,7 @@ export default function AdminDashboard() {
                              company.status === 'inactive' ? 'Inativo' : company.status}
                           </span>
                         </td>
+                        <td className="p-4 text-white">{company.reseller_display}</td>
                         <td className="p-4">
                           <div className="flex items-center gap-2">
                             <button
@@ -329,8 +330,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
-
-
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && companyToDelete && (

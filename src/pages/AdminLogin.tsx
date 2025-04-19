@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, LogIn, Loader2, Database } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -12,15 +12,30 @@ export default function AdminLogin() {
     password: ''
   });
 
+  // Verify environment variables on component mount
+  useEffect(() => {
+    if (!import.meta.env.VITE_ADMIN_EMAIL || !import.meta.env.VITE_ADMIN_PASSWORD) {
+      console.error('Admin credentials not properly configured in environment variables');
+      toast.error('Erro de configuração do sistema');
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
       setLoading(true);
 
-      // Validate against environment variables
-      if (formData.email !== import.meta.env.VITE_ADMIN_EMAIL || 
-          formData.password !== import.meta.env.VITE_ADMIN_PASSWORD) {
+      // Check if environment variables are available
+      if (!import.meta.env.VITE_ADMIN_EMAIL || !import.meta.env.VITE_ADMIN_PASSWORD) {
+        throw new Error('Erro de configuração do sistema');
+      }
+
+      // Validate credentials
+      const isValidEmail = formData.email === import.meta.env.VITE_ADMIN_EMAIL;
+      const isValidPassword = formData.password === import.meta.env.VITE_ADMIN_PASSWORD;
+
+      if (!isValidEmail || !isValidPassword) {
         throw new Error('Credenciais inválidas');
       }
 

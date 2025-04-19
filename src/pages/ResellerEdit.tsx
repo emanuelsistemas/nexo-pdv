@@ -1,19 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Trash2, Search } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Search, Plus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 import InputMask from 'react-input-mask';
 import axios from 'axios';
 
 interface OpeningHours {
-  sunday: { active: boolean; open: string; close: string };
-  monday: { active: boolean; open: string; close: string };
-  tuesday: { active: boolean; open: string; close: string };
-  wednesday: { active: boolean; open: string; close: string };
-  thursday: { active: boolean; open: string; close: string };
-  friday: { active: boolean; open: string; close: string };
-  saturday: { active: boolean; open: string; close: string };
+  [key: string]: {
+    active: boolean;
+    open: string;
+    close: string;
+  };
 }
 
 interface Contact {
@@ -37,34 +35,43 @@ interface Reseller {
   address_state: string;
   created_at: string;
   status: string;
-  code?: string; // Código único de 5 dígitos
-  
-  // Campos complementares
+  code?: string;
   website?: string;
   opening_hours?: OpeningHours;
   tech_support?: Contact[];
   sales_contacts?: Contact[];
   admin_contacts?: Contact[];
   additional_info?: string;
-  
-  [key: string]: any; // Para campos dinâmicos
+  [key: string]: any;
 }
+
+// Mapeamento dos dias da semana
+const WEEKDAYS = {
+  monday: 'Segunda-feira',
+  tuesday: 'Terça-feira',
+  wednesday: 'Quarta-feira',
+  thursday: 'Quinta-feira',
+  friday: 'Sexta-feira',
+  saturday: 'Sábado',
+  sunday: 'Domingo'
+};
 
 // Estilo para reduzir o tamanho do ícone do relógio e ajustar espaçamento
 const timeInputStyle = `
   input[type="time"]::-webkit-calendar-picker-indicator {
-    width: 14px;
-    height: 14px;
-    opacity: 0.7;
+    width: 12px;
+    height: 12px;
+    opacity: 0.6;
     padding: 0;
-    margin-right: -4px;
+    margin: 0;
+    margin-left: -2px;
   }
   input[type="time"]::-webkit-datetime-edit {
     font-size: 0.875rem;
     padding: 0;
   }
   input[type="time"] {
-    padding-right: 0 !important;
+    padding-right: 2px !important;
   }
 `;
 
@@ -76,6 +83,9 @@ export default function ResellerEdit() {
   const [searching, setSearching] = useState(false);
   const [reseller, setReseller] = useState<Reseller | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [supportPhone, setSupportPhone] = useState('');
+  const [salesPhone, setSalesPhone] = useState('');
+  const [adminPhone, setAdminPhone] = useState('');
 
   const isNew = id === 'new';
 
@@ -88,7 +98,17 @@ export default function ResellerEdit() {
     }
 
     if (isNew) {
-      // Criar uma nova revenda
+      // Criar uma nova revenda com horários padrão
+      const defaultOpeningHours: OpeningHours = {
+        monday: { active: true, open: '08:00', close: '18:00' },
+        tuesday: { active: true, open: '08:00', close: '18:00' },
+        wednesday: { active: true, open: '08:00', close: '18:00' },
+        thursday: { active: true, open: '08:00', close: '18:00' },
+        friday: { active: true, open: '08:00', close: '18:00' },
+        saturday: { active: false, open: '08:00', close: '13:00' },
+        sunday: { active: false, open: '08:00', close: '18:00' }
+      };
+
       setReseller({
         id: '',
         trade_name: '',
@@ -103,18 +123,8 @@ export default function ResellerEdit() {
         address_state: '',
         created_at: new Date().toISOString(),
         status: 'active',
-        
-        // Campos complementares
         website: '',
-        opening_hours: {
-          monday: { active: true, open: '08:00', close: '18:00' },
-          tuesday: { active: true, open: '08:00', close: '18:00' },
-          wednesday: { active: true, open: '08:00', close: '18:00' },
-          thursday: { active: true, open: '08:00', close: '18:00' },
-          friday: { active: true, open: '08:00', close: '18:00' },
-          saturday: { active: true, open: '08:00', close: '13:00' },
-          sunday: { active: false, open: '08:00', close: '18:00' }
-        },
+        opening_hours: defaultOpeningHours,
         tech_support: [],
         sales_contacts: [],
         admin_contacts: [],
@@ -141,7 +151,51 @@ export default function ResellerEdit() {
       if (error) throw error;
 
       if (data) {
-        setReseller(data as Reseller);
+        // Garantir que opening_hours tenha todos os dias da semana
+        const defaultOpeningHours: OpeningHours = {
+          monday: { active: true, open: '08:00', close: '18:00' },
+          tuesday: { active: true, open: '08:00', close: '18:00' },
+          wednesday: { active: true, open: '08:00', close: '18:00' },
+          thursday: { active: true, open: '08:00', close: '18:00' },
+          friday: { active: true, open: '08:00', close: '18:00' },
+          saturday: { active: false, open: '08:00', close: '13:00' },
+          sunday: { active: false, open: '08:00', close: '18:00' }
+        };
+
+        // Verificar se o formato dos dados é o esperado
+        let opening_hours = defaultOpeningHours;
+        
+        if (data.opening_hours) {
+          // Se os dados vierem como array, converter para o formato de objeto
+          if (Array.isArray(data.opening_hours)) {
+            const formattedHours: OpeningHours = {};
+            const weekdayKeys = Object.keys(WEEKDAYS);
+            
+            data.opening_hours.forEach((item: any, index: number) => {
+              if (index < weekdayKeys.length) {
+                const day = weekdayKeys[index];
+                formattedHours[day] = {
+                  active: item.active || false,
+                  open: item.open || '08:00',
+                  close: item.close || '18:00'
+                };
+              }
+            });
+            
+            opening_hours = formattedHours;
+          } else {
+            // Se já for um objeto, mesclar com os valores padrão
+            opening_hours = {
+              ...defaultOpeningHours,
+              ...data.opening_hours
+            };
+          }
+        }
+
+        setReseller({
+          ...data,
+          opening_hours
+        });
       } else {
         toast.error('Revenda não encontrada');
         navigate('/admin/resellers');
@@ -180,7 +234,7 @@ export default function ResellerEdit() {
         opening_hours: {
           ...prevReseller.opening_hours,
           [day]: {
-            ...prevReseller.opening_hours[day as keyof OpeningHours],
+            ...prevReseller.opening_hours[day],
             [field]: value
           }
         }
@@ -188,55 +242,158 @@ export default function ResellerEdit() {
     });
   };
   
-  // Funções para manipulação de contatos (técnicos, vendas e administrativos)
-  const [newContact, setNewContact] = useState<Contact>({
-    name: '',
-    phone: '',
-    email: '',
-    position: ''
-  });
-  
-  // Função genérica para adicionar um contato ao tipo especificado
-  const addContact = (contactType: 'tech_support' | 'sales_contacts' | 'admin_contacts') => {
+  // Função para adicionar um número de telefone de suporte
+  const addSupportPhone = () => {
     if (!reseller) return;
-    if (!newContact.name || !newContact.phone || !newContact.email) {
-      toast.error('Preencha todos os campos do contato');
+    if (!supportPhone.trim()) {
+      toast.error('Digite um número de telefone');
       return;
     }
     
+    // Verificar se já existem 5 números
+    const currentPhones = reseller.tech_support || [];
+    if (currentPhones.length >= 5) {
+      toast.error('Máximo de 5 números de suporte permitidos');
+      return;
+    }
+    
+    // Criar um novo contato apenas com o telefone
+    const newContact: Contact = {
+      name: `Suporte ${currentPhones.length + 1}`,
+      phone: supportPhone,
+      email: `suporte${currentPhones.length + 1}@exemplo.com`
+    };
+    
     setReseller(prevReseller => {
       if (!prevReseller) return null;
       
-      const currentContacts = prevReseller[contactType] || [];
-      
       return {
         ...prevReseller,
-        [contactType]: [...currentContacts, {...newContact}]
+        tech_support: [...(prevReseller.tech_support || []), newContact]
       };
     });
     
-    // Limpar o formulário
-    setNewContact({
-      name: '',
-      phone: '',
-      email: '',
-      position: ''
-    });
+    // Limpar o campo
+    setSupportPhone('');
   };
   
-  // Função genérica para remover um contato
-  const removeContact = (contactType: 'tech_support' | 'sales_contacts' | 'admin_contacts', index: number) => {
+  // Função para remover um contato de suporte
+  const removeSupportPhone = (index: number) => {
     if (!reseller) return;
     
     setReseller(prevReseller => {
       if (!prevReseller) return null;
       
-      const currentContacts = [...(prevReseller[contactType] || [])];
-      currentContacts.splice(index, 1);
+      const currentPhones = [...(prevReseller.tech_support || [])];
+      currentPhones.splice(index, 1);
       
       return {
         ...prevReseller,
-        [contactType]: currentContacts
+        tech_support: currentPhones
+      };
+    });
+  };
+  
+  // Função para adicionar um número de telefone de vendas
+  const addSalesPhone = () => {
+    if (!reseller) return;
+    if (!salesPhone.trim()) {
+      toast.error('Digite um número de telefone');
+      return;
+    }
+    
+    // Verificar se já existem 5 números
+    const currentPhones = reseller.sales_contacts || [];
+    if (currentPhones.length >= 5) {
+      toast.error('Máximo de 5 números de vendas permitidos');
+      return;
+    }
+    
+    // Criar um novo contato apenas com o telefone
+    const newContact: Contact = {
+      name: `Vendas ${currentPhones.length + 1}`,
+      phone: salesPhone,
+      email: `vendas${currentPhones.length + 1}@exemplo.com`
+    };
+    
+    setReseller(prevReseller => {
+      if (!prevReseller) return null;
+      
+      return {
+        ...prevReseller,
+        sales_contacts: [...(prevReseller.sales_contacts || []), newContact]
+      };
+    });
+    
+    // Limpar o campo
+    setSalesPhone('');
+  };
+  
+  // Função para remover um contato de vendas
+  const removeSalesPhone = (index: number) => {
+    if (!reseller) return;
+    
+    setReseller(prevReseller => {
+      if (!prevReseller) return null;
+      
+      const currentPhones = [...(prevReseller.sales_contacts || [])];
+      currentPhones.splice(index, 1);
+      
+      return {
+        ...prevReseller,
+        sales_contacts: currentPhones
+      };
+    });
+  };
+  
+  // Função para adicionar um número de telefone administrativo
+  const addAdminPhone = () => {
+    if (!reseller) return;
+    if (!adminPhone.trim()) {
+      toast.error('Digite um número de telefone');
+      return;
+    }
+    
+    // Verificar se já existem 5 números
+    const currentPhones = reseller.admin_contacts || [];
+    if (currentPhones.length >= 5) {
+      toast.error('Máximo de 5 números administrativos permitidos');
+      return;
+    }
+    
+    // Criar um novo contato apenas com o telefone
+    const newContact: Contact = {
+      name: `Admin ${currentPhones.length + 1}`,
+      phone: adminPhone,
+      email: `admin${currentPhones.length + 1}@exemplo.com`
+    };
+    
+    setReseller(prevReseller => {
+      if (!prevReseller) return null;
+      
+      return {
+        ...prevReseller,
+        admin_contacts: [...(prevReseller.admin_contacts || []), newContact]
+      };
+    });
+    
+    // Limpar o campo
+    setAdminPhone('');
+  };
+  
+  // Função para remover um contato administrativo
+  const removeAdminPhone = (index: number) => {
+    if (!reseller) return;
+    
+    setReseller(prevReseller => {
+      if (!prevReseller) return null;
+      
+      const currentPhones = [...(prevReseller.admin_contacts || [])];
+      currentPhones.splice(index, 1);
+      
+      return {
+        ...prevReseller,
+        admin_contacts: currentPhones
       };
     });
   };
@@ -250,6 +407,14 @@ export default function ResellerEdit() {
       [name]: value
     }));
   };
+
+  // Estado para contatos de vendas e administrativos
+  const [newContact, setNewContact] = useState<Contact>({
+    name: '',
+    phone: '',
+    email: '',
+    position: ''
+  });
 
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newStatus = e.target.value;
@@ -783,16 +948,20 @@ export default function ResellerEdit() {
                     <label className="block text-gray-400 mb-3 text-lg font-medium">Horários de Funcionamento</label>
                     <div className="grid grid-cols-1 gap-2">
                       {reseller.opening_hours && Object.entries(reseller.opening_hours).map(([day, hours]) => {
-                        // Nomes dos dias removidos conforme solicitado no print
+                        // Apenas mostrar os dias que estão no mapeamento WEEKDAYS
+                        if (!WEEKDAYS[day as keyof typeof WEEKDAYS]) return null;
+                        
+                        const dayName = WEEKDAYS[day as keyof typeof WEEKDAYS];
                         return (
                           <div key={day} className="flex items-center bg-[#1C1C1C] rounded-lg border border-gray-800 p-3">
-                            <div className="flex items-center mr-3" style={{ width: '40px' }}>
+                            <div className="flex items-center mr-3 w-32">
                               <input
                                 type="checkbox"
                                 checked={hours.active}
                                 onChange={(e) => handleOpeningHoursChange(day, 'active', e.target.checked)}
                                 className="h-4 w-4 rounded border-gray-700 text-emerald-500 focus:ring-emerald-500 bg-[#1C1C1C] mr-2"
                               />
+                              <span className="text-white text-sm">{dayName}</span>
                             </div>
                             
                             <div className="flex items-center flex-1 gap-2">
@@ -830,172 +999,169 @@ export default function ResellerEdit() {
                     </div>
                   </div>
                   
-                  {/* Contatos de Suporte Técnico */}
+                  {/* Contatos de Suporte Técnico - NOVA IMPLEMENTAÇÃO */}
                   <div className="pt-2 pb-4 border-t border-gray-800">
                     <label className="block text-lg text-white font-medium mb-3">Contatos de Suporte Técnico</label>
                     
-                    {/* Lista de contatos existentes */}
+                    {/* Lista de números de telefone */}
                     <div className="space-y-3 mb-4">
                       {reseller.tech_support && reseller.tech_support.length > 0 ? (
-                        reseller.tech_support.map((contact, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-[#1C1C1C] rounded-lg">
-                            <div>
-                              <div className="text-white font-medium">{contact.name}</div>
-                              <div className="text-gray-400 text-sm">
-                                {contact.position && <span className="mr-2">{contact.position}</span>}
-                                <span className="mr-2">{contact.phone}</span>
-                                <span>{contact.email}</span>
-                              </div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {reseller.tech_support.map((contact, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 bg-[#1C1C1C] rounded-lg">
+                              <div className="text-white font-medium">{contact.phone}</div>
+                              <button
+                                type="button"
+                                onClick={() => removeSupportPhone(index)}
+                                className="text-red-500 hover:text-red-400 p-1"
+                              >
+                                <Trash2 size={16} />
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => removeContact('tech_support', index)}
-                              className="text-red-500 hover:text-red-400 p-1"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        ))
+                          ))}
+                        </div>
                       ) : (
-                        <div className="text-gray-400 italic">Nenhum contato de suporte técnico cadastrado</div>
+                        <div className="text-gray-400 italic">Nenhum número de suporte cadastrado</div>
                       )}
                     </div>
                     
-                    {/* Formulário para adicionar novo contato */}
-                    <div className="bg-[#1A1A1A] p-4 rounded-lg border border-gray-800">
-                      <h4 className="text-white font-medium mb-3">Adicionar Contato Técnico</h4>
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        <div>
-                          <label className="block text-gray-400 text-sm mb-1">Nome</label>
-                          <input
-                            type="text"
-                            name="name"
-                            value={newContact.name}
-                            onChange={handleContactInputChange}
-                            className="w-full px-3 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-gray-400 text-sm mb-1">Cargo/Função</label>
-                          <input
-                            type="text"
-                            name="position"
-                            value={newContact.position}
-                            onChange={handleContactInputChange}
-                            className="w-full px-3 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-gray-400 text-sm mb-1">Telefone</label>
-                          <input
-                            type="text"
-                            name="phone"
-                            value={newContact.phone}
-                            onChange={handleContactInputChange}
-                            className="w-full px-3 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-gray-400 text-sm mb-1">E-mail</label>
-                          <input
-                            type="email"
-                            name="email"
-                            value={newContact.email}
-                            onChange={handleContactInputChange}
-                            className="w-full px-3 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm"
-                          />
-                        </div>
+                    {/* Campo para adicionar novo número */}
+                    {(reseller.tech_support?.length || 0) < 5 && (
+                      <div className="flex gap-2">
+                        <InputMask
+                          mask="(99) 99999-9999"
+                          type="text"
+                          value={supportPhone}
+                          onChange={(e) => setSupportPhone(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          placeholder="(00) 00000-0000"
+                        />
+                        <button
+                          type="button"
+                          onClick={addSupportPhone}
+                          disabled={!supportPhone.trim()}
+                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center"
+                        >
+                          <Plus size={18} />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => addContact('tech_support')}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
-                      >
-                        Adicionar Contato
-                      </button>
-                    </div>
+                    )}
+                    
+                    {(reseller.tech_support?.length || 0) >= 5 && (
+                      <div className="text-amber-400 text-sm mt-2">
+                        Máximo de 5 números de suporte atingido
+                      </div>
+                    )}
                   </div>
                   
-                  {/* Contatos de Vendas */}
+                  {/* Contatos de Vendas - NOVA IMPLEMENTAÇÃO */}
                   <div className="pt-2 pb-4 border-t border-gray-800">
                     <label className="block text-lg text-white font-medium mb-3">Contatos de Vendas</label>
                     
-                    {/* Lista de contatos existentes */}
+                    {/* Lista de números de telefone */}
                     <div className="space-y-3 mb-4">
                       {reseller.sales_contacts && reseller.sales_contacts.length > 0 ? (
-                        reseller.sales_contacts.map((contact, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-[#1C1C1C] rounded-lg">
-                            <div>
-                              <div className="text-white font-medium">{contact.name}</div>
-                              <div className="text-gray-400 text-sm">
-                                {contact.position && <span className="mr-2">{contact.position}</span>}
-                                <span className="mr-2">{contact.phone}</span>
-                                <span>{contact.email}</span>
-                              </div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {reseller.sales_contacts.map((contact, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 bg-[#1C1C1C] rounded-lg">
+                              <div className="text-white font-medium">{contact.phone}</div>
+                              <button
+                                type="button"
+                                onClick={() => removeSalesPhone(index)}
+                                className="text-red-500 hover:text-red-400 p-1"
+                              >
+                                <Trash2 size={16} />
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => removeContact('sales_contacts', index)}
-                              className="text-red-500 hover:text-red-400 p-1"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        ))
+                          ))}
+                        </div>
                       ) : (
-                        <div className="text-gray-400 italic">Nenhum contato de vendas cadastrado</div>
+                        <div className="text-gray-400 italic">Nenhum número de vendas cadastrado</div>
                       )}
                     </div>
                     
-                    {/* Botão para adicionar contato de vendas */}
-                    <button
-                      type="button"
-                      onClick={() => addContact('sales_contacts')}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
-                    >
-                      Adicionar Contato de Vendas
-                    </button>
+                    {/* Campo para adicionar novo número */}
+                    {(reseller.sales_contacts?.length || 0) < 5 && (
+                      <div className="flex gap-2">
+                        <InputMask
+                          mask="(99) 99999-9999"
+                          type="text"
+                          value={salesPhone}
+                          onChange={(e) => setSalesPhone(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          placeholder="(00) 00000-0000"
+                        />
+                        <button
+                          type="button"
+                          onClick={addSalesPhone}
+                          disabled={!salesPhone.trim()}
+                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center"
+                        >
+                          <Plus size={18} />
+                        </button>
+                      </div>
+                    )}
+                    
+                    {(reseller.sales_contacts?.length || 0) >= 5 && (
+                      <div className="text-amber-400 text-sm mt-2">
+                        Máximo de 5 números de vendas atingido
+                      </div>
+                    )}
                   </div>
                   
-                  {/* Contatos Administrativos */}
+                  {/* Contatos Administrativos - NOVA IMPLEMENTAÇÃO */}
                   <div className="pt-2 pb-4 border-t border-gray-800">
                     <label className="block text-lg text-white font-medium mb-3">Contatos Administrativos</label>
                     
-                    {/* Lista de contatos existentes */}
+                    {/* Lista de números de telefone */}
                     <div className="space-y-3 mb-4">
                       {reseller.admin_contacts && reseller.admin_contacts.length > 0 ? (
-                        reseller.admin_contacts.map((contact, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 bg-[#1C1C1C] rounded-lg">
-                            <div>
-                              <div className="text-white font-medium">{contact.name}</div>
-                              <div className="text-gray-400 text-sm">
-                                {contact.position && <span className="mr-2">{contact.position}</span>}
-                                <span className="mr-2">{contact.phone}</span>
-                                <span>{contact.email}</span>
-                              </div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {reseller.admin_contacts.map((contact, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 bg-[#1C1C1C] rounded-lg">
+                              <div className="text-white font-medium">{contact.phone}</div>
+                              <button
+                                type="button"
+                                onClick={() => removeAdminPhone(index)}
+                                className="text-red-500 hover:text-red-400 p-1"
+                              >
+                                <Trash2 size={16} />
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => removeContact('admin_contacts', index)}
-                              className="text-red-500 hover:text-red-400 p-1"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        ))
+                          ))}
+                        </div>
                       ) : (
-                        <div className="text-gray-400 italic">Nenhum contato administrativo cadastrado</div>
+                        <div className="text-gray-400 italic">Nenhum número administrativo cadastrado</div>
                       )}
                     </div>
                     
-                    {/* Botão para adicionar contato administrativo */}
-                    <button
-                      type="button"
-                      onClick={() => addContact('admin_contacts')}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
-                    >
-                      Adicionar Contato Administrativo
-                    </button>
+                    {/* Campo para adicionar novo número */}
+                    {(reseller.admin_contacts?.length || 0) < 5 && (
+                      <div className="flex gap-2">
+                        <InputMask
+                          mask="(99) 99999-9999"
+                          type="text"
+                          value={adminPhone}
+                          onChange={(e) => setAdminPhone(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          placeholder="(00) 00000-0000"
+                        />
+                        <button
+                          type="button"
+                          onClick={addAdminPhone}
+                          disabled={!adminPhone.trim()}
+                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center"
+                        >
+                          <Plus size={18} />
+                        </button>
+                      </div>
+                    )}
+                    
+                    {(reseller.admin_contacts?.length || 0) >= 5 && (
+                      <div className="text-amber-400 text-sm mt-2">
+                        Máximo de 5 números administrativos atingido
+                      </div>
+                    )}
                   </div>
                   
                   {/* Informações Adicionais */}

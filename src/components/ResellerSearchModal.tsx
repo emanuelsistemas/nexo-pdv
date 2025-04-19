@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, Loader2, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
+import InputMask from 'react-input-mask';
 
 interface ResellerSearchModalProps {
   isOpen: boolean;
@@ -94,13 +95,13 @@ const ResellerSearchModal: React.FC<ResellerSearchModalProps> = ({
             Código da Revenda
           </label>
           <div className="flex">
-            <input
+            <InputMask
+              mask="99999"
               type="text"
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => setCode(e.target.value)}
               className="w-full px-4 py-2 rounded-l-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
               placeholder="Digite o código (5 dígitos)"
-              maxLength={5}
             />
             <button
               type="button"

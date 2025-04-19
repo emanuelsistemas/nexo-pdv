@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Box, Search, Plus, Trash2 } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Box, Search, Plus, Trash2, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -22,6 +22,7 @@ export default function Resellers() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [resellerToDelete, setResellerToDelete] = useState<Reseller | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     // Check admin session
@@ -47,28 +48,44 @@ export default function Resellers() {
   const loadResellers = async () => {
     try {
       setLoading(true);
+      console.log('Carregando revendedores...');
       
+      // Buscar todos os revendedores
       const { data, error } = await supabase
         .from('resellers')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao buscar revendedores:', error);
+        throw error;
+      }
 
-      const formattedData: Reseller[] = data?.map(item => ({
+      console.log('Dados recebidos:', data);
+
+      if (!data || data.length === 0) {
+        console.log('Nenhum revendedor encontrado no banco de dados');
+        setResellers([]);
+        setLoading(false);
+        return;
+      }
+
+      // Formatar os dados recebidos
+      const formattedData: Reseller[] = data.map(item => ({
         id: item.id as string,
         trade_name: item.trade_name as string,
         legal_name: item.legal_name as string,
         document_number: item.document_number as string,
         created_at: item.created_at as string,
-        status: item.status as string,
+        status: item.status as string || 'active',
         code: item.code as string
-      })) || [];
+      }));
 
+      console.log('Dados formatados:', formattedData);
       setResellers(formattedData);
     } catch (error: any) {
       console.error('Erro ao carregar revendas:', error);
-      toast.error('Erro ao carregar revendas');
+      toast.error('Erro ao carregar revendas: ' + (error.message || 'Erro desconhecido'));
     } finally {
       setLoading(false);
     }
@@ -118,8 +135,9 @@ export default function Resellers() {
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch = 
       reseller.trade_name.toLowerCase().includes(searchLower) ||
-      reseller.document_number.includes(searchLower) ||
-      reseller.legal_name.toLowerCase().includes(searchLower);
+      (reseller.document_number && reseller.document_number.includes(searchLower)) ||
+      (reseller.legal_name && reseller.legal_name.toLowerCase().includes(searchLower)) ||
+      (reseller.code && reseller.code.includes(searchLower));
 
     const matchesStatus = selectedStatus === 'all' || reseller.status === selectedStatus;
 
@@ -232,7 +250,7 @@ export default function Resellers() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="p-4 text-center text-gray-400">
+                      <td colSpan={7} className="p-4 text-center text-gray-400">
                         <div className="flex items-center justify-center gap-2">
                           <Box size={20} className="animate-spin" />
                           <span>Carregando revendas...</span>
@@ -241,7 +259,7 @@ export default function Resellers() {
                     </tr>
                   ) : filteredResellers.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-4 text-center text-gray-400">
+                      <td colSpan={7} className="p-4 text-center text-gray-400">
                         Nenhuma revenda encontrada
                       </td>
                     </tr>
@@ -322,7 +340,7 @@ export default function Resellers() {
                   onClick={() => setShowDeleteConfirm(false)}
                   className="text-gray-400 hover:text-white"
                 >
-                  ✕
+                  <X size={20} />
                 </button>
               </div>
               <p className="text-gray-300 mb-6">
