@@ -95,6 +95,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [reservedCode, setReservedCode] = useState<string | null>(null); // Para rastrear o código reservado
 
   useEffect(() => {
     if (isOpen) {
@@ -125,10 +126,68 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
           loadProductImages(productToEdit.id);
         }
       } else {
+        // Para novo produto, resetamos o form, definimos valores padrão e reservamos um código
         resetForm();
+        // Depois de carregar as unidades e grupos, definimos os valores padrão
+        setDefaultValues();
+        reserveProductCode();
       }
     }
   }, [isOpen, productToEdit]);
+  
+  // Função para reservar automaticamente o código do produto
+  const reserveProductCode = async () => {
+    try {
+      // Obter usuário e empresa atual
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error('Usuário não autenticado');
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        console.error('Empresa não encontrada');
+        return;
+      }
+      
+      // Chamar diretamente a função do PostgreSQL usando Supabase RPC
+      const { data: code, error: rpcError } = await supabase
+        .rpc('reserve_product_code', {
+          p_company_id: profile.company_id,
+          p_user_id: user.id
+        }) as { data: string | null, error: any };
+      
+      if (rpcError) {
+        console.error('Erro ao reservar código de produto:', rpcError);
+        return;
+      }
+      
+      if (code) {
+        // Atualizar o formulário com o código reservado
+        const codeString = String(code);
+        setFormData(prev => ({
+          ...prev,
+          code: codeString
+        }));
+        
+        // Guardar o código reservado para liberação posterior se necessário
+        setReservedCode(codeString);
+        
+        console.log(`Código ${codeString} reservado com sucesso!`);
+      } else {
+        console.error('Nenhum código retornado da função');
+      }
+    } catch (error) {
+      console.error('Erro ao reservar código:', error);
+    }
+  };
 
   const loadProductImages = async (productId: string) => {
     try {
@@ -378,10 +437,21 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       }
 
       resetForm();
+      setReservedCode(null); // Limpar o código reservado, pois foi utilizado com sucesso
       onClose();
     } catch (error: any) {
       console.error('Erro ao salvar produto:', error);
-      toast.error(error.message || 'Erro ao processar produto');
+      toast.error(error.message || 'Erro ao salvar produto');
+      
+      // Se falhou ao salvar um novo produto, liberar o código reservado
+      if (!productToEdit && reservedCode) {
+        try {
+          await releaseProductCode(reservedCode);
+          setReservedCode(null); // Limpar referência local ao código
+        } catch (releaseError) {
+          console.error('Erro ao liberar código após falha:', releaseError);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -552,7 +622,78 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     }
   };
 
-  const panelClasses = `fixed right-0 top-0 h-full w-full md:w-[800px] bg-slate-800 shadow-xl transform transition-transform duration-300 ease-in-out ${
+  // Função para definir os valores padrão (unidade UN e grupo Diversos)
+  const setDefaultValues = () => {
+    // Encontrar a unidade UN
+    const unitUN = units.find(unit => unit.code === 'UN');
+    
+    // Encontrar o grupo Diversos
+    const groupDiversos = groups.find(group => group.name === 'Diversos');
+    
+    // Atualizar o formulário com os valores padrão se encontrados
+    setFormData(prev => ({
+      ...prev,
+      unit_id: unitUN?.id || '',
+      group_id: groupDiversos?.id || ''
+    }));
+    
+    if (!unitUN) {
+      console.warn('Unidade UN não encontrada para definir como padrão.');
+    }
+    
+    if (!groupDiversos) {
+      console.warn('Grupo Diversos não encontrado para definir como padrão.');
+    }
+  };
+  
+  // Função para liberar um código reservado
+  const releaseProductCode = async (code: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+          
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+          
+      if (profile?.company_id) {
+        // Excluir diretamente a reserva no banco de dados
+        await supabase
+          .from('product_code_reservations')
+          .delete()
+          .eq('company_id', profile.company_id)
+          .eq('product_code', code);
+            
+        console.log(`Código ${code} liberado`);
+      }
+    } catch (error) {
+      console.error('Erro ao liberar código:', error);
+      throw error; // Propagar o erro para tratamento externo
+    }
+  };
+  
+  // Modificar a função onClose para liberar o código se necessário
+  const handleClose = async () => {
+    // Se estamos fechando um novo produto (não edição) e temos um código reservado
+    if (!productToEdit && reservedCode) {
+      try {
+        await releaseProductCode(reservedCode);
+        console.log(`Código ${reservedCode} liberado ao fechar painel`);
+      } catch (error) {
+        console.error('Erro ao liberar código ao fechar:', error);
+      } finally {
+        setReservedCode(null); // Limpar código reservado independente de sucesso ou erro
+      }
+    }
+    
+    // Resetar o formulário e chamar a função onClose original
+    resetForm();
+    onClose();
+  };
+
+  const panelClasses = `fixed top-0 right-0 w-full md:w-[700px] h-full bg-slate-800 shadow-2xl transform transition-transform duration-300 ease-in-out overflow-hidden ${
     isOpen ? 'translate-x-0' : 'translate-x-full'
   }`;
 
@@ -561,7 +702,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       {isOpen && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 transition-opacity z-40"
-          onClick={onClose}
+          onClick={handleClose}
         />
       )}
 
@@ -572,7 +713,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
               {productToEdit ? 'Editar Produto' : 'Novo Produto'}
             </h2>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="text-slate-400 hover:text-slate-200"
             >
               <X size={24} />
@@ -590,16 +731,19 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
             >
               Produto
             </button>
-            <button
-              className={`px-6 py-3 text-sm font-medium transition-colors ${
-                activeTab === 'estoque' 
-                  ? 'text-white border-b-2 border-blue-500'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-              onClick={() => setActiveTab('estoque')}
-            >
-              Estoque
-            </button>
+            {/* Aba de estoque só aparece quando estiver editando um produto existente */}
+            {productToEdit && (
+              <button
+                className={`px-6 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'estoque' 
+                    ? 'text-white border-b-2 border-blue-500'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                onClick={() => setActiveTab('estoque')}
+              >
+                Estoque
+              </button>
+            )}
             <button
               className={`px-6 py-3 text-sm font-medium transition-colors ${
                 activeTab === 'impostos' 
@@ -757,6 +901,22 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                       />
                     </div>
                   </div>
+                  
+                  {/* Campo de estoque inicial - só aparece em novos produtos */}
+                  {!productToEdit && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        Estoque Inicial
+                      </label>
+                      <input
+                        type="text"
+                        name="stock"
+                        value={formData.stock}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">

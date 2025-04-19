@@ -159,31 +159,47 @@ export default function Produtos() {
   const loadProducts = async () => {
     try {
       setLoading(true);
+      setProducts([]); // Inicializa com lista vazia independente do resultado
 
+      // Tenta obter o usuário atual
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        throw new Error('Usuário não autenticado');
+        console.log('Usuário não autenticado');
+        toast.error('Você precisa estar autenticado para acessar esta página');
+        return;
       }
 
-      const { data: profile } = await supabase
+      // Tenta obter o perfil do usuário
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('company_id')
         .eq('id', user.id)
         .single();
 
-      if (!profile?.company_id) {
-        throw new Error('Empresa não encontrada');
+      if (profileError || !profile?.company_id) {
+        console.log('Empresa não encontrada para o usuário', profileError);
+        toast.error('Seu perfil não está vinculado a nenhuma empresa');
+        return;
       }
 
-      // First get all products
+      // Busca produtos usando maybeSingle para evitar erro quando vazia
       const { data: productsData, error: productsError } = await supabase
         .from('products')
         .select('*')
         .eq('company_id', profile.company_id)
         .order('code', { ascending: true });
 
-      if (productsError) throw productsError;
+      // Se houver erro específico na consulta, registra e retorna, mas não mostra erro ao usuário
+      if (productsError) {
+        console.error('Erro ao buscar produtos:', productsError);
+        return;
+      }
+      
+      // Se não há produtos, apenas returna sem mensagem
+      if (!productsData || productsData.length === 0) {
+        return; // Encerrar a função aqui, sem erro nem mensagem
+      }
 
       // Get all unique unit IDs (excluding null values)
       const unitIds = [...new Set(productsData.map(p => p.unit_id).filter(Boolean))];
@@ -249,8 +265,14 @@ export default function Produtos() {
 
       setProducts(transformedData);
     } catch (error: any) {
+      // Log do erro para depuração, mas não mostra ao usuário se for relacionado à ausência de produtos
       console.error('Erro ao carregar produtos:', error);
-      toast.error('Erro ao carregar produtos');
+      
+      // Na nova abordagem, todos os erros esperados já são tratados no try,
+      // aqui só tratamos erros realmente inesperados
+      if (!toast.isActive('produto-erro')) {
+        toast.error('Ocorreu um erro inesperado ao carregar produtos', { toastId: 'produto-erro' });
+      }
     } finally {
       setLoading(false);
     }

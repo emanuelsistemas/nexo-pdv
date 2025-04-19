@@ -477,6 +477,27 @@ const handleRegister = async () => {
       return;
     }
     
+    // PASSO IMPORTANTE: Criar o perfil do usuário na tabela profiles
+    // Este é o passo que estava faltando e é a causa do erro!
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: authData.user.id,
+        name: formData.name,
+        email: formData.email,
+        company_id: companyData.id,
+        status_cad_empresa: 'S', // Status de cadastro de empresa completo
+        theme_preference: 'D' // Tema escuro por padrão
+      });
+      
+    if (profileError) {
+      console.error('Erro ao criar perfil do usuário:', profileError);
+      toast.warning('Conta criada mas houve um erro ao configurar seu perfil. Entre em contato com o suporte.');
+      // Não interrompemos o fluxo, pois o usuário e empresa já foram criados
+    } else {
+      console.log('Perfil do usuário criado com sucesso!');
+    }
+    
     // Se um revendedor foi selecionado, vincula a empresa a ele
     if (formData.resellerId && formData.resellerId.trim() !== '') {
       try {
