@@ -3,6 +3,7 @@ import { X, Loader2, ArrowUpDown, PlusCircle, MinusCircle, Image as ImageIcon, U
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 import { StockMovementModal } from './StockMovementModal';
+import { ProductGallery } from './ProductGallery';
 
 interface ProductSlidePanelProps {
   isOpen: boolean;
@@ -1567,130 +1568,10 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
               )}
 
               {activeTab === 'galeria' && (
-                <div className="space-y-6">
-                  {!productToEdit?.id ? (
-                    <div className="bg-slate-700 p-6 rounded-lg text-center">
-                      <ImageIcon size={48} className="mx-auto mb-4 text-slate-500" />
-                      <h3 className="text-lg font-medium text-white mb-2">Salve o produto primeiro</h3>
-                      <p className="text-slate-400">
-                        Para adicionar imagens, você precisa primeiro salvar o produto.
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-medium text-white">Imagens do Produto</h3>
-                        <div className="text-sm text-slate-400">
-                          {productImages.length}/6 imagens
-                        </div>
-                      </div>
-                      
-                      {productImages.length === 0 ? (
-                        <div className="bg-slate-700 p-8 rounded-lg text-center">
-                          <ImageIcon size={48} className="mx-auto mb-4 text-slate-500" />
-                          <h3 className="text-lg font-medium text-white mb-2">Nenhuma imagem adicionada</h3>
-                          <p className="text-slate-400 mb-4">
-                            Adicione até 6 imagens para o seu produto.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={handleImageUpload}
-                            disabled={uploadingImage}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50"
-                          >
-                            {uploadingImage ? (
-                              <Loader2 size={18} className="animate-spin" />
-                            ) : (
-                              <Upload size={18} />
-                            )}
-                            <span>Adicionar Imagem</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                            {productImages.map(image => (
-                              <div 
-                                key={image.id} 
-                                className={`relative group rounded-lg overflow-hidden border-2 ${
-                                  image.is_primary ? 'border-blue-500' : 'border-transparent'
-                                }`}
-                              >
-                                <img 
-                                  src={image.url} 
-                                  alt={`Imagem do produto ${formData.name}`}
-                                  className="w-full h-48 object-cover"
-                                />
-                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                  <div className="flex gap-2">
-                                    {!image.is_primary && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSetPrimaryImage(image.id)}
-                                        className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full"
-                                        title="Definir como principal"
-                                      >
-                                        <Star size={16} />
-                                      </button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteImage(image.id)}
-                                      className="p-2 bg-red-600 hover:bg-red-500 text-white rounded-full"
-                                      title="Excluir imagem"
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </div>
-                                </div>
-                                {image.is_primary && (
-                                  <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
-                                    Principal
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                            
-                            {productImages.length < 6 && (
-                              <button
-                                type="button"
-                                onClick={handleImageUpload}
-                                disabled={uploadingImage}
-                                className="flex flex-col items-center justify-center gap-2 h-48 border-2 border-dashed border-slate-600 rounded-lg hover:border-blue-500 transition-colors"
-                              >
-                                {uploadingImage ? (
-                                  <Loader2 size={24} className="animate-spin text-slate-400" />
-                                ) : (
-                                  <Upload size={24} className="text-slate-400" />
-                                )}
-                                <span className="text-slate-400 text-sm">Adicionar Imagem</span>
-                              </button>
-                            )}
-                          </div>
-                          
-                          <div className="mt-4 p-4 bg-slate-700 rounded-lg">
-                            <h4 className="text-sm font-medium text-white mb-2">Dicas:</h4>
-                            <ul className="text-sm text-slate-400 space-y-1 list-disc pl-5">
-                              <li>Imagens devem ter no máximo 2MB</li>
-                              <li>Formatos aceitos: JPG, PNG, GIF</li>
-                              <li>A imagem principal será exibida primeiro no PDV</li>
-                              <li>Recomendamos imagens com fundo branco</li>
-                            </ul>
-                          </div>
-                        </>
-                      )}
-                      
-                      {/* Input de arquivo oculto */}
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                        accept="image/*"
-                        className="hidden"
-                      />
-                    </>
-                  )}
-                </div>
+                <ProductGallery 
+                  productId={productToEdit?.id || null}
+                  productName={formData.name}
+                />
               )}
             </form>
           </div>
