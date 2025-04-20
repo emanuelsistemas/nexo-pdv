@@ -105,13 +105,136 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [reservedCode, setReservedCode] = useState<string | null>(null); // Para rastrear o código reservado
   const [reservedBarcode, setReservedBarcode] = useState<string | null>(null); // Para rastrear o código de barras reservado
+  const [defaultsApplied, setDefaultsApplied] = useState(false); // Para rastrear se os valores padrão já foram aplicados
+
+  // Função para definir os valores padrão (unidade UN e grupo Diversos)
+  const setDefaultValues = () => {
+    console.log('Definindo valores padrão...');
+    console.log('Units disponíveis:', units);
+    console.log('Groups disponíveis:', groups);
+    
+    // Encontrar a unidade UN
+    const unitUN = units.find(unit => unit.code === 'UN');
+    
+    // Encontrar o grupo Diversos
+    const groupDiversos = groups.find(group => group.name === 'Diversos');
+    
+    console.log('Unidade UN encontrada:', unitUN);
+    console.log('Grupo Diversos encontrado:', groupDiversos);
+    
+    // Atualizar o formulário com os valores padrão se encontrados
+    if (unitUN || groupDiversos) {
+      const newFormData = {
+        ...formData,
+        unit_id: unitUN?.id || '',
+        group_id: groupDiversos?.id || ''
+      };
+      
+      console.log('Novos valores do formulário:', newFormData);
+      setFormData(newFormData);
+    }
+    
+    if (!unitUN) {
+      console.warn('Unidade UN não encontrada para definir como padrão.');
+    }
+    
+    if (!groupDiversos) {
+      console.warn('Grupo Diversos não encontrado para definir como padrão.');
+    }
+  };
+  
+  // Função para liberar um código reservado
+  const releaseProductCode = async (code: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+          
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+          
+      if (profile?.company_id) {
+        // Excluir diretamente a reserva no banco de dados
+        await supabase
+          .from('product_code_reservations')
+          .delete()
+          .eq('company_id', profile.company_id)
+          .eq('product_code', code);
+            
+        console.log(`Código ${code} liberado`);
+      }
+    } catch (error) {
+      console.error('Erro ao liberar código:', error);
+      throw error; // Propagar o erro para tratamento externo
+    }
+  };
+  
+  // Função para liberar reserva de código de barras
+  const releaseBarcodeReservation = async (barcode: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+          
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+          
+      if (profile?.company_id) {
+        // Excluir diretamente da tabela de reservas
+        await supabase
+          .from('product_barcode_reservations')
+          .delete()
+          .eq('company_id', profile.company_id)
+          .eq('barcode', barcode);
+            
+        console.log(`Código de barras ${barcode} liberado diretamente`);
+      }
+    } catch (error) {
+      console.error('Erro ao liberar código de barras:', error);
+      throw error; // Propagar o erro para tratamento externo
+    }
+  };
+
+  // Função para limpar reservas antigas do usuário atual
+  const cleanUserReservations = async () => {
+    try {
+      // Obter usuário atual
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error('Usuário não autenticado');
+        return;
+      }
+      
+      // Chamar a função RPC para limpar reservas antigas
+      const { error } = await supabase.rpc('clean_user_product_code_reservations', {
+        p_user_id: user.id
+      });
+      
+      if (error) {
+        console.error('Erro ao limpar reservas antigas:', error);
+      } else {
+        console.log('Reservas antigas limpas com sucesso');
+      }
+    } catch (error) {
+      console.error('Erro ao limpar reservas antigas:', error);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
-      // Primeiro carregamos as unidades e grupos
+      // Primeiro limpamos reservas antigas e depois carregamos as unidades e grupos
       const loadInitialData = async () => {
         setLoading(true);
+        setDefaultsApplied(false); // Resetar o estado de valores padrão aplicados
         try {
+          // Limpar reservas antigas do usuário atual
+          await cleanUserReservations();
+          
           // Carregar unidades e grupos em paralelo
           await Promise.all([loadUnits(), loadGroups(), loadCFOPOptions()]);
           
@@ -155,6 +278,15 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       loadInitialData();
     }
   }, [isOpen, productToEdit]);
+
+  // Efeito adicional para garantir que os valores padrão sejam aplicados quando as unidades e grupos estiverem carregados
+  useEffect(() => {
+    if (isOpen && !productToEdit && units.length > 0 && groups.length > 0 && !defaultsApplied) {
+      console.log('Aplicando valores padrão no useEffect secundário');
+      setDefaultValues();
+      setDefaultsApplied(true);
+    }
+  }, [isOpen, productToEdit, units, groups, defaultsApplied]);
   
   // Função para reservar automaticamente o código do produto
   const reserveProductCode = async () => {
@@ -903,86 +1035,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     } catch (error: any) {
       console.error('Erro ao definir imagem principal:', error);
       toast.error('Erro ao definir imagem principal: ' + (error.message || 'Erro desconhecido'));
-    }
-  };
-
-  // Função para definir os valores padrão (unidade UN e grupo Diversos)
-  const setDefaultValues = () => {
-    // Encontrar a unidade UN
-    const unitUN = units.find(unit => unit.code === 'UN');
-    
-    // Encontrar o grupo Diversos
-    const groupDiversos = groups.find(group => group.name === 'Diversos');
-    
-    // Atualizar o formulário com os valores padrão se encontrados
-    setFormData(prev => ({
-      ...prev,
-      unit_id: unitUN?.id || '',
-      group_id: groupDiversos?.id || ''
-    }));
-    
-    if (!unitUN) {
-      console.warn('Unidade UN não encontrada para definir como padrão.');
-    }
-    
-    if (!groupDiversos) {
-      console.warn('Grupo Diversos não encontrado para definir como padrão.');
-    }
-  };
-  
-  // Função para liberar um código reservado
-  const releaseProductCode = async (code: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-          
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('id', user.id)
-        .single();
-          
-      if (profile?.company_id) {
-        // Excluir diretamente a reserva no banco de dados
-        await supabase
-          .from('product_code_reservations')
-          .delete()
-          .eq('company_id', profile.company_id)
-          .eq('product_code', code);
-            
-        console.log(`Código ${code} liberado`);
-      }
-    } catch (error) {
-      console.error('Erro ao liberar código:', error);
-      throw error; // Propagar o erro para tratamento externo
-    }
-  };
-  
-  // Função para liberar reserva de código de barras
-  const releaseBarcodeReservation = async (barcode: string) => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-          
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('id', user.id)
-        .single();
-          
-      if (profile?.company_id) {
-        // Excluir diretamente da tabela de reservas
-        await supabase
-          .from('product_barcode_reservations')
-          .delete()
-          .eq('company_id', profile.company_id)
-          .eq('barcode', barcode);
-            
-        console.log(`Código de barras ${barcode} liberado diretamente`);
-      }
-    } catch (error) {
-      console.error('Erro ao liberar código de barras:', error);
-      throw error; // Propagar o erro para tratamento externo
     }
   };
   
