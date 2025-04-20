@@ -60,6 +60,10 @@ export const isUserLoggedIn = (): boolean => {
 export const clearLoginState = (): void => {
   try {
     localStorage.removeItem(LOGIN_STATE_KEY);
+    
+    // Remover também o estado de verificação humana
+    // para garantir que a verificação seja exibida em cada login
+    localStorage.removeItem('humanVerified');
   } catch (error) {
     console.error('Erro ao limpar estado de login:', error);
   }
