@@ -986,6 +986,17 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
             </button>
           </div>
 
+          {/* Barra de identificação do produto - sempre visível */}
+          <div className="bg-slate-700 border-b border-slate-600 py-3 px-6 flex items-center">
+            <h2 className="text-xl font-semibold truncate">
+              {formData.name ? (
+                <span className="text-white">{formData.name}</span>
+              ) : (
+                <span className="text-slate-400">[ Nome do Produto ]</span>
+              )}
+            </h2>
+          </div>
+
           <div className="flex border-b border-slate-700">
             <button
               className={`px-6 py-3 text-sm font-medium transition-colors ${
