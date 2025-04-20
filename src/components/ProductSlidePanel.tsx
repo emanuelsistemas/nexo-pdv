@@ -108,40 +108,51 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
 
   useEffect(() => {
     if (isOpen) {
-      loadUnits();
-      loadGroups();
-      loadCFOPOptions();
-      
-      if (productToEdit) {
-        setFormData({
-          code: productToEdit.code,
-          name: productToEdit.name,
-          barcode: productToEdit.barcode || '',
-          unit_id: productToEdit.unit_id,
-          group_id: productToEdit.group_id || '',
-          cost_price: productToEdit.cost_price.toString().replace('.', ','),
-          profit_margin: productToEdit.profit_margin.toString().replace('.', ','),
-          selling_price: productToEdit.selling_price.toString().replace('.', ','),
-          stock: productToEdit.stock.toString().replace('.', ','),
-          cst: productToEdit.cst,
-          pis: productToEdit.pis,
-          cofins: productToEdit.cofins,
-          ncm: productToEdit.ncm,
-          cfop: productToEdit.cfop,
-          status: productToEdit.status
-        });
-        
-        // Carregar imagens do produto se estiver editando
-        if (productToEdit.id) {
-          loadProductImages(productToEdit.id);
+      // Primeiro carregamos as unidades e grupos
+      const loadInitialData = async () => {
+        setLoading(true);
+        try {
+          // Carregar unidades e grupos em paralelo
+          await Promise.all([loadUnits(), loadGroups(), loadCFOPOptions()]);
+          
+          if (productToEdit) {
+            setFormData({
+              code: productToEdit.code,
+              name: productToEdit.name,
+              barcode: productToEdit.barcode || '',
+              unit_id: productToEdit.unit_id,
+              group_id: productToEdit.group_id || '',
+              cost_price: productToEdit.cost_price.toString().replace('.', ','),
+              profit_margin: productToEdit.profit_margin.toString().replace('.', ','),
+              selling_price: productToEdit.selling_price.toString().replace('.', ','),
+              stock: productToEdit.stock.toString().replace('.', ','),
+              cst: productToEdit.cst,
+              pis: productToEdit.pis,
+              cofins: productToEdit.cofins,
+              ncm: productToEdit.ncm,
+              cfop: productToEdit.cfop,
+              status: productToEdit.status
+            });
+            
+            // Carregar imagens do produto se estiver editando
+            if (productToEdit.id) {
+              loadProductImages(productToEdit.id);
+            }
+          } else {
+            // Para novo produto, resetamos o form, definimos valores padrão e reservamos um código
+            resetForm();
+            // Depois de carregar as unidades e grupos, definimos os valores padrão
+            setDefaultValues();
+            reserveProductCode();
+          }
+        } catch (error) {
+          console.error("Erro ao carregar dados iniciais:", error);
+        } finally {
+          setLoading(false);
         }
-      } else {
-        // Para novo produto, resetamos o form, definimos valores padrão e reservamos um código
-        resetForm();
-        // Depois de carregar as unidades e grupos, definimos os valores padrão
-        setDefaultValues();
-        reserveProductCode();
-      }
+      };
+      
+      loadInitialData();
     }
   }, [isOpen, productToEdit]);
   
@@ -299,11 +310,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       const typedGroups = (groupsData || []) as ProductGroup[];
       setGroups(typedGroups);
       console.log('Grupos carregados:', typedGroups);
-      
-      if (!productToEdit) {
-        // Se está criando um novo produto, chamamos a função para definir valores padrão
-        setDefaultValues();
-      }
     } catch (error: any) {
       console.error('Erro ao carregar grupos:', error.message);
       toast.error(`Erro ao carregar grupos: ${error.message}`);
