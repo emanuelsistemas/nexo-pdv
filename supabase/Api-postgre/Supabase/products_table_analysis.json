@@ -1,0 +1,311 @@
+{
+  "status": "success",
+  "timestamp": "2025-04-19T17:53:00.768348",
+  "table_exists": true,
+  "columns": [
+    {
+      "column_name": "id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "column_default": "gen_random_uuid()"
+    },
+    {
+      "column_name": "company_id",
+      "data_type": "uuid",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "code",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "barcode",
+      "data_type": "text",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "column_name": "name",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "cost_price",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "profit_margin",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "selling_price",
+      "data_type": "numeric",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "stock",
+      "data_type": "numeric",
+      "is_nullable": "YES",
+      "column_default": "0"
+    },
+    {
+      "column_name": "cst",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "pis",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "cofins",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "ncm",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": null
+    },
+    {
+      "column_name": "status",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'active'::text"
+    },
+    {
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": "now()"
+    },
+    {
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone",
+      "is_nullable": "YES",
+      "column_default": "now()"
+    },
+    {
+      "column_name": "group_id",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "column_name": "unit_id",
+      "data_type": "uuid",
+      "is_nullable": "YES",
+      "column_default": null
+    },
+    {
+      "column_name": "cfop",
+      "data_type": "text",
+      "is_nullable": "NO",
+      "column_default": "'5405'::text"
+    }
+  ],
+  "foreign_keys": [
+    {
+      "constraint_name": "products_unit_id_fkey",
+      "column_name": "unit_id",
+      "foreign_table_name": "product_units",
+      "foreign_column_name": "id"
+    },
+    {
+      "constraint_name": "products_company_id_fkey",
+      "column_name": "company_id",
+      "foreign_table_name": "companies",
+      "foreign_column_name": "id"
+    },
+    {
+      "constraint_name": "products_group_id_fkey",
+      "column_name": "group_id",
+      "foreign_table_name": "product_groups",
+      "foreign_column_name": "id"
+    }
+  ],
+  "indices": [
+    {
+      "index_name": "products_code_company_unique",
+      "column_name": "company_id"
+    },
+    {
+      "index_name": "products_code_company_unique",
+      "column_name": "code"
+    },
+    {
+      "index_name": "products_company_id_idx",
+      "column_name": "company_id"
+    },
+    {
+      "index_name": "products_group_id_idx",
+      "column_name": "group_id"
+    },
+    {
+      "index_name": "products_pkey",
+      "column_name": "id"
+    },
+    {
+      "index_name": "products_unit_id_idx",
+      "column_name": "unit_id"
+    }
+  ],
+  "rls_enabled": false,
+  "rls_policies": [],
+  "fk_relationships": [
+    {
+      "conname": "products_unit_id_fkey",
+      "conrelid": "products",
+      "confrelid": "product_units"
+    },
+    {
+      "conname": "products_company_id_fkey",
+      "conrelid": "products",
+      "confrelid": "companies"
+    },
+    {
+      "conname": "product_stock_movements_product_id_fkey",
+      "conrelid": "product_stock_movements",
+      "confrelid": "products"
+    },
+    {
+      "conname": "product_images_product_id_fkey",
+      "conrelid": "product_images",
+      "confrelid": "products"
+    },
+    {
+      "conname": "products_group_id_fkey",
+      "conrelid": "products",
+      "confrelid": "product_groups"
+    }
+  ],
+  "constraint_details": [
+    {
+      "conname": "products_company_id_fkey",
+      "conrelid": "products",
+      "confrelid": "companies",
+      "confkey": [
+        1
+      ],
+      "pg_get_constraintdef": "FOREIGN KEY (company_id) REFERENCES companies(id)"
+    },
+    {
+      "conname": "products_group_id_fkey",
+      "conrelid": "products",
+      "confrelid": "product_groups",
+      "confkey": [
+        1
+      ],
+      "pg_get_constraintdef": "FOREIGN KEY (group_id) REFERENCES product_groups(id)"
+    },
+    {
+      "conname": "products_unit_id_fkey",
+      "conrelid": "products",
+      "confrelid": "product_units",
+      "confkey": [
+        1
+      ],
+      "pg_get_constraintdef": "FOREIGN KEY (unit_id) REFERENCES product_units(id)"
+    }
+  ],
+  "counts": {
+    "products": 0,
+    "product_units": 4,
+    "product_groups": 1,
+    "null_company_id": 0,
+    "invalid_unit_id": 0,
+    "invalid_group_id": 0,
+    "orphaned_units": 4,
+    "orphaned_groups": 1,
+    "products_without_company": 0,
+    "profiles_without_company": 0,
+    "valid_product_company_profile_relations": 0
+  },
+  "unit_distribution": [],
+  "related_tables": {
+    "product_units": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "column_name": "company_id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "column_name": "code",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "column_name": "name",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "column_name": "description",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      }
+    ],
+    "product_groups": [
+      {
+        "column_name": "id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "column_name": "company_id",
+        "data_type": "uuid",
+        "is_nullable": "NO"
+      },
+      {
+        "column_name": "name",
+        "data_type": "text",
+        "is_nullable": "NO"
+      },
+      {
+        "column_name": "description",
+        "data_type": "text",
+        "is_nullable": "YES"
+      },
+      {
+        "column_name": "created_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      },
+      {
+        "column_name": "updated_at",
+        "data_type": "timestamp with time zone",
+        "is_nullable": "YES"
+      }
+    ]
+  },
+  "sample_products": []
+}
