@@ -325,6 +325,67 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       return newData;
     });
   };
+  
+  // Verifica se o código já existe para a empresa atual quando o campo perde o foco
+  const handleCodeBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
+    const code = e.target.value.trim();
+    
+    // Se o código estiver vazio ou estiver editando um produto existente, não verificar
+    if (!code || productToEdit) return;
+    
+    // Se o código for igual ao reservado, não verificar duplicidade
+    if (reservedCode && code === reservedCode) return;
+    
+    try {
+      // Obter usuário e empresa atual
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error('Usuário não autenticado');
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        console.error('Empresa não encontrada');
+        return;
+      }
+      
+      // Verificar se o código já existe para esta empresa
+      const { data: existingProduct, error: productError } = await supabase
+        .from('products')
+        .select('id, code')
+        .eq('company_id', profile.company_id)
+        .eq('code', code)
+        .single();
+      
+      if (productError && productError.code !== 'PGRST116') {
+        // PGRST116 é o código para 'não encontrado', qualquer outro é um erro real
+        console.error('Erro ao verificar código:', productError);
+        return;
+      }
+      
+      // Se encontrou um produto com este código
+      if (existingProduct) {
+        toast.error(`O código ${code} já está sendo utilizado. Escolha outro código válido.`);
+        
+        // Se temos um código reservado, voltar para ele
+        if (reservedCode) {
+          setFormData(prev => ({
+            ...prev,
+            code: reservedCode
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao verificar código:', error);
+    }
+  };
 
   const handlePriceBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -780,6 +841,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                         name="code"
                         value={formData.code}
                         onChange={handleChange}
+                        onBlur={handleCodeBlur}
                         className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         required
                         disabled={!!productToEdit}
