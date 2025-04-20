@@ -1325,16 +1325,26 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                       <label className="block text-sm font-medium text-slate-300 mb-1">
                         CFOP *
                       </label>
-                      <select
-                        name="cfop"
-                        value={formData.cfop}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      >
+                      <div className="relative">
+                        <select
+                          name="cfop"
+                          value={formData.cfop}
+                          onChange={handleChange}
+                          className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required
+                          style={{ 
+                            textOverflow: 'ellipsis',
+                            maxWidth: '100%'
+                          }}
+                        >
                         {cfopOptions.length > 0 ? (
                           cfopOptions.map((cfop) => (
-                            <option key={cfop.id_cfop} value={cfop.codigo_cfop}>
+                            <option 
+                              key={cfop.id_cfop} 
+                              value={cfop.codigo_cfop}
+                              title={`${cfop.codigo_cfop} - ${cfop.desc_cfop}`}
+                              className="text-wrap"
+                            >
                               {cfop.codigo_cfop} - {cfop.desc_cfop}
                             </option>
                           ))
@@ -1344,7 +1354,9 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                             <option value="5102">5102 - Venda de mercadoria</option>
                           </>
                         )}
-                      </select>
+                        </select>
+                        {/* Estilos aplicados diretamente nos elementos */}
+                      </div>
                     </div>
 
                     <div>

@@ -7,3 +7,23 @@
 .hide-scrollbar::-webkit-scrollbar {
   display: none;  /* Chrome, Safari and Opera */
 }
+
+/* Estilos para o dropdown do CFOP */
+select[name="cfop"] {
+  max-width: 100%;
+  overflow-x: hidden;
+  text-overflow: ellipsis;
+}
+
+select[name="cfop"] option {
+  max-width: 100%;
+  white-space: normal;
+  overflow-x: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Estilo para o dropdown aberto */
+select[name="cfop"]:focus {
+  max-height: 300px;
+  overflow-y: auto;
+}
