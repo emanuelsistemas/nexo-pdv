@@ -1264,37 +1264,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
 
               {activeTab === 'impostos' && (
                 <div className="space-y-6">
+                  {/* CFOP e CST na primeira posição, na mesma linha */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        CST *
-                      </label>
-                      <input
-                        type="text"
-                        name="cst"
-                        value={formData.cst}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        NCM *
-                      </label>
-                      <input
-                        type="text"
-                        name="ncm"
-                        value={formData.ncm}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
                         CFOP *
@@ -1309,6 +1280,37 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                         <option value="5405">5405 - Venda de mercadoria adquirida</option>
                         <option value="5102">5102 - Venda de mercadoria</option>
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        CST *
+                      </label>
+                      <input
+                        type="text"
+                        name="cst"
+                        value={formData.cst}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* NCM, PIS e COFINS nas posições restantes */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        NCM *
+                      </label>
+                      <input
+                        type="text"
+                        name="ncm"
+                        value={formData.ncm}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
                     </div>
 
                     <div>
