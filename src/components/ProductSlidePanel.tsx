@@ -240,7 +240,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
           
           // Carregar unidades e grupos em paralelo
           await Promise.all([loadUnits(), loadGroups(), loadCFOPOptions()]);
-          
+
           if (productToEdit) {
             setFormData({
               code: productToEdit.code,
