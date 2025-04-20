@@ -1297,22 +1297,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                     </div>
                   </div>
 
-                  {/* NCM, PIS e COFINS nas posições restantes */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        NCM *
-                      </label>
-                      <input
-                        type="text"
-                        name="ncm"
-                        value={formData.ncm}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
-                    </div>
-
+                  {/* PIS e COFINS na segunda linha */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
                         PIS *
@@ -1335,6 +1321,23 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                         type="text"
                         name="cofins"
                         value={formData.cofins}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* NCM sozinho na última posição */}
+                  <div className="grid grid-cols-1 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        NCM *
+                      </label>
+                      <input
+                        type="text"
+                        name="ncm"
+                        value={formData.ncm}
                         onChange={handleChange}
                         className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         required
