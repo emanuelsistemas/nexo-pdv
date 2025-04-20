@@ -126,7 +126,7 @@ export function ProductGallery({ productId, productName }: ProductGalleryProps) 
       
       toast.success('Imagem adicionada com sucesso!');
     } catch (error: any) {
-      console.error('Erro ao fazer upload da imagem:', error);
+      console.error('Erro ao fazer upload da imagem:', error.message);
       toast.error('Erro ao enviar imagem: ' + (error.message || 'Erro desconhecido'));
     } finally {
       setUploadingImage(false);
@@ -172,7 +172,7 @@ export function ProductGallery({ productId, productName }: ProductGalleryProps) 
       
       toast.success('Imagem excluída com sucesso!');
     } catch (error: any) {
-      console.error('Erro ao excluir imagem:', error);
+      console.error('Erro ao excluir imagem:', error.message);
       toast.error('Erro ao excluir imagem: ' + (error.message || 'Erro desconhecido'));
     }
   };
@@ -202,7 +202,7 @@ export function ProductGallery({ productId, productName }: ProductGalleryProps) 
       
       toast.success('Imagem principal definida com sucesso!');
     } catch (error: any) {
-      console.error('Erro ao definir imagem principal:', error);
+      console.error('Erro ao definir imagem principal:', error.message);
       toast.error('Erro ao definir imagem principal: ' + (error.message || 'Erro desconhecido'));
     }
   };
