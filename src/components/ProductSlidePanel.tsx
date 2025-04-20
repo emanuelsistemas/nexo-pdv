@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Loader2, ArrowUpDown, PlusCircle, MinusCircle, Image as ImageIcon, Upload, Trash2, Star, StarOff } from 'lucide-react';
+import { X, Loader2, ArrowUpDown, PlusCircle, MinusCircle, Image as ImageIcon, Upload, Trash2, Star } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 import { StockMovementModal } from './StockMovementModal';
@@ -60,6 +60,13 @@ interface ProductGroup {
   name: string;
 }
 
+interface CFOPItem {
+  id_cfop: number;
+  codigo_cfop: string;
+  desc_cfop: string;
+  tipo: string;
+}
+
 interface ProductImage {
   id: string;
   product_id: string;
@@ -88,6 +95,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     cfop: '5405',
     status: 'active'
   });
+  const [cfopOptions, setCfopOptions] = useState<CFOPItem[]>([]);
   const [units, setUnits] = useState<ProductUnit[]>([]);
   const [groups, setGroups] = useState<ProductGroup[]>([]);
   const [showStockMovementModal, setShowStockMovementModal] = useState(false);
@@ -102,6 +110,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     if (isOpen) {
       loadUnits();
       loadGroups();
+      loadCFOPOptions();
       
       if (productToEdit) {
         setFormData({
@@ -194,25 +203,33 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     try {
       const { data, error } = await supabase
         .from('product_images')
-        .select('*')
+        .select('id, product_id, url, is_primary, created_at')
         .eq('product_id', productId)
-        .order('is_primary', { ascending: false });
-
-      if (error) throw error;
+        .order('created_at', { ascending: false });
+        
+      if (error) {
+        throw error;
+      }
       
-      setProductImages(data || []);
-    } catch (error) {
-      console.error('Erro ao carregar imagens do produto:', error);
+      // Garantir o tipo correto dos dados
+      const typedData = data as ProductImage[];
+      setProductImages(typedData);
+    } catch (error: any) {
+      console.error('Erro ao carregar imagens do produto:', error.message);
       toast.error('Erro ao carregar imagens do produto');
     }
   };
 
   const loadUnits = async () => {
     try {
+      setLoading(true);
+      
+      // Obter usuário e empresa atual
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
-        throw new Error('Usuário não autenticado');
+        console.error('Usuário não autenticado');
+        return;
       }
 
       const { data: profile, error: profileError } = await supabase
@@ -222,28 +239,36 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         .single();
 
       if (profileError || !profile?.company_id) {
-        throw new Error('Empresa não encontrada');
+        console.error('Empresa não encontrada');
+        return;
       }
-
-      const { data: units, error: unitsError } = await supabase
+      
+      // Usar o company_id do perfil do usuário
+      const { data, error } = await supabase
         .from('product_units')
         .select('id, code, name')
         .eq('company_id', profile.company_id)
-        .order('code');
-
-      if (unitsError) {
-        throw unitsError;
+        .order('name', { ascending: true });
+        
+      if (error) {
+        throw error;
       }
-
-      setUnits(units || []);
-    } catch (error) {
-      console.error('Erro ao carregar unidades:', error);
-      toast.error('Erro ao carregar unidades');
+      
+      // Garantir o tipo correto dos dados
+      const typedData = data as ProductUnit[];
+      setUnits(typedData);
+      console.log('Unidades carregadas:', typedData);
+    } catch (error: any) {
+      console.error('Erro ao carregar unidades:', error.message);
+      toast.error(`Erro ao carregar unidades: ${error.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadGroups = async () => {
     try {
+      setLoading(true);
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
@@ -260,20 +285,50 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         throw new Error('Empresa não encontrada');
       }
 
-      const { data: groups, error: groupsError } = await supabase
+      const { data: groupsData, error: groupsError } = await supabase
         .from('product_groups')
         .select('id, name')
         .eq('company_id', profile.company_id)
-        .order('name');
-
+        .order('name', { ascending: true });
+        
       if (groupsError) {
         throw groupsError;
       }
+      
+      // Garantir o tipo correto dos dados
+      const typedGroups = (groupsData || []) as ProductGroup[];
+      setGroups(typedGroups);
+      console.log('Grupos carregados:', typedGroups);
+      
+      if (!productToEdit) {
+        // Se está criando um novo produto, chamamos a função para definir valores padrão
+        setDefaultValues();
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar grupos:', error.message);
+      toast.error(`Erro ao carregar grupos: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      setGroups(groups || []);
-    } catch (error) {
-      console.error('Erro ao carregar grupos:', error);
-      toast.error('Erro ao carregar grupos');
+  const loadCFOPOptions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cfop')
+        .select('id_cfop, codigo_cfop, desc_cfop, tipo')
+        .order('codigo_cfop', { ascending: true });
+        
+      if (error) {
+        throw error;
+      }
+      
+      // Garantir o tipo correto dos dados
+      const typedData = data as CFOPItem[];
+      setCfopOptions(typedData);
+    } catch (error: any) {
+      console.error('Erro ao carregar códigos CFOP:', error.message);
+      toast.error(`Erro ao carregar códigos CFOP: ${error.message}`);
     }
   };
 
@@ -1277,8 +1332,18 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                         className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         required
                       >
-                        <option value="5405">5405 - Venda de mercadoria adquirida</option>
-                        <option value="5102">5102 - Venda de mercadoria</option>
+                        {cfopOptions.length > 0 ? (
+                          cfopOptions.map((cfop) => (
+                            <option key={cfop.id_cfop} value={cfop.codigo_cfop}>
+                              {cfop.codigo_cfop} - {cfop.desc_cfop}
+                            </option>
+                          ))
+                        ) : (
+                          <>
+                            <option value="5405">5405 - Venda de mercadoria adquirida</option>
+                            <option value="5102">5102 - Venda de mercadoria</option>
+                          </>
+                        )}
                       </select>
                     </div>
 
