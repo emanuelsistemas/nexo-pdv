@@ -1390,22 +1390,24 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                           onChange={handleChange}
                           className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           required
-                          style={{ 
-                            textOverflow: 'ellipsis',
-                            maxWidth: '100%'
-                          }}
                         >
                         {cfopOptions.length > 0 ? (
-                          cfopOptions.map((cfop) => (
-                            <option 
-                              key={cfop.id_cfop} 
-                              value={cfop.codigo_cfop}
-                              title={`${cfop.codigo_cfop} - ${cfop.desc_cfop}`}
-                              className="text-wrap"
-                            >
-                              {cfop.codigo_cfop} - {cfop.desc_cfop}
-                            </option>
-                          ))
+                          cfopOptions.map((cfop) => {
+                            // Limitar o tamanho da descrição para evitar que estoure a largura
+                            const shortDesc = cfop.desc_cfop.length > 40 
+                              ? cfop.desc_cfop.substring(0, 40) + '...' 
+                              : cfop.desc_cfop;
+                            
+                            return (
+                              <option 
+                                key={cfop.id_cfop} 
+                                value={cfop.codigo_cfop}
+                                title={`${cfop.codigo_cfop} - ${cfop.desc_cfop}`}
+                              >
+                                {cfop.codigo_cfop} - {shortDesc}
+                              </option>
+                            );
+                          })
                         ) : (
                           <>
                             <option value="5405">5405 - Venda de mercadoria adquirida</option>
@@ -1413,7 +1415,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                           </>
                         )}
                         </select>
-                        {/* Estilos aplicados diretamente nos elementos */}
                       </div>
                     </div>
 
