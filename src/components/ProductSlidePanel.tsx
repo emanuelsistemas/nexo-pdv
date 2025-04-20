@@ -278,6 +278,36 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       };
       
       loadInitialData();
+    } else {
+      // Quando o painel é fechado, limpar todas as reservas
+      if (reservedCode) {
+        releaseProductCode(reservedCode)
+          .then(() => {
+            console.log(`Código ${reservedCode} liberado ao fechar painel`);
+            setReservedCode(null);
+          })
+          .catch(error => {
+            console.error('Erro ao liberar código ao fechar:', error);
+            setReservedCode(null);
+          });
+      }
+      
+      if (reservedBarcode) {
+        releaseBarcodeReservation(reservedBarcode)
+          .then(() => {
+            console.log(`Código de barras ${reservedBarcode} liberado ao fechar painel`);
+            setReservedBarcode(null);
+          })
+          .catch(error => {
+            console.error('Erro ao liberar código de barras ao fechar:', error);
+            setReservedBarcode(null);
+          });
+      }
+      
+      // Limpar todas as reservas antigas do usuário
+      cleanUserReservations()
+        .then(() => console.log('Reservas antigas limpas ao fechar painel'))
+        .catch(error => console.error('Erro ao limpar reservas antigas ao fechar:', error));
     }
   }, [isOpen, productToEdit]);
 
