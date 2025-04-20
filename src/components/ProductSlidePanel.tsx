@@ -96,6 +96,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [reservedCode, setReservedCode] = useState<string | null>(null); // Para rastrear o código reservado
+  const [reservedBarcode, setReservedBarcode] = useState<string | null>(null); // Para rastrear o código de barras reservado
 
   useEffect(() => {
     if (isOpen) {
@@ -382,8 +383,155 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
           }));
         }
       }
+      
+      // Se formData.barcode está preenchido, verificar se o novo código não conflita com ele
+      if (formData.barcode) {
+        if (code === formData.barcode) {
+          toast.error(`O código do produto não pode ser igual ao código de barras!`);
+          
+          // Se temos um código reservado, voltar para ele
+          if (reservedCode) {
+            setFormData(prev => ({
+              ...prev,
+              code: reservedCode
+            }));
+          }
+        }
+      }
     } catch (error) {
       console.error('Erro ao verificar código:', error);
+    }
+  };
+  
+  // Verifica se o código de barras já existe ou conflita com algum código quando o campo perde o foco
+  const handleBarcodeBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
+    const barcode = e.target.value.trim();
+    
+    // Se o código de barras estiver vazio, ignorar a verificação
+    if (!barcode) {
+      // Se temos um código de barras reservado, liberar ele
+      if (reservedBarcode) {
+        try {
+          await releaseBarcodeReservation(reservedBarcode);
+          setReservedBarcode(null);
+        } catch (error) {
+          console.error('Erro ao liberar código de barras:', error);
+        }
+      }
+      return;
+    }
+    
+    // Se estamos editando e o código de barras não mudou, não verificar
+    if (productToEdit && productToEdit.barcode === barcode) return;
+    
+    // Verificar se o código de barras conflita com o código do produto
+    if (formData.code && formData.code === barcode) {
+      toast.error(`O código de barras não pode ser igual ao código do produto!`);
+      setFormData(prev => ({
+        ...prev,
+        barcode: ''
+      }));
+      return;
+    }
+    
+    // Verificar se o código de barras já existe ou conflita com algum código
+    try {
+      // Obter usuário e empresa atual
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error('Usuário não autenticado');
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        console.error('Empresa não encontrada');
+        return;
+      }
+      
+      // Verificar se o código de barras já existe como código de barras de outro produto
+      const { data: existingBarcode, error: barcodeError } = await supabase
+        .from('products')
+        .select('id, barcode')
+        .eq('company_id', profile.company_id)
+        .eq('barcode', barcode)
+        .single();
+      
+      // Verificar se o código de barras conflita com algum código de produto
+      const { data: existingProductCode, error: productCodeError } = await supabase
+        .from('products')
+        .select('id, code')
+        .eq('company_id', profile.company_id)
+        .eq('code', barcode)
+        .single();
+      
+      // Se já existe um produto com este código de barras
+      if (!barcodeError) {
+        toast.error(`O código de barras ${barcode} já está sendo utilizado por outro produto. Escolha outro código de barras.`);
+        setFormData(prev => ({
+          ...prev,
+          barcode: ''
+        }));
+        return;
+      }
+      
+      // Se conflita com um código de produto existente
+      if (!productCodeError) {
+        toast.error(`O código de barras ${barcode} conflita com o código de um produto existente. Escolha outro código de barras.`);
+        setFormData(prev => ({
+          ...prev,
+          barcode: ''
+        }));
+        return;
+      }
+      
+      // Se chegou até aqui, o código de barras está disponível
+      // Vamos reservá-lo usando a função no banco de dados
+      if (!reservedBarcode || reservedBarcode !== barcode) {
+        // Se já temos um código de barras reservado, liberar o anterior
+        if (reservedBarcode) {
+          try {
+            await releaseBarcodeReservation(reservedBarcode);
+            console.log(`Código de barras anterior ${reservedBarcode} liberado`);
+          } catch (error) {
+            console.error('Erro ao liberar código de barras anterior:', error);
+          }
+        }
+        
+        // Reservar o novo código de barras
+        const { data: reserved, error: reserveError } = await supabase
+          .rpc('reserve_barcode', {
+            p_company_id: profile.company_id,
+            p_user_id: user.id,
+            p_barcode: barcode
+          }) as { data: boolean, error: any };
+        
+        if (reserveError) {
+          console.error('Erro ao reservar código de barras:', reserveError);
+          return;
+        }
+        
+        if (!reserved) {
+          toast.error(`Não foi possível reservar o código de barras ${barcode}. Ele pode estar em uso por outro usuário.`);
+          setFormData(prev => ({
+            ...prev,
+            barcode: ''
+          }));
+          return;
+        }
+        
+        // Marcar o código de barras como reservado
+        setReservedBarcode(barcode);
+        console.log(`Código de barras ${barcode} reservado com sucesso.`);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar código de barras:', error);
     }
   };
 
@@ -499,18 +647,32 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
 
       resetForm();
       setReservedCode(null); // Limpar o código reservado, pois foi utilizado com sucesso
+      setReservedBarcode(null); // Limpar o código de barras reservado
       onClose();
     } catch (error: any) {
       console.error('Erro ao salvar produto:', error);
       toast.error(error.message || 'Erro ao salvar produto');
       
-      // Se falhou ao salvar um novo produto, liberar o código reservado
-      if (!productToEdit && reservedCode) {
-        try {
-          await releaseProductCode(reservedCode);
-          setReservedCode(null); // Limpar referência local ao código
-        } catch (releaseError) {
-          console.error('Erro ao liberar código após falha:', releaseError);
+      // Se falhou ao salvar um novo produto, liberar o código reservado e código de barras
+      if (!productToEdit) {
+        // Liberar código do produto
+        if (reservedCode) {
+          try {
+            await releaseProductCode(reservedCode);
+            setReservedCode(null); // Limpar referência local ao código
+          } catch (releaseError) {
+            console.error('Erro ao liberar código após falha:', releaseError);
+          }
+        }
+        
+        // Liberar código de barras
+        if (reservedBarcode) {
+          try {
+            await releaseBarcodeReservation(reservedBarcode);
+            setReservedBarcode(null); // Limpar referência local ao código de barras
+          } catch (releaseError) {
+            console.error('Erro ao liberar código de barras após falha:', releaseError);
+          }
         }
       }
     } finally {
@@ -735,17 +897,60 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     }
   };
   
+  // Função para liberar reserva de código de barras
+  const releaseBarcodeReservation = async (barcode: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+          
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+          
+      if (profile?.company_id) {
+        // Excluir diretamente da tabela de reservas
+        await supabase
+          .from('product_barcode_reservations')
+          .delete()
+          .eq('company_id', profile.company_id)
+          .eq('barcode', barcode);
+            
+        console.log(`Código de barras ${barcode} liberado diretamente`);
+      }
+    } catch (error) {
+      console.error('Erro ao liberar código de barras:', error);
+      throw error; // Propagar o erro para tratamento externo
+    }
+  };
+  
   // Modificar a função onClose para liberar o código se necessário
   const handleClose = async () => {
     // Se estamos fechando um novo produto (não edição) e temos um código reservado
-    if (!productToEdit && reservedCode) {
-      try {
-        await releaseProductCode(reservedCode);
-        console.log(`Código ${reservedCode} liberado ao fechar painel`);
-      } catch (error) {
-        console.error('Erro ao liberar código ao fechar:', error);
-      } finally {
-        setReservedCode(null); // Limpar código reservado independente de sucesso ou erro
+    if (!productToEdit) {
+      // Liberar código do produto se existir
+      if (reservedCode) {
+        try {
+          await releaseProductCode(reservedCode);
+          console.log(`Código ${reservedCode} liberado ao fechar painel`);
+        } catch (error) {
+          console.error('Erro ao liberar código ao fechar:', error);
+        } finally {
+          setReservedCode(null); // Limpar código reservado independente de sucesso ou erro
+        }
+      }
+      
+      // Liberar código de barras se existir
+      if (reservedBarcode) {
+        try {
+          await releaseBarcodeReservation(reservedBarcode);
+          console.log(`Código de barras ${reservedBarcode} liberado ao fechar painel`);
+        } catch (error) {
+          console.error('Erro ao liberar código de barras ao fechar:', error);
+        } finally {
+          setReservedBarcode(null); // Limpar código de barras reservado
+        }
       }
     }
     
@@ -857,6 +1062,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                         name="barcode"
                         value={formData.barcode}
                         onChange={handleChange}
+                        onBlur={handleBarcodeBlur}
                         className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
