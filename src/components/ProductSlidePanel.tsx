@@ -96,6 +96,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     status: 'active'
   });
   const [cfopOptions, setCfopOptions] = useState<CFOPItem[]>([]);
+  const [cfopSearchTerm, setCfopSearchTerm] = useState('');
+  const [showCfopDropdown, setShowCfopDropdown] = useState(false);
   const [units, setUnits] = useState<ProductUnit[]>([]);
   const [groups, setGroups] = useState<ProductGroup[]>([]);
   const [showStockMovementModal, setShowStockMovementModal] = useState(false);
@@ -1384,6 +1386,17 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                         CFOP *
                       </label>
                       <div className="relative">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Pesquisar CFOP..."
+                            value={cfopSearchTerm}
+                            onChange={(e) => setCfopSearchTerm(e.target.value)}
+                            onFocus={() => setShowCfopDropdown(true)}
+                            className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
+                          />
+                        </div>
+                        
                         <select
                           name="cfop"
                           value={formData.cfop}
@@ -1392,22 +1405,28 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                           required
                         >
                         {cfopOptions.length > 0 ? (
-                          cfopOptions.map((cfop) => {
-                            // Limitar o tamanho da descrição para evitar que estoure a largura
-                            const shortDesc = cfop.desc_cfop.length > 40 
-                              ? cfop.desc_cfop.substring(0, 40) + '...' 
-                              : cfop.desc_cfop;
-                            
-                            return (
-                              <option 
-                                key={cfop.id_cfop} 
-                                value={cfop.codigo_cfop}
-                                title={`${cfop.codigo_cfop} - ${cfop.desc_cfop}`}
-                              >
-                                {cfop.codigo_cfop} - {shortDesc}
-                              </option>
-                            );
-                          })
+                          cfopOptions
+                            .filter(cfop => 
+                              cfopSearchTerm === '' || 
+                              cfop.codigo_cfop.includes(cfopSearchTerm) || 
+                              cfop.desc_cfop.toLowerCase().includes(cfopSearchTerm.toLowerCase())
+                            )
+                            .map((cfop) => {
+                              // Limitar o tamanho da descrição para evitar que estoure a largura
+                              const shortDesc = cfop.desc_cfop.length > 40 
+                                ? cfop.desc_cfop.substring(0, 40) + '...' 
+                                : cfop.desc_cfop;
+                              
+                              return (
+                                <option 
+                                  key={cfop.id_cfop} 
+                                  value={cfop.codigo_cfop}
+                                  title={`${cfop.codigo_cfop} - ${cfop.desc_cfop}`}
+                                >
+                                  {cfop.codigo_cfop} - {shortDesc}
+                                </option>
+                              );
+                            })
                         ) : (
                           <>
                             <option value="5405">5405 - Venda de mercadoria adquirida</option>
