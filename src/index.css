@@ -1,9 +1,9 @@
+/* Importar estilos adicionais */
+@import './styles/hide-scrollbar.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Importar estilos adicionais */
-@import './styles/hide-scrollbar.css';
 
 @layer utilities {
   .animate-fade-in {
