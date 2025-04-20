@@ -1416,54 +1416,88 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                         CFOP *
                       </label>
                       <div className="relative">
-                        <div className="relative">
-                          <input
-                            type="text"
-                            placeholder="Pesquisar CFOP..."
-                            value={cfopSearchTerm}
-                            onChange={(e) => setCfopSearchTerm(e.target.value)}
-                            onFocus={() => setShowCfopDropdown(true)}
-                            className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2"
-                          />
-                        </div>
-                        
                         <select
                           name="cfop"
                           value={formData.cfop}
                           onChange={handleChange}
+                          onClick={() => setShowCfopDropdown(!showCfopDropdown)}
                           className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           required
                         >
-                        {cfopOptions.length > 0 ? (
-                          cfopOptions
-                            .filter(cfop => 
-                              cfopSearchTerm === '' || 
-                              cfop.codigo_cfop.includes(cfopSearchTerm) || 
-                              cfop.desc_cfop.toLowerCase().includes(cfopSearchTerm.toLowerCase())
-                            )
-                            .map((cfop) => {
-                              // Limitar o tamanho da descrição para evitar que estoure a largura
-                              const shortDesc = cfop.desc_cfop.length > 40 
-                                ? cfop.desc_cfop.substring(0, 40) + '...' 
-                                : cfop.desc_cfop;
-                              
-                              return (
-                                <option 
-                                  key={cfop.id_cfop} 
-                                  value={cfop.codigo_cfop}
-                                  title={`${cfop.codigo_cfop} - ${cfop.desc_cfop}`}
-                                >
-                                  {cfop.codigo_cfop} - {shortDesc}
-                                </option>
-                              );
-                            })
-                        ) : (
-                          <>
-                            <option value="5405">5405 - Venda de mercadoria adquirida</option>
-                            <option value="5102">5102 - Venda de mercadoria</option>
-                          </>
-                        )}
+                          {cfopOptions.length > 0 ? (
+                            cfopOptions
+                              .filter(cfop => 
+                                cfopSearchTerm === '' || 
+                                cfop.codigo_cfop.includes(cfopSearchTerm) || 
+                                cfop.desc_cfop.toLowerCase().includes(cfopSearchTerm.toLowerCase())
+                              )
+                              .map((cfop) => {
+                                // Limitar o tamanho da descrição para evitar que estoure a largura
+                                const shortDesc = cfop.desc_cfop.length > 40 
+                                  ? cfop.desc_cfop.substring(0, 40) + '...' 
+                                  : cfop.desc_cfop;
+                                
+                                return (
+                                  <option 
+                                    key={cfop.id_cfop} 
+                                    value={cfop.codigo_cfop}
+                                    title={`${cfop.codigo_cfop} - ${cfop.desc_cfop}`}
+                                  >
+                                    {cfop.codigo_cfop} - {shortDesc}
+                                  </option>
+                                );
+                              })
+                          ) : (
+                            <>
+                              <option value="5405">5405 - Venda de mercadoria adquirida</option>
+                              <option value="5102">5102 - Venda de mercadoria</option>
+                            </>
+                          )}
                         </select>
+                        
+                        {showCfopDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10">
+                            <div className="p-2">
+                              <input
+                                type="text"
+                                placeholder="Pesquisar CFOP..."
+                                value={cfopSearchTerm}
+                                onChange={(e) => setCfopSearchTerm(e.target.value)}
+                                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </div>
+                            <div className="max-h-60 overflow-y-auto">
+                              {cfopOptions
+                                .filter(cfop => 
+                                  cfopSearchTerm === '' || 
+                                  cfop.codigo_cfop.includes(cfopSearchTerm) || 
+                                  cfop.desc_cfop.toLowerCase().includes(cfopSearchTerm.toLowerCase())
+                                )
+                                .map((cfop) => {
+                                  // Limitar o tamanho da descrição para evitar que estoure a largura
+                                  const shortDesc = cfop.desc_cfop.length > 40 
+                                    ? cfop.desc_cfop.substring(0, 40) + '...' 
+                                    : cfop.desc_cfop;
+                                  
+                                  return (
+                                    <div 
+                                      key={cfop.id_cfop}
+                                      className={`px-4 py-2 cursor-pointer hover:bg-slate-700 ${formData.cfop === cfop.codigo_cfop ? 'bg-blue-500/20' : ''}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setFormData(prev => ({ ...prev, cfop: cfop.codigo_cfop }));
+                                        setShowCfopDropdown(false);
+                                      }}
+                                      title={`${cfop.codigo_cfop} - ${cfop.desc_cfop}`}
+                                    >
+                                      {cfop.codigo_cfop} - {shortDesc}
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
