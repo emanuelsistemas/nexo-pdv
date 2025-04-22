@@ -19,6 +19,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { AppFooter } from '../components/AppFooter';
+import { NFEPanel } from '../components/NFEPanel';
 
 interface NFE {
   id: string;
@@ -53,6 +54,8 @@ export default function NFE() {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [isLoading, setIsLoading] = useState(false);
+  const [showNFEPanel, setShowNFEPanel] = useState(false);
+  const [selectedNFE, setSelectedNFE] = useState<NFE | null>(null);
   
   // Dados simulados para a grid
   let nfeList: NFE[] = [
@@ -187,6 +190,19 @@ export default function NFE() {
     );
   });
 
+  // Função para tratar quando uma NF-e é editada
+  const handleEditNFE = (nfe: NFE) => {
+    setSelectedNFE(nfe);
+    setShowNFEPanel(true);
+  };
+
+  // Função para tratar quando uma NF-e é salva no painel
+  const handleNFESaved = () => {
+    toast.success('NF-e salva com sucesso!');
+    setShowNFEPanel(false);
+    handleRefresh();
+  };
+
 
 
   return (
@@ -246,6 +262,10 @@ export default function NFE() {
               </div>
               <div className="flex gap-2">
                 <button
+                  onClick={() => {
+                    setSelectedNFE(null); // Nova NF-e, sem dados pré-existentes
+                    setShowNFEPanel(true);
+                  }}
                   className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm transition-colors"
                 >
                   <Plus size={16} />
@@ -408,6 +428,7 @@ export default function NFE() {
                             <button 
                               className="p-1 text-slate-400 hover:text-slate-200" 
                               title="Editar"
+                              onClick={() => handleEditNFE(nfe)}
                             >
                               <Edit size={16} />
                             </button>
@@ -456,6 +477,14 @@ export default function NFE() {
 
       {/* Footer */}
       <AppFooter />
+
+      {/* Painel de criação/edição de NF-e */}
+      <NFEPanel
+        isOpen={showNFEPanel}
+        onClose={() => setShowNFEPanel(false)}
+        nfe={selectedNFE}
+        onSave={handleNFESaved}
+      />
     </div>
   );
 }

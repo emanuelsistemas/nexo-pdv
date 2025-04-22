@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom';
 import { Receipt, ShoppingCart } from 'lucide-react';
 
 interface LogoProps {
-  variant?: 'login' | 'dashboard';
+  variant?: 'login' | 'dashboard' | 'pdv';
+  noLink?: boolean;
 }
 
-export function Logo({ variant = 'login' }: LogoProps) {
+export function Logo({ variant = 'login', noLink = false }: LogoProps) {
   const LogoContent = () => {
-    if (variant === 'dashboard') {
+    if (variant === 'dashboard' || variant === 'pdv') {
       return (
         <div className="flex items-center justify-center gap-1.5">
           <div className="relative">
@@ -35,6 +36,12 @@ export function Logo({ variant = 'login' }: LogoProps) {
     );
   };
 
+  // Se noLink for true ou se for Dashboard ou PDV, não criar link
+  if (noLink || variant === 'dashboard' || variant === 'pdv') {
+    return <LogoContent />;
+  }
+  
+  // Caso contrário, manter o comportamento de link
   return (
     <Link to="/" className="hover:opacity-80 transition-opacity">
       <LogoContent />

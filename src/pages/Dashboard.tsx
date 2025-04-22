@@ -145,6 +145,8 @@ function Dashboard() {
     // Clientes folder items
     { i: 'clientes-app', x: 0, y: 0, w: 1, h: 1, type: 'app', icon: <Users className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Clientes.app', parent: 'clientes' },
     { i: 'clientes-relatorios', x: 1, y: 0, w: 1, h: 1, type: 'app', icon: <FileBarChart2 className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Relatórios.app', parent: 'clientes' },
+    // Vendas folder items
+    { i: 'nfe-app', x: 0, y: 0, w: 1, h: 1, type: 'app', icon: <FileText className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'NFE.app', parent: 'vendas' },
   ];
 
   const [layout, setLayout] = useState(initialLayout);
@@ -340,6 +342,9 @@ function Dashboard() {
           case 'clientes-app':
             navigate('/clientes');
             break;
+          case 'nfe-app':
+            navigate('/nfe');
+            break;
           default:
             toast.info('Aplicativo em desenvolvimento');
         }
@@ -395,7 +400,7 @@ function Dashboard() {
               <Menu size={24} />
             </button>
             <div className="flex items-center gap-2">
-              <Logo small />
+              <Logo variant="dashboard" />
               <span className="text-slate-300 hidden sm:inline">|</span>
               <span className="text-slate-300 hidden sm:inline">{companyName}</span>
             </div>
