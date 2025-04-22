@@ -17,6 +17,7 @@ const Produtos = lazy(() => import('./pages/Produtos'));
 const Unidade = lazy(() => import('./pages/Unidade'));
 const Grupo = lazy(() => import('./pages/Grupo'));
 const Clientes = lazy(() => import('./pages/Clientes'));
+const NFE = lazy(() => import('./pages/NFE'));
 const PasswordRecovery = lazy(() => import('./pages/PasswordRecovery'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const ResendConfirmation = lazy(() => import('./pages/ResendConfirmation'));
@@ -360,6 +361,7 @@ function App() {
             <Route path="/unidade" element={<ProtectedRoute><Unidade /></ProtectedRoute>} />
             <Route path="/grupo" element={<ProtectedRoute><Grupo /></ProtectedRoute>} />
             <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
+            <Route path="/nfe" element={<ProtectedRoute><NFE /></ProtectedRoute>} />
           </Routes>
           <AIChatWrapper />
         </Suspense>
