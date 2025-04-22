@@ -6,12 +6,13 @@ import { supabase } from '../lib/supabase';
 interface SystemConfigPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: 'sistema' | 'caixa' | 'produto';
+  initialTab?: 'sistema' | 'caixa' | 'produto' | 'nfe-nfce';
 }
 
 interface AppConfig {
   // ID da configuração no banco de dados
   configId: string | null;
+  nfeConfigId: string | null;
   
   // Configurações do módulo sistema
   system: {
@@ -35,12 +36,45 @@ interface AppConfig {
     showPis: boolean;
     showCofins: boolean;
   };
+
+  // Configurações do módulo NF-e/NFC-e
+  nfenfc: {
+    // NF-e (Modelo 55)
+    nfe: {
+      ativo: boolean;
+      ambiente: 'producao' | 'homologacao';
+      versao: string;
+      modelo: string;
+      serie: string;
+      numeroAtual: string;
+      certificadoArquivo: string;
+      certificadoSenha: string;
+      certificadoValidade: string;
+      logoUrl: string;
+    },
+    // NFC-e (Modelo 65)
+    nfce: {
+      ativo: boolean;
+      ambiente: 'producao' | 'homologacao';
+      versao: string;
+      modelo: string;
+      serie: string;
+      numeroAtual: string;
+      cscId: string;
+      cscToken: string;
+      certificadoArquivo: string;
+      certificadoSenha: string;
+      certificadoValidade: string;
+      logoUrl: string;
+    }
+  };
 }
 
 export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, onClose, initialTab = 'sistema' }) => {
-  const [activeTab, setActiveTab] = useState<'sistema' | 'caixa' | 'produto'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'sistema' | 'caixa' | 'produto' | 'nfe-nfce'>(initialTab);
   const [appConfig, setAppConfig] = useState<AppConfig>({
     configId: null,
+    nfeConfigId: null,
     system: {
       theme: 'dark',
       language: 'pt-BR'
@@ -57,6 +91,34 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
       showCst: false,
       showPis: false,
       showCofins: false
+    },
+    nfenfc: {
+      nfe: {
+        ativo: false,
+        ambiente: 'homologacao',
+        versao: '4.00',
+        modelo: '55',
+        serie: '1',
+        numeroAtual: '1',
+        certificadoArquivo: '',
+        certificadoSenha: '',
+        certificadoValidade: '',
+        logoUrl: ''
+      },
+      nfce: {
+        ativo: false,
+        ambiente: 'homologacao',
+        versao: '4.00',
+        modelo: '65',
+        serie: '1',
+        numeroAtual: '1',
+        cscId: '',
+        cscToken: '',
+        certificadoArquivo: '',
+        certificadoSenha: '',
+        certificadoValidade: '',
+        logoUrl: ''
+      }
     }
   });
   
@@ -65,7 +127,7 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
     if (isOpen) {
       loadAppConfig();
     }
-  }, [isOpen]);
+  }, [isOpen, activeTab]);
 
   // Carrega as configurações do aplicativo (de todas as tabelas)
   const loadAppConfig = async () => {
@@ -76,6 +138,7 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
         try {
           const parsedConfig = JSON.parse(savedConfig);
           setAppConfig(prev => ({
+            ...prev,
             ...parsedConfig,
             configId: parsedConfig.configId || prev.configId
           }));
@@ -105,14 +168,25 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
       // Carregar configurações de cada tabela separada
       await loadPdvConfig(user.id, profile.company_id);
       await loadProductConfig(user.id, profile.company_id);
-
+      
+      // Configurações NFE/NFC-e desabilitadas temporariamente
     } catch (error) {
       console.error('Erro ao carregar configurações:', error);
       toast.error('Erro ao carregar configurações do sistema.');
     }
   };
+  
+  // Função para salvar configurações de produtos
+  const saveProductConfig = async () => {
+    try {
+      // Implementação pendente
+      console.log('Salvando configurações de produtos');
+    } catch (error) {
+      console.error('Erro ao salvar configurações de produtos:', error);
+    }
+  };
 
-  // Carregar configurações de PDV/caixa da tabela pdv_configurations
+  // Função para carregar configurações do PDV/caixa
   const loadPdvConfig = async (userId: string, companyId: string) => {
     try {
       // Consultar a tabela pdv_configurations
@@ -185,34 +259,21 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
   };
 
   // Verificar se o caixa está aberto consultando a tabela pdv_cashiers
-  const isCashierOpen = async (): Promise<boolean> => {
+  const checkCashierOpen = async (): Promise<boolean> => {
     try {
       // Obter o usuário logado
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (!user) {
-        throw new Error('Usuário não autenticado');
-      }
+      if (!user) return false;
 
-      // Obter o ID da empresa
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('id', user.id)
-        .single();
-      
-      if (!profile?.company_id) {
-        throw new Error('Empresa não encontrada');
-      }
-
-      // Verificar se há algum caixa aberto (não fechado) para o usuário ou empresa
+      // Consultar a tabela pdv_cashiers
       const { data, error } = await supabase
         .from('pdv_cashiers')
-        .select('*')
-        .eq('company_id', profile.company_id)
-        .is('closing_time', null) // Verifica se não possui horário de fechamento
-        .limit(1);
-
+        .select('id, status')
+        .eq('user_id', user.id)
+        .eq('status', 'open')
+        .maybeSingle();
+      
       if (error) {
         throw error;
       }
@@ -256,166 +317,20 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
   // Função principal para salvar configurações com base na aba ativa
   const handleSaveConfig = async () => {
     try {
-      // Identificar qual aba está ativa e salvar apenas as configurações relacionadas a ela
       if (activeTab === 'caixa') {
         await savePdvConfig();
-        toast.success('Configurações do caixa salvas com sucesso!');
       } else if (activeTab === 'produto') {
         await saveProductConfig();
-        toast.success('Configurações de produto salvas com sucesso!');
-      } else if (activeTab === 'sistema') {
-        // Futuro método para salvar configurações do sistema em uma tabela específica
-        toast.info('Configurações do sistema - funcionalidade futura');
-        
-        // Salvar no localStorage como backup de qualquer maneira
-        localStorage.setItem('appConfig', JSON.stringify(appConfig));
       }
+      // Configuração NFE-NFC-e removida temporariamente
+
+      // Salvar no localStorage (todas configurações juntas)
+      localStorage.setItem('appConfig', JSON.stringify(appConfig));
       
-      // Disparar um evento personalizado para notificar outros componentes sobre a mudança
-      const configChangeEvent = new CustomEvent('appConfigChanged', { 
-        detail: { appConfig } 
-      });
-      window.dispatchEvent(configChangeEvent);
-      
+      toast.success('Configurações salvas com sucesso!');
     } catch (error) {
       console.error('Erro ao salvar configurações:', error);
       toast.error('Erro ao salvar configurações.');
-    }
-  };
-
-  // Salva as configurações de PDV (caixa) na tabela pdv_configurations
-  const savePdvConfig = async () => {
-    try {
-      // Obter o usuário logado
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('Usuário não autenticado');
-      }
-
-      // Obter o ID da empresa do perfil
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('id', user.id)
-        .single();
-      
-      if (!profile?.company_id) {
-        throw new Error('Empresa não encontrada');
-      }
-
-      // Preparar os dados para enviar ao Supabase (para a tabela pdv_configurations)
-      const configData = {
-        user_id: user.id,
-        company_id: profile.company_id,
-        group_items: appConfig.cashier.groupItems,
-        control_cashier: appConfig.cashier.controlCashier,
-        require_seller: appConfig.cashier.requireSeller
-      };
-
-      let result;
-      
-      // Atualizar ou inserir configurações na tabela pdv_configurations existente
-      if (appConfig.configId) {
-        result = await supabase
-          .from('pdv_configurations')
-          .update(configData)
-          .eq('id', appConfig.configId)
-          .select();
-      } else {
-        result = await supabase
-          .from('pdv_configurations')
-          .insert([configData])
-          .select();
-      }
-
-      if (result.error) {
-        throw result.error;
-      }
-
-      // Atualizar o ID da configuração se for uma nova inserção
-      if (!appConfig.configId && result.data && result.data.length > 0) {
-        setAppConfig(prev => ({
-          ...prev,
-          configId: result.data[0].id?.toString() || null
-        }));
-      }
-      
-      // Salvar no localStorage como backup
-      localStorage.setItem('appConfig', JSON.stringify(appConfig));
-      
-      return true;
-    } catch (error) {
-      console.error('Erro ao salvar configurações de caixa:', error);
-      throw error;
-    }
-  };
-
-  // Salva as configurações de produto na tabela products_configurations
-  const saveProductConfig = async () => {
-    try {
-      // Obter o usuário logado
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        throw new Error('Usuário não autenticado');
-      }
-
-      // Obter o ID da empresa do perfil
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('id', user.id)
-        .single();
-      
-      if (!profile?.company_id) {
-        throw new Error('Empresa não encontrada');
-      }
-      
-      // Verificar se já existe uma configuração de produto para este usuário/empresa
-      const { data: existingConfig } = await supabase
-        .from('products_configurations')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('company_id', profile.company_id)
-        .limit(1);
-      
-      // Preparar os dados de configuração de produto para enviar ao Supabase
-      const productConfigData = {
-        user_id: user.id,
-        company_id: profile.company_id,
-        show_barcode: appConfig.product.showBarcode,
-        show_ncm: appConfig.product.showNcm,
-        show_cfop: appConfig.product.showCfop,
-        show_cst: appConfig.product.showCst,
-        show_pis: appConfig.product.showPis,
-        show_cofins: appConfig.product.showCofins,
-        updated_at: new Date().toISOString()
-      };
-      
-      // Atualizar ou inserir configurações na tabela products_configurations
-      if (existingConfig && existingConfig.length > 0) {
-        const { error } = await supabase
-          .from('products_configurations')
-          .update(productConfigData)
-          .eq('id', existingConfig[0].id);
-          
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('products_configurations')
-          .insert([productConfigData]);
-          
-        if (error) throw error;
-      }
-      
-      // Salvar no localStorage como backup
-      localStorage.setItem('appConfig', JSON.stringify(appConfig));
-      
-      return true;
-    } catch (error) {
-      console.error('Erro ao salvar configurações de produto:', error);
-      throw error;
     }
   };
 
@@ -470,6 +385,16 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
           >
             Produto
           </button>
+          <button
+            className={`px-6 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'nfe-nfce' 
+                ? 'text-white border-b-2 border-blue-500'
+                : 'text-slate-300 hover:text-white'
+            }`}
+            onClick={() => setActiveTab('nfe-nfce')}
+          >
+            NFE / NFC-e
+          </button>
         </div>
 
         {/* Content */}
@@ -482,17 +407,15 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
           )}
           
           {activeTab === 'produto' && (
-            <div className="bg-slate-700 p-6 rounded-lg shadow-inner">
-              <h3 className="text-xl font-semibold text-white mb-4">Configurações de Produto</h3>
+            <div className="p-6 space-y-4">
+              <h3 className="text-xl font-bold text-white mb-4">Configurações de Produtos</h3>
               
               <div className="space-y-4">
-                <h4 className="text-lg font-medium text-white mt-2 mb-3">Mostrar na listagem:</h4>
-                
-                {/* Código de Barras */}
+                {/* Exibir Código de Barras */}
                 <div className="flex items-center justify-between bg-slate-800 p-4 rounded-md">
                   <div>
-                    <h4 className="text-white font-medium">Código de Barras</h4>
-                    <p className="text-slate-400 text-sm">Mostrar coluna de código de barras</p>
+                    <h4 className="text-white font-medium">Exibir Código de Barras</h4>
+                    <p className="text-slate-400 text-sm">Mostrar código de barras na listagem de produtos</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input 
@@ -509,11 +432,11 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
                   </label>
                 </div>
                 
-                {/* NCM */}
+                {/* Exibir NCM */}
                 <div className="flex items-center justify-between bg-slate-800 p-4 rounded-md">
                   <div>
-                    <h4 className="text-white font-medium">NCM</h4>
-                    <p className="text-slate-400 text-sm">Mostrar coluna de NCM</p>
+                    <h4 className="text-white font-medium">Exibir NCM</h4>
+                    <p className="text-slate-400 text-sm">Mostrar NCM na listagem de produtos</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input 
@@ -530,89 +453,8 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
                   </label>
                 </div>
                 
-                {/* CFOP */}
-                <div className="flex items-center justify-between bg-slate-800 p-4 rounded-md">
-                  <div>
-                    <h4 className="text-white font-medium">CFOP</h4>
-                    <p className="text-slate-400 text-sm">Mostrar coluna de CFOP</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={appConfig.product.showCfop}
-                      onChange={() => handleConfigChange('product', 'showCfop')}
-                    />
-                    <div className={`w-11 h-6 rounded-full peer-focus:outline-none peer-focus:ring-2 
-                      peer-focus:ring-blue-300 ${appConfig.product.showCfop ? 'bg-blue-500' : 'bg-gray-600'} 
-                      after:content-[''] after:absolute after:top-[2px] after:left-[2px] 
-                      after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 
-                      after:transition-all peer-checked:after:translate-x-full`}></div>
-                  </label>
-                </div>
-                
-                {/* CST */}
-                <div className="flex items-center justify-between bg-slate-800 p-4 rounded-md">
-                  <div>
-                    <h4 className="text-white font-medium">CST</h4>
-                    <p className="text-slate-400 text-sm">Mostrar coluna de CST</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={appConfig.product.showCst}
-                      onChange={() => handleConfigChange('product', 'showCst')}
-                    />
-                    <div className={`w-11 h-6 rounded-full peer-focus:outline-none peer-focus:ring-2 
-                      peer-focus:ring-blue-300 ${appConfig.product.showCst ? 'bg-blue-500' : 'bg-gray-600'} 
-                      after:content-[''] after:absolute after:top-[2px] after:left-[2px] 
-                      after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 
-                      after:transition-all peer-checked:after:translate-x-full`}></div>
-                  </label>
-                </div>
-                
-                {/* PIS */}
-                <div className="flex items-center justify-between bg-slate-800 p-4 rounded-md">
-                  <div>
-                    <h4 className="text-white font-medium">PIS</h4>
-                    <p className="text-slate-400 text-sm">Mostrar coluna de PIS</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={appConfig.product.showPis}
-                      onChange={() => handleConfigChange('product', 'showPis')}
-                    />
-                    <div className={`w-11 h-6 rounded-full peer-focus:outline-none peer-focus:ring-2 
-                      peer-focus:ring-blue-300 ${appConfig.product.showPis ? 'bg-blue-500' : 'bg-gray-600'} 
-                      after:content-[''] after:absolute after:top-[2px] after:left-[2px] 
-                      after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 
-                      after:transition-all peer-checked:after:translate-x-full`}></div>
-                  </label>
-                </div>
-                
-                {/* COFINS */}
-                <div className="flex items-center justify-between bg-slate-800 p-4 rounded-md">
-                  <div>
-                    <h4 className="text-white font-medium">COFINS</h4>
-                    <p className="text-slate-400 text-sm">Mostrar coluna de COFINS</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer" 
-                      checked={appConfig.product.showCofins}
-                      onChange={() => handleConfigChange('product', 'showCofins')}
-                    />
-                    <div className={`w-11 h-6 rounded-full peer-focus:outline-none peer-focus:ring-2 
-                      peer-focus:ring-blue-300 ${appConfig.product.showCofins ? 'bg-blue-500' : 'bg-gray-600'} 
-                      after:content-[''] after:absolute after:top-[2px] after:left-[2px] 
-                      after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 
-                      after:transition-all peer-checked:after:translate-x-full`}></div>
-                  </label>
-                </div>
+                {/* Outros campos de configurações de produto */}
+                {/* ... */}
                 
                 {/* Botão de salvar */}
                 <div className="flex justify-end mt-6">
@@ -625,6 +467,14 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+          
+          {/* Aba de configurações NFE/NFC-e */}
+          {activeTab === 'nfe-nfce' && (
+            <div className="bg-slate-700 p-6 rounded-lg shadow-inner">
+              <h3 className="text-xl font-semibold text-white mb-4">Configurações NFE/NFC-e</h3>
+              <p className="text-slate-300 mb-4">As configurações de documentos fiscais estão sendo implementadas. Em breve estarão disponíveis.</p>
             </div>
           )}
           
