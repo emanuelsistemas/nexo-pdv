@@ -17,6 +17,13 @@ interface AppConfig {
   configId: string | null;
   nfeConfigId: string | null;
 
+  // Certificado Digital (compartilhado entre NF-e e NFC-e)
+  certificadoDigital: {
+    arquivo: string;
+    senha: string;
+    validade: string;
+  };
+
   // Configurações do módulo sistema
   system: {
     theme: string;
@@ -50,9 +57,6 @@ interface AppConfig {
       modelo: string;
       serie: string;
       numeroAtual: string;
-      certificadoArquivo: string;
-      certificadoSenha: string;
-      certificadoValidade: string;
       logoUrl: string;
     };
     // NFC-e (Modelo 65)
@@ -65,9 +69,6 @@ interface AppConfig {
       numeroAtual: string;
       cscId: string;
       cscToken: string;
-      certificadoArquivo: string;
-      certificadoSenha: string;
-      certificadoValidade: string;
       logoUrl: string;
     };
   };
@@ -78,6 +79,11 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
   const [appConfig, setAppConfig] = useState<AppConfig>({
     configId: null,
     nfeConfigId: null,
+    certificadoDigital: {
+      arquivo: '',
+      senha: '',
+      validade: ''
+    },
     system: {
       theme: 'dark',
       language: 'pt-BR'
@@ -103,9 +109,6 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
         modelo: '55',
         serie: '1',
         numeroAtual: '1',
-        certificadoArquivo: '',
-        certificadoSenha: '',
-        certificadoValidade: '',
         logoUrl: ''
       },
       nfce: {
@@ -117,9 +120,6 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
         numeroAtual: '1',
         cscId: '',
         cscToken: '',
-        certificadoArquivo: '',
-        certificadoSenha: '',
-        certificadoValidade: '',
         logoUrl: ''
       }
     }
@@ -133,9 +133,26 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
       if (fiscalConfig) {
         setAppConfig(prev => ({
           ...prev,
+          certificadoDigital: {
+            arquivo: fiscalConfig.certificadoDigital?.arquivo || '',
+            senha: fiscalConfig.certificadoDigital?.senha || '',
+            validade: fiscalConfig.certificadoDigital?.validade || ''
+          },
           nfenfc: {
-            nfe: fiscalConfig.nfe,
-            nfce: fiscalConfig.nfce
+            nfe: {
+              ...fiscalConfig.nfe,
+              // Remover referências de certificado da NF-e
+              certificadoArquivo: undefined,
+              certificadoSenha: undefined,
+              certificadoValidade: undefined
+            },
+            nfce: {
+              ...fiscalConfig.nfce,
+              // Remover referências de certificado da NFC-e
+              certificadoArquivo: undefined,
+              certificadoSenha: undefined,
+              certificadoValidade: undefined
+            }
           }
         }));
       }
@@ -412,6 +429,7 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
   const saveFiscalConfig = useCallback(async () => {
     try {
       const success = await saveFiscalConfigs({
+        certificadoDigital: appConfig.certificadoDigital, // Incluir certificado compartilhado
         nfe: appConfig.nfenfc.nfe,
         nfce: appConfig.nfenfc.nfce
       });
@@ -425,12 +443,15 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
       console.error('Erro ao salvar configurações fiscais:', error);
       toast.error('Erro ao salvar configurações fiscais.');
     }
-  }, [appConfig.nfenfc]);
+  }, [appConfig.nfenfc, appConfig.certificadoDigital]);
 
   // Função principal para salvar configurações com base na aba ativa
   const handleSaveConfig = async () => {
     try {
-      if (activeTab === 'caixa') {
+      if (activeTab === 'sistema') {
+        // Salvar configurações do sistema (incluindo certificado digital)
+        await saveFiscalConfig();
+      } else if (activeTab === 'caixa') {
         await savePdvConfig();
       } else if (activeTab === 'produto') {
         await saveProductConfig();
@@ -554,7 +575,85 @@ export const SystemConfigPanel: React.FC<SystemConfigPanelProps> = ({ isOpen, on
           {activeTab === 'sistema' && (
             <div className="bg-slate-700 p-6 rounded-lg shadow-inner">
               <h3 className="text-xl font-semibold text-white mb-4">Configurações do Sistema</h3>
-              <p className="text-slate-300">Aqui serão adicionadas as configurações do sistema.</p>
+              
+              <div className="space-y-6">
+                {/* Certificado Digital */}
+                <div className="mt-6">
+                  <h4 className="text-lg font-medium text-white mb-3">Certificado Digital (A1)</h4>
+                  <p className="text-slate-400 mb-4 text-sm">Configure o certificado digital para emissão de documentos fiscais (NF-e e NFC-e)</p>
+                  
+                  <div className="bg-slate-800 p-5 rounded-md space-y-4">
+                    <div>
+                      <label className="block text-white font-medium mb-2">Arquivo do Certificado (.pfx)</label>
+                      <div className="flex">
+                        <input
+                          type="text"
+                          className="flex-1 px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-l-md focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-not-allowed"
+                          placeholder="Selecione o arquivo do certificado..."
+                          value={appConfig.certificadoDigital.arquivo}
+                          readOnly
+                        />
+                        <button
+                          type="button"
+                          className="px-4 py-2 bg-slate-600 text-white rounded-r-md hover:bg-slate-500 transition-colors"
+                          // onClick={handleSelectCertificate}
+                        >
+                          Selecionar
+                        </button>
+                      </div>
+                      <p className="text-slate-500 text-xs mt-1">Arquivo do certificado A1 no formato .pfx ou .p12</p>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-white font-medium mb-2">Senha do Certificado</label>
+                      <input
+                        type="password"
+                        className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Digite a senha do certificado"
+                        value={appConfig.certificadoDigital.senha}
+                        onChange={(e) => {
+                          setAppConfig(prev => ({
+                            ...prev,
+                            certificadoDigital: {
+                              ...prev.certificadoDigital,
+                              senha: e.target.value
+                            }
+                          }));
+                        }}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-white font-medium mb-2">Validade do Certificado</label>
+                      <input
+                        type="date"
+                        className="w-full px-3 py-2 bg-slate-700 text-white border border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={appConfig.certificadoDigital.validade}
+                        onChange={(e) => {
+                          setAppConfig(prev => ({
+                            ...prev,
+                            certificadoDigital: {
+                              ...prev.certificadoDigital,
+                              validade: e.target.value
+                            }
+                          }));
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botão de salvar */}
+                <div className="flex justify-end mt-6">
+                  <button
+                    onClick={handleSaveConfig}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md transition-colors"
+                  >
+                    <Save size={18} />
+                    Salvar Configurações
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
