@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Save, 
@@ -11,6 +11,7 @@ import {
   SendHorizontal
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { supabase } from '../lib/supabase';
 import NFEIdentificacaoTab from './NFETabs/NFEIdentificacaoTab';
 
 interface NFE {
@@ -43,6 +44,8 @@ export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave
   const [activeTab, setActiveTab] = useState<'identificacao' | 'destinatario' | 'produtos' | 'transporte' | 'pagamentos' | 'observacoes'>('identificacao');
   const [isSaving, setIsSaving] = useState(false);
   const [isEmitting, setIsEmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [reservedNumber, setReservedNumber] = useState<number | null>(null);
   const [nfeData, setNfeData] = useState<NFE>(
     nfe || {
       id: '',
@@ -54,7 +57,7 @@ export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave
       status: 'RASCUNHO',
       codigo: '',
       modelo: '55',
-      serie: '2',
+      serie: '1',
       tipo_documento: '1',
       finalidade_emissao: '1',
       presenca: '9',
@@ -63,43 +66,229 @@ export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave
     }
   );
   
-  const handleSaveNFE = () => {
+  // Função para reservar automaticamente o número da NF-e
+  const reserveNFENumber = async () => {
     try {
-      setIsSaving(true);
+      setIsLoading(true);
       
-      // Simular o salvamento para a interface de frontend
-      setTimeout(() => {
-        toast.success(`NF-e ${nfeData.id ? 'atualizada' : 'criada'} com sucesso!`);
-        onSave();
-        setIsSaving(false);
-      }, 800);
-    } catch (error: any) {
-      console.error('Erro ao salvar NF-e:', error);
-      toast.error(`Erro ao salvar: ${error.message || 'Erro desconhecido'}`);
-      setIsSaving(false);
+      // Obter usuário e empresa atual
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error('Usuário não autenticado');
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        console.error('Empresa não encontrada');
+        return;
+      }
+      
+      // Chamar a função de reserva de número
+      const { data: numero, error: rpcError } = await supabase
+        .rpc('reserve_nfe_number', {
+          p_company_id: profile.company_id,
+          p_user_id: user.id,
+          p_serie: nfeData.serie,
+          p_modelo: nfeData.modelo
+        }) as { data: number | null, error: any };
+      
+      if (rpcError) {
+        console.error('Erro ao reservar número de NF-e:', rpcError);
+        return;
+      }
+      
+      if (numero) {
+        // Gerar um código numérico aleatório de 8 dígitos conforme especificação da NF-e
+        // Este código é parte da chave de acesso (posições 36-43)
+        const min = 10000000; // 8 dígitos (começando com 1)
+        const max = 99999999; // 8 dígitos (todos 9)
+        const codigoGerado = String(Math.floor(Math.random() * (max - min + 1)) + min);
+        
+        // Atualizar o formulário com o número e código reservados
+        setNfeData(prev => ({
+          ...prev,
+          numero: numero,
+          codigo: codigoGerado
+        }));
+        
+        // Guardar o número reservado para eventual liberação
+        setReservedNumber(numero);
+        
+        console.log(`Número ${numero} e código ${codigoGerado} gerados com sucesso!`);
+      } else {
+        console.error('Nenhum número retornado da função');
+      }
+    } catch (error) {
+      console.error('Erro ao reservar número:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleEmitNFE = () => {
+  // Função para liberar o número reservado
+  const releaseNFENumber = async () => {
     try {
-      setIsEmitting(true);
+      if (!reservedNumber) return;
       
-      // Simular a emissão para a interface de frontend
-      setTimeout(() => {
-        setNfeData(prev => ({
-          ...prev,
-          status: 'AUTORIZADA',
-          status_processamento: 'EMITIDA',
-          chave_acesso: '35230607608152000136550010000010011648843271'
-        }));
-        toast.success('NF-e emitida com sucesso!');
-        setIsEmitting(false);
-      }, 2000);
-    } catch (error: any) {
-      console.error('Erro ao emitir NF-e:', error);
-      toast.error(`Erro ao emitir: ${error.message || 'Erro desconhecido'}`);
-      setIsEmitting(false);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+          
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+          
+      if (profile?.company_id) {
+        // Excluir a reserva no banco de dados
+        await supabase
+          .from('nfe_number_reservations')
+          .delete()
+          .eq('company_id', profile.company_id)
+          .eq('serie', nfeData.serie)
+          .eq('numero', reservedNumber)
+          .eq('modelo', nfeData.modelo)
+          .eq('used', false);
+            
+        console.log(`Número ${reservedNumber} liberado`);
+        setReservedNumber(null);
+      }
+    } catch (error) {
+      console.error('Erro ao liberar número:', error);
     }
+  };
+
+  // Função para marcar um número como utilizado
+  const markNFENumberAsUsed = async () => {
+    try {
+      if (!reservedNumber) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+          
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+          
+      if (profile?.company_id) {
+        // Marcar como utilizado via RPC
+        const { data, error } = await supabase
+          .rpc('mark_nfe_number_as_used', {
+            p_company_id: profile.company_id,
+            p_serie: nfeData.serie,
+            p_numero: reservedNumber,
+            p_modelo: nfeData.modelo
+          });
+          
+        if (error) {
+          console.error('Erro ao marcar número como utilizado:', error);
+        } else {
+          console.log(`Número ${reservedNumber} marcado como utilizado:`, data);
+          setReservedNumber(null); // Limpar após marcar como usado
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao marcar número como utilizado:', error);
+    }
+  };
+  
+  // Limpar reservas antigas e reservar um novo número quando o painel é aberto
+  useEffect(() => {
+    const cleanAndReserve = async () => {
+      if (isOpen && !nfe) { // Apenas para novas NF-e
+        try {
+          setIsLoading(true);
+          console.log('Iniciando reserva de número para nova NF-e...');
+          
+          // Limpar reservas antigas
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            console.log('Limpando reservas antigas...');
+            await supabase.rpc('clean_user_nfe_number_reservations', {
+              p_user_id: user.id
+            });
+            
+            // Reservar novo número
+            console.log('Reservando novo número...');
+            await reserveNFENumber();
+          }
+        } catch (error) {
+          console.error('Erro ao limpar reservas antigas:', error);
+          toast.error('Erro ao gerar número: ' + (error as any)?.message || 'Erro desconhecido');
+        } finally {
+          setIsLoading(false);
+        }
+      } else if (isOpen && nfe) {
+        console.log('Editando NF-e existente, não reservando novo número');
+      }
+    };
+    
+    if (isOpen) {
+      cleanAndReserve();
+    }
+    
+    // Liberar o número ao fechar o painel se não foi utilizado
+    return () => {
+      if (reservedNumber) {
+        console.log(`Liberando número reservado ${reservedNumber} ao fechar painel`);
+        releaseNFENumber();
+      }
+    };
+  }, [isOpen]);
+  
+  
+  const handleSaveNFE = () => {
+    setIsSaving(true);
+    
+    // Marcar o número reservado como utilizado ao salvar
+    markNFENumberAsUsed()
+      .then(() => {
+        // Simular salvamento
+        setTimeout(() => {
+          toast.success(`NF-e ${nfeData.id ? 'atualizada' : 'criada'} com sucesso!`);
+          onSave();
+          setIsSaving(false);
+        }, 800);
+      })
+      .catch((error) => {
+        console.error('Erro ao salvar NF-e:', error);
+        toast.error(`Erro ao salvar: ${error.message || 'Erro desconhecido'}`);
+        setIsSaving(false);
+      });
+  };
+
+  const handleEmitNFE = () => {
+    setIsEmitting(true);
+    
+    // Marcar o número reservado como utilizado ao emitir
+    markNFENumberAsUsed()
+      .then(() => {
+        // Simular emissão
+        setTimeout(() => {
+          setNfeData(prev => ({
+            ...prev,
+            status: 'AUTORIZADA',
+            status_processamento: 'EMITIDA',
+            chave_acesso: '35230607608152000136550010000010011648843271'
+          }));
+          toast.success('NF-e emitida com sucesso!');
+          setIsEmitting(false);
+        }, 2000);
+      })
+      .catch((error) => {
+        console.error('Erro ao emitir NF-e:', error);
+        toast.error(`Erro ao emitir: ${error.message || 'Erro desconhecido'}`);
+        setIsEmitting(false);
+      });
   };
 
   const handleIdentificacaoChange = (data: Partial<any>) => {
@@ -218,10 +407,10 @@ export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave
           {activeTab === 'identificacao' ? (
             <NFEIdentificacaoTab 
               identificacao={{
-                codigo: nfeData.codigo,
+                codigo: isLoading ? 'Gerando...' : nfeData.codigo || '',
                 modelo: nfeData.modelo,
                 serie: nfeData.serie,
-                numero: String(nfeData.numero),
+                numero: isLoading ? 'Gerando...' : String(nfeData.numero || ''),
                 data_emissao: nfeData.data_emissao,
                 tipo_documento: nfeData.tipo_documento,
                 finalidade_emissao: nfeData.finalidade_emissao,

@@ -60,7 +60,7 @@ const NFEIdentificacaoTab: React.FC<NFEIdentificacaoTabProps> = ({ identificacao
               value={identificacao.codigo}
               onChange={handleChange}
               className="w-full px-3 py-2 bg-slate-600 text-white border border-slate-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="59718245"
+              readOnly
             />
           </div>
 
@@ -75,7 +75,7 @@ const NFEIdentificacaoTab: React.FC<NFEIdentificacaoTabProps> = ({ identificacao
               value={identificacao.modelo}
               onChange={handleChange}
               className="w-full px-3 py-2 bg-slate-600 text-white border border-slate-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="55"
+              readOnly
             />
           </div>
 
@@ -90,7 +90,7 @@ const NFEIdentificacaoTab: React.FC<NFEIdentificacaoTabProps> = ({ identificacao
               value={identificacao.serie}
               onChange={handleChange}
               className="w-full px-3 py-2 bg-slate-600 text-white border border-slate-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="2"
+              readOnly
             />
           </div>
 
@@ -105,7 +105,7 @@ const NFEIdentificacaoTab: React.FC<NFEIdentificacaoTabProps> = ({ identificacao
               value={identificacao.numero}
               onChange={handleChange}
               className="w-full px-3 py-2 bg-slate-600 text-white border border-slate-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="1"
+              readOnly
             />
           </div>
         </div>
@@ -199,7 +199,6 @@ const NFEIdentificacaoTab: React.FC<NFEIdentificacaoTabProps> = ({ identificacao
             value={identificacao.natureza_operacao}
             onChange={handleChange}
             className="w-full px-3 py-2 bg-slate-600 text-white border border-slate-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="VENDA"
           />
         </div>
 
