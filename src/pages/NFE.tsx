@@ -6,8 +6,6 @@ import {
   X,
   FileText, 
   RefreshCw,
-  ChevronLeft,
-  ChevronRight,
   Printer,
   Copy,
   Edit,
@@ -30,6 +28,15 @@ interface NFE {
   destinatario_nome: string;
   status: 'RASCUNHO' | 'ENVIADA' | 'AUTORIZADA' | 'REJEITADA' | 'CANCELADA';
   itens: number;
+  // Campos de identificação
+  codigo: string;
+  modelo: string;
+  serie: string;
+  tipo_documento: string;
+  finalidade_emissao: string;
+  presenca: string;
+  natureza_operacao: string;
+  status_processamento: 'EM_DIGITACAO' | 'EMITIDA' | 'CANCELADA';
 }
 
 const statusColors = {
@@ -67,7 +74,16 @@ export default function NFE() {
       valor_total: 2850.75,
       destinatario_nome: 'Empresa ABC Ltda',
       status: 'AUTORIZADA',
-      itens: 8
+      itens: 8,
+      // Dados de identificação
+      codigo: '59718245',
+      modelo: '55',
+      serie: '2',
+      tipo_documento: '1',
+      finalidade_emissao: '1',
+      presenca: '9',
+      natureza_operacao: 'VENDA',
+      status_processamento: 'EMITIDA'
     },
     {
       id: '2',
@@ -77,7 +93,16 @@ export default function NFE() {
       valor_total: 1250.30,
       destinatario_nome: 'Comercial XYZ S/A',
       status: 'ENVIADA',
-      itens: 5
+      itens: 5,
+      // Dados de identificação
+      codigo: '59718246',
+      modelo: '55',
+      serie: '2',
+      tipo_documento: '1',
+      finalidade_emissao: '1',
+      presenca: '9',
+      natureza_operacao: 'VENDA',
+      status_processamento: 'EMITIDA'
     },
     {
       id: '3',
@@ -87,7 +112,16 @@ export default function NFE() {
       valor_total: 750.00,
       destinatario_nome: 'João Silva ME',
       status: 'RASCUNHO',
-      itens: 3
+      itens: 3,
+      // Dados de identificação
+      codigo: '59718247',
+      modelo: '55',
+      serie: '2',
+      tipo_documento: '1',
+      finalidade_emissao: '1',
+      presenca: '9',
+      natureza_operacao: 'VENDA',
+      status_processamento: 'EM_DIGITACAO'
     },
     {
       id: '4',
@@ -97,7 +131,16 @@ export default function NFE() {
       valor_total: 4250.90,
       destinatario_nome: 'Distribuidora A&B Ltda',
       status: 'REJEITADA',
-      itens: 12
+      itens: 12,
+      // Dados de identificação
+      codigo: '59718248',
+      modelo: '55',
+      serie: '2',
+      tipo_documento: '1',
+      finalidade_emissao: '1',
+      presenca: '9',
+      natureza_operacao: 'VENDA',
+      status_processamento: 'CANCELADA'
     },
     {
       id: '5',
@@ -107,7 +150,16 @@ export default function NFE() {
       valor_total: 3120.50,
       destinatario_nome: 'Supermercado Central',
       status: 'CANCELADA',
-      itens: 6
+      itens: 6,
+      // Dados de identificação
+      codigo: '59718249',
+      modelo: '55',
+      serie: '2',
+      tipo_documento: '1',
+      finalidade_emissao: '1',
+      presenca: '9',
+      natureza_operacao: 'VENDA',
+      status_processamento: 'CANCELADA'
     },
   ];
 
@@ -193,14 +245,26 @@ export default function NFE() {
   // Função para tratar quando uma NF-e é editada
   const handleEditNFE = (nfe: NFE) => {
     setSelectedNFE(nfe);
-    setShowNFEPanel(true);
+    // Pequeno atraso para evitar problemas de foco
+    setTimeout(() => {
+      setShowNFEPanel(true);
+    }, 100);
+  };
+
+  // Função para criar uma nova NF-e
+  const handleNewNFE = () => {
+    setSelectedNFE(null);
+    // Pequeno atraso para evitar problemas de foco
+    setTimeout(() => {
+      setShowNFEPanel(true);
+    }, 100);
   };
 
   // Função para tratar quando uma NF-e é salva no painel
   const handleNFESaved = () => {
-    toast.success('NF-e salva com sucesso!');
     setShowNFEPanel(false);
-    handleRefresh();
+    toast.success('NF-e salva com sucesso!');
+    // Atualizaríamos a lista de NF-e aqui em um ambiente real
   };
 
 
@@ -262,14 +326,11 @@ export default function NFE() {
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => {
-                    setSelectedNFE(null); // Nova NF-e, sem dados pré-existentes
-                    setShowNFEPanel(true);
-                  }}
-                  className="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-md text-sm transition-colors"
+                  onClick={handleNewNFE}
+                  className="flex items-center gap-2 font-medium text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
                 >
-                  <Plus size={16} />
-                  <span>Nova NF-e</span>
+                  <Plus size={18} />
+                  Nova NF-e
                 </button>
               </div>
             </div>
@@ -455,18 +516,7 @@ export default function NFE() {
                     Mostrando {filteredNFEs.length} de {filteredNFEs.length} resultados
                   </span>
                   <div className="flex items-center gap-2">
-                    <button
-                      disabled
-                      className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
-                    >
-                      <ChevronLeft size={20} />
-                    </button>
-                    <button
-                      disabled
-                      className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
-                    >
-                      <ChevronRight size={20} />
-                    </button>
+                    <span className="text-sm">Página 1 de 1</span>
                   </div>
                 </div>
               </div>

@@ -6,9 +6,12 @@ import {
   ShoppingCart, 
   CreditCard, 
   Info,
-  User
+  User,
+  FileText,
+  SendHorizontal
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import NFEIdentificacaoTab from './NFETabs/NFEIdentificacaoTab';
 
 interface NFE {
   id: string;
@@ -18,6 +21,15 @@ interface NFE {
   valor_total: number;
   destinatario_nome: string;
   status: 'RASCUNHO' | 'ENVIADA' | 'AUTORIZADA' | 'REJEITADA' | 'CANCELADA';
+  // Campos de identificação
+  codigo: string;
+  modelo: string;
+  serie: string;
+  tipo_documento: string;
+  finalidade_emissao: string;
+  presenca: string;
+  natureza_operacao: string;
+  status_processamento: 'EM_DIGITACAO' | 'EMITIDA' | 'CANCELADA';
 }
 
 interface NFEPanelProps {
@@ -28,8 +40,28 @@ interface NFEPanelProps {
 }
 
 export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave }) => {
-  const [activeTab, setActiveTab] = useState<'destinatario' | 'produtos' | 'transporte' | 'pagamentos' | 'observacoes'>('destinatario');
+  const [activeTab, setActiveTab] = useState<'identificacao' | 'destinatario' | 'produtos' | 'transporte' | 'pagamentos' | 'observacoes'>('identificacao');
   const [isSaving, setIsSaving] = useState(false);
+  const [isEmitting, setIsEmitting] = useState(false);
+  const [nfeData, setNfeData] = useState<NFE>(
+    nfe || {
+      id: '',
+      numero: 0,
+      chave_acesso: '',
+      data_emissao: new Date().toISOString(),
+      valor_total: 0,
+      destinatario_nome: '',
+      status: 'RASCUNHO',
+      codigo: '',
+      modelo: '55',
+      serie: '2',
+      tipo_documento: '1',
+      finalidade_emissao: '1',
+      presenca: '9',
+      natureza_operacao: 'VENDA',
+      status_processamento: 'EM_DIGITACAO'
+    }
+  );
   
   const handleSaveNFE = () => {
     try {
@@ -37,9 +69,8 @@ export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave
       
       // Simular o salvamento para a interface de frontend
       setTimeout(() => {
-        toast.success(`NF-e ${nfe?.id ? 'atualizada' : 'criada'} com sucesso!`);
+        toast.success(`NF-e ${nfeData.id ? 'atualizada' : 'criada'} com sucesso!`);
         onSave();
-        onClose();
         setIsSaving(false);
       }, 800);
     } catch (error: any) {
@@ -47,6 +78,35 @@ export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave
       toast.error(`Erro ao salvar: ${error.message || 'Erro desconhecido'}`);
       setIsSaving(false);
     }
+  };
+
+  const handleEmitNFE = () => {
+    try {
+      setIsEmitting(true);
+      
+      // Simular a emissão para a interface de frontend
+      setTimeout(() => {
+        setNfeData(prev => ({
+          ...prev,
+          status: 'AUTORIZADA',
+          status_processamento: 'EMITIDA',
+          chave_acesso: '35230607608152000136550010000010011648843271'
+        }));
+        toast.success('NF-e emitida com sucesso!');
+        setIsEmitting(false);
+      }, 2000);
+    } catch (error: any) {
+      console.error('Erro ao emitir NF-e:', error);
+      toast.error(`Erro ao emitir: ${error.message || 'Erro desconhecido'}`);
+      setIsEmitting(false);
+    }
+  };
+
+  const handleIdentificacaoChange = (data: Partial<any>) => {
+    setNfeData(prev => ({
+      ...prev,
+      ...data
+    }));
   };
 
   // Painel simplificado - sem funções de atualização de dados
@@ -57,10 +117,9 @@ export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center ${isOpen ? 'visible' : 'invisible'}`}
     >
-      {/* Overlay */}
+      {/* Overlay - sem fechar ao clicar */}
       <div
         className={`absolute inset-0 bg-black/50 transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0'}`}
-        onClick={onClose}
       />
 
       {/* Panel */}
@@ -86,6 +145,17 @@ export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave
 
         {/* Tabs */}
         <div className="flex border-b border-slate-700 overflow-x-auto">
+          <button
+            className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'identificacao'
+                ? 'text-white border-b-2 border-blue-500'
+                : 'text-slate-300 hover:text-white'
+            }`}
+            onClick={() => setActiveTab('identificacao')}
+          >
+            <FileText size={18} />
+            Identificação
+          </button>
           <button
             className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'destinatario'
@@ -143,39 +213,66 @@ export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave
           </button>
         </div>
         
-        {/* Tab Content - Versão simplificada */}
+        {/* Tab Content */}
         <div className="flex-1 overflow-auto p-6">
-          <div className="bg-slate-700 p-6 rounded-lg text-white">
-            <h3 className="text-xl font-bold mb-4">
-              {activeTab === 'destinatario' && 'Informações do Destinatário'}
-              {activeTab === 'produtos' && 'Produtos da NF-e'}
-              {activeTab === 'transporte' && 'Dados de Transporte'}
-              {activeTab === 'pagamentos' && 'Formas de Pagamento'}
-              {activeTab === 'observacoes' && 'Observações da NF-e'}
-            </h3>
-            
-            <p className="text-slate-300 mb-4">
-              Esta é uma implementação preliminar do componente de NF-e. Os conteúdos detalhados das abas estão nos componentes individuais da pasta NFETabs/.  
-            </p>
+          {activeTab === 'identificacao' ? (
+            <NFEIdentificacaoTab 
+              identificacao={{
+                codigo: nfeData.codigo,
+                modelo: nfeData.modelo,
+                serie: nfeData.serie,
+                numero: String(nfeData.numero),
+                data_emissao: nfeData.data_emissao,
+                tipo_documento: nfeData.tipo_documento,
+                finalidade_emissao: nfeData.finalidade_emissao,
+                presenca: nfeData.presenca,
+                natureza_operacao: nfeData.natureza_operacao,
+                status: nfeData.status_processamento
+              }}
+              onChange={handleIdentificacaoChange}
+            />
+          ) : (
+            <div className="bg-slate-700 p-6 rounded-lg text-white">
+              <h3 className="text-xl font-bold mb-4">
+                {activeTab === 'destinatario' && 'Informações do Destinatário'}
+                {activeTab === 'produtos' && 'Produtos da NF-e'}
+                {activeTab === 'transporte' && 'Dados de Transporte'}
+                {activeTab === 'pagamentos' && 'Formas de Pagamento'}
+                {activeTab === 'observacoes' && 'Observações da NF-e'}
+              </h3>
+              
+              <p className="text-slate-300 mb-4">
+                Esta é uma implementação preliminar do componente de NF-e. Os conteúdos detalhados das abas estão nos componentes individuais da pasta NFETabs/.  
+              </p>
 
-            <div className="bg-slate-600 p-4 rounded-md flex items-center justify-center">
-              <p className="text-white font-medium">Conteúdo da aba {activeTab} será exibido aqui</p>
+              <div className="bg-slate-600 p-4 rounded-md flex items-center justify-center">
+                <p className="text-white font-medium">Conteúdo da aba {activeTab} será exibido aqui</p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
         
         {/* Footer com botões de ação */}
         <div className="border-t border-slate-600 p-4">
-          <div className="flex justify-between">
-            <div>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center">
+              <span className={`
+                px-3 py-1 rounded-full text-sm font-medium
+                ${nfeData.status_processamento === 'EM_DIGITACAO' ? 'bg-yellow-400/20 text-yellow-400' : 
+                  nfeData.status_processamento === 'EMITIDA' ? 'bg-green-400/20 text-green-400' : 
+                  'bg-red-400/20 text-red-400'}
+              `}>
+                {nfeData.status_processamento === 'EM_DIGITACAO' ? 'Em Digitação' : 
+                 nfeData.status_processamento === 'EMITIDA' ? 'Emitida' : 'Cancelada'}
+              </span>
+            </div>
+            <div className="flex gap-2">
               <button
                 onClick={onClose}
                 className="px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-700 rounded-md transition-colors"
               >
                 Cancelar
               </button>
-            </div>
-            <div className="flex gap-2">
               <button
                 onClick={handleSaveNFE}
                 disabled={isSaving}
@@ -190,6 +287,23 @@ export const NFEPanel: React.FC<NFEPanelProps> = ({ isOpen, onClose, nfe, onSave
                   <>
                     <Save size={18} />
                     <span>Salvar</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleEmitNFE}
+                disabled={isEmitting || nfeData.status_processamento !== 'EM_DIGITACAO'}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isEmitting ? (
+                  <>
+                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    <span>Emitindo...</span>
+                  </>
+                ) : (
+                  <>
+                    <SendHorizontal size={18} />
+                    <span>Emitir NFE</span>
                   </>
                 )}
               </button>
