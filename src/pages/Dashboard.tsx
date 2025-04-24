@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../App';
-import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Users, FileBarChart2, Moon, Sun, Bug, Maximize2, Minimize2, RefreshCw, AlertTriangle, Lock } from 'lucide-react';
+import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Users, FileBarChart2, Moon, Sun, Bug, Maximize2, Minimize2, RefreshCw, AlertTriangle, Lock, Tag } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import GridLayout from 'react-grid-layout';
@@ -142,6 +142,7 @@ function Dashboard() {
     { i: 'produtos-app', x: 0, y: 0, w: 1, h: 1, type: 'app', icon: <Package className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Produtos.app', parent: 'produtos' },
     { i: 'grupo-app', x: 1, y: 0, w: 1, h: 1, type: 'app', icon: <Grid2X2 className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Grupos.app', parent: 'produtos' },
     { i: 'unidade-app', x: 2, y: 0, w: 1, h: 1, type: 'app', icon: <Ruler className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Unidades.app', parent: 'produtos' },
+    { i: 'marca-app', x: 3, y: 0, w: 1, h: 1, type: 'app', icon: <Tag className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Marcas.app', parent: 'produtos' },
     // Clientes folder items
     { i: 'clientes-app', x: 0, y: 0, w: 1, h: 1, type: 'app', icon: <Users className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Clientes.app', parent: 'clientes' },
     { i: 'clientes-relatorios', x: 1, y: 0, w: 1, h: 1, type: 'app', icon: <FileBarChart2 className="text-blue-400 group-hover:text-blue-300" strokeWidth={1.5} size={40} />, title: 'Relatórios.app', parent: 'clientes' },
@@ -331,16 +332,19 @@ function Dashboard() {
             navigate('/orcamento');
             break;
           case 'produtos-app':
-            navigate('/produtos');
+            navigate('/produtos', { state: { from: 'produtos-folder' } });
             break;
           case 'unidade-app':
-            navigate('/unidade');
+            navigate('/unidade', { state: { from: 'produtos-folder' } });
             break;
           case 'grupo-app':
-            navigate('/grupo');
+            navigate('/grupo', { state: { from: 'produtos-folder' } });
+            break;
+          case 'marca-app':
+            navigate('/marca', { state: { from: 'produtos-folder' } });
             break;
           case 'clientes-app':
-            navigate('/clientes');
+            navigate('/clientes', { state: { from: 'clientes-folder' } });
             break;
           case 'nfe-app':
             navigate('/nfe');
@@ -462,7 +466,7 @@ function Dashboard() {
                         onClick={() => alert('Alterar senha - Em desenvolvimento')}
                         className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 transition-colors"
                       >
-                        <Lock size={16} />
+                        <Key size={16} />
                         <span>Alterar senha</span>
                       </button>
                     </li>
