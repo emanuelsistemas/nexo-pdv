@@ -29,7 +29,7 @@ interface ProductSlidePanelProps {
     cfop: string;
     status: 'active' | 'inactive';
   } | null;
-  initialTab?: 'produto' | 'estoque' | 'impostos';
+  initialTab?: 'produto' | 'estoque' | 'impostos' | 'fotos';
 }
 
 interface ProductFormData {
@@ -77,7 +77,7 @@ interface ProductImage {
 }
 
 export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab = 'produto' }: ProductSlidePanelProps) {
-  const [activeTab, setActiveTab] = useState<'produto' | 'estoque' | 'impostos'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'produto' | 'estoque' | 'impostos' | 'fotos'>(initialTab);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<ProductFormData>({
     code: '',
@@ -106,6 +106,9 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [tempImages, setTempImages] = useState<File[]>([]);
+  const [tempImagePreviews, setTempImagePreviews] = useState<string[]>([]);
+  const [primaryTempImageIndex, setPrimaryTempImageIndex] = useState<number | null>(null);
   const [reservedCode, setReservedCode] = useState<string | null>(null); // Para rastrear o código reservado
   const [reservedBarcode, setReservedBarcode] = useState<string | null>(null); // Para rastrear o código de barras reservado
   const [defaultsApplied, setDefaultsApplied] = useState(false); // Para rastrear se os valores padrão já foram aplicados
@@ -522,6 +525,12 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       status: 'active'
     });
     setProductImages([]);
+    // Limpar imagens temporárias
+    tempImagePreviews.forEach(url => URL.revokeObjectURL(url));
+    setTempImages([]);
+    setTempImagePreviews([]);
+    setPrimaryTempImageIndex(null);
+    setActiveTab('produto');
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -783,10 +792,9 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    try {
-      setLoading(true);
+    setLoading(true);
 
+    try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
@@ -858,7 +866,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         }
 
         // Criar novo produto
-        const { data: newProduct, error: insertError } = await supabase
+        const { data, error: insertError } = await supabase
           .from('products')
           .insert(productData)
           .select()
@@ -869,12 +877,65 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         }
 
         toast.success('Produto cadastrado com sucesso!');
+      
+        // Se tiver imagens temporárias, fazer upload após salvar o produto
+        if (tempImages.length > 0 && data?.id) {
+          try {
+            // Fazer upload de cada imagem temporária
+            for (let i = 0; i < tempImages.length; i++) {
+              const file = tempImages[i];
+              const isPrimary = primaryTempImageIndex === i;
+              
+              // Gerar nome único para o arquivo
+              const fileExt = file.name.split('.').pop();
+              const fileName = `${data.id}_${Date.now()}_${i}.${fileExt}`;
+              const filePath = `product-images/${fileName}`;
+              
+              // Fazer upload para o storage do Supabase
+              const { error: uploadError } = await supabase.storage
+                .from('products')
+                .upload(filePath, file);
+              
+              if (uploadError) throw uploadError;
+              
+              // Obter URL pública da imagem
+              const { data: urlData } = supabase.storage
+                .from('products')
+                .getPublicUrl(filePath);
+              
+              if (!urlData || !urlData.publicUrl) {
+                throw new Error('Erro ao obter URL da imagem');
+              }
+              
+              // Salvar referência no banco de dados
+              const { error: dbError } = await supabase
+                .from('product_images')
+                .insert({
+                  product_id: data.id,
+                  url: urlData.publicUrl,
+                  is_primary: isPrimary
+                });
+              
+              if (dbError) throw dbError;
+            }
+            
+            // Limpar previews e liberar memória
+            tempImagePreviews.forEach(url => URL.revokeObjectURL(url));
+            setTempImages([]);
+            setTempImagePreviews([]);
+            setPrimaryTempImageIndex(null);
+            
+          } catch (error: any) {
+            console.error('Erro ao fazer upload das imagens:', error);
+            toast.error('Erro ao salvar imagens: ' + (error.message || 'Erro desconhecido'));
+          }
+        }
       }
-
-      resetForm();
-      setReservedCode(null); // Limpar o código reservado, pois foi utilizado com sucesso
-      setReservedBarcode(null); // Limpar o código de barras reservado
+      
       onClose();
+      resetForm(); // Limpar formulário após salvar com sucesso
+      setReservedCode(null); // Limpar o código reservado
+      setReservedBarcode(null); // Limpar o código de barras reservado
     } catch (error: any) {
       console.error('Erro ao salvar produto:', error);
       toast.error(error.message || 'Erro ao salvar produto');
@@ -1176,6 +1237,16 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
               onClick={() => setActiveTab('impostos')}
             >
               Impostos
+            </button>
+            <button
+              className={`px-6 py-3 text-sm font-medium transition-colors ${
+                activeTab === 'fotos' 
+                  ? 'text-white border-b-2 border-blue-500'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              onClick={() => setActiveTab('fotos')}
+            >
+              Fotos
             </button>
 
           </div>
@@ -1558,6 +1629,155 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                 </div>
               )}
 
+              {activeTab === 'fotos' && (
+                <div className="p-6 space-y-8">
+                  <div>
+                    <h3 className="text-lg font-medium text-slate-200 mb-4">Fotos do Produto</h3>
+                    <p className="text-sm text-slate-400 mb-4">
+                      Adicione até 6 fotos do produto. As fotos serão salvas quando o produto for cadastrado.
+                    </p>
+                    
+                    {/* Área de upload de imagens */}
+                    <div className="flex flex-col items-center justify-center w-full p-6 border-2 border-dashed border-slate-600 rounded-lg hover:border-blue-500 transition-colors mb-6">
+                      <ImageIcon size={48} className="text-slate-500 mb-4" />
+                      <p className="text-slate-400 text-sm mb-2">
+                        Arraste e solte imagens ou clique para selecionar
+                      </p>
+                      <p className="text-xs text-slate-500 mb-4">
+                        PNG, JPG ou JPEG (máx. 2MB)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (tempImages.length >= 6) {
+                            toast.error('Limite máximo de 6 imagens atingido');
+                            return;
+                          }
+                          if (fileInputRef.current) fileInputRef.current.click();
+                        }}
+                        disabled={uploadingImage || tempImages.length >= 6}
+                        className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {uploadingImage ? (
+                          <>
+                            <Loader2 size={18} className="animate-spin" />
+                            <span>Carregando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={18} />
+                            <span>Selecionar Imagem</span>
+                          </>
+                        )}
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={(e) => {
+                          const files = e.target.files;
+                          if (!files || files.length === 0) return;
+                          
+                          const file = files[0];
+                          
+                          // Verificar tamanho (máx 2MB)
+                          if (file.size > 2 * 1024 * 1024) {
+                            toast.error('A imagem deve ter no máximo 2MB');
+                            return;
+                          }
+                          
+                          // Verificar tipo
+                          if (!file.type.startsWith('image/')) {
+                            toast.error('O arquivo deve ser uma imagem');
+                            return;
+                          }
+                          
+                          // Atualizar lista de imagens temporárias
+                          setTempImages(prev => [...prev, file]);
+                          
+                          // Criar URL para preview
+                          const previewUrl = URL.createObjectURL(file);
+                          setTempImagePreviews(prev => [...prev, previewUrl]);
+                          
+                          // Se for a primeira imagem, definir como principal
+                          if (tempImages.length === 0 && primaryTempImageIndex === null) {
+                            setPrimaryTempImageIndex(0);
+                          }
+                          
+                          // Limpar input
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = '';
+                          }
+                        }}
+                        accept="image/png, image/jpeg, image/jpg"
+                        className="hidden"
+                      />
+                    </div>
+                    
+                    {/* Grid de previews de imagens */}
+                    {tempImagePreviews.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        {tempImagePreviews.map((url, index) => (
+                          <div 
+                            key={index} 
+                            className={`relative group rounded-lg overflow-hidden border-2 ${
+                              primaryTempImageIndex === index ? 'border-yellow-500' : 'border-slate-700'
+                            }`}
+                          >
+                            <img 
+                              src={url} 
+                              alt={`Preview ${index + 1}`}
+                              className="w-full h-40 object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-60 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setPrimaryTempImageIndex(index)}
+                                  className="p-2 bg-yellow-500 rounded-full hover:bg-yellow-400 transition-colors"
+                                  title="Definir como imagem principal"
+                                >
+                                  <Star size={16} className="text-white" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    // Remover imagem da lista
+                                    const newTempImages = [...tempImages];
+                                    newTempImages.splice(index, 1);
+                                    setTempImages(newTempImages);
+                                    
+                                    // Remover preview
+                                    const newPreviews = [...tempImagePreviews];
+                                    URL.revokeObjectURL(newPreviews[index]); // Liberar memória
+                                    newPreviews.splice(index, 1);
+                                    setTempImagePreviews(newPreviews);
+                                    
+                                    // Ajustar índice da imagem principal se necessário
+                                    if (primaryTempImageIndex === index) {
+                                      setPrimaryTempImageIndex(newPreviews.length > 0 ? 0 : null);
+                                    } else if (primaryTempImageIndex !== null && primaryTempImageIndex > index) {
+                                      setPrimaryTempImageIndex(primaryTempImageIndex - 1);
+                                    }
+                                  }}
+                                  className="p-2 bg-red-600 rounded-full hover:bg-red-500 transition-colors"
+                                  title="Remover imagem"
+                                >
+                                  <Trash2 size={16} className="text-white" />
+                                </button>
+                              </div>
+                            </div>
+                            {primaryTempImageIndex === index && (
+                              <div className="absolute top-2 right-2 bg-yellow-500 rounded-full p-1" title="Imagem principal">
+                                <Star size={14} className="text-white" />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
             </form>
           </div>
