@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Loader2, ArrowUpDown, PlusCircle, MinusCircle, Image as ImageIcon, Upload, Trash2, Star } from 'lucide-react';
+import { X, Loader2, ArrowUpDown, PlusCircle, MinusCircle, Image as ImageIcon, Upload, Trash2, Star, Package, Receipt } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 import { StockMovementModal } from './StockMovementModal';
@@ -1206,13 +1206,14 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
 
           <div className="flex border-b border-slate-700">
             <button
-              className={`px-6 py-3 text-sm font-medium transition-colors ${
+              className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 ${
                 activeTab === 'produto' 
                   ? 'text-white border-b-2 border-blue-500'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
               onClick={() => setActiveTab('produto')}
             >
+              <Package size={16} />
               Produto
             </button>
             {/* Aba de estoque só aparece quando estiver editando um produto existente */}
@@ -1229,23 +1230,25 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
               </button>
             )}
             <button
-              className={`px-6 py-3 text-sm font-medium transition-colors ${
+              className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 ${
                 activeTab === 'impostos' 
                   ? 'text-white border-b-2 border-blue-500'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
               onClick={() => setActiveTab('impostos')}
             >
+              <Receipt size={16} />
               Impostos
             </button>
             <button
-              className={`px-6 py-3 text-sm font-medium transition-colors ${
+              className={`px-6 py-3 text-sm font-medium transition-colors flex items-center gap-2 ${
                 activeTab === 'fotos' 
                   ? 'text-white border-b-2 border-blue-500'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
               onClick={() => setActiveTab('fotos')}
             >
+              <ImageIcon size={16} />
               Fotos
             </button>
 
