@@ -18,6 +18,8 @@ interface ProductSlidePanelProps {
     unit_name?: string;
     group_id: string | null;
     group_name?: string;
+    brand_id: string | null;
+    brand_name?: string;
     cost_price: number;
     profit_margin: number;
     selling_price: number;
@@ -38,6 +40,7 @@ interface ProductFormData {
   barcode: string;
   unit_id: string;
   group_id: string;
+  brand_id: string;
   cost_price: string;
   profit_margin: string;
   selling_price: string;
@@ -57,6 +60,11 @@ interface ProductUnit {
 }
 
 interface ProductGroup {
+  id: string;
+  name: string;
+}
+
+interface ProductBrand {
   id: string;
   name: string;
 }
@@ -85,6 +93,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     barcode: '',
     unit_id: '',
     group_id: '',
+    brand_id: '',
     cost_price: '',
     profit_margin: '',
     selling_price: '',
@@ -101,6 +110,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   const [showCfopDropdown, setShowCfopDropdown] = useState(false);
   const [units, setUnits] = useState<ProductUnit[]>([]);
   const [groups, setGroups] = useState<ProductGroup[]>([]);
+  const [brands, setBrands] = useState<ProductBrand[]>([]);
   const [showStockMovementModal, setShowStockMovementModal] = useState(false);
   const [movementType, setMovementType] = useState<'entrada' | 'saida'>('entrada');
   const [productImages, setProductImages] = useState<ProductImage[]>([]);
@@ -241,8 +251,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
           // Limpar reservas antigas do usuário atual
           await cleanUserReservations();
           
-          // Carregar unidades e grupos em paralelo
-          await Promise.all([loadUnits(), loadGroups(), loadCFOPOptions()]);
+          // Carregar unidades, grupos, marcas e opções CFOP em paralelo
+          await Promise.all([loadUnits(), loadGroups(), loadBrands(), loadCFOPOptions()]);
 
           if (productToEdit) {
             setFormData({
@@ -251,6 +261,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
               barcode: productToEdit.barcode || '',
               unit_id: productToEdit.unit_id,
               group_id: productToEdit.group_id || '',
+              brand_id: productToEdit.brand_id || '',
               cost_price: productToEdit.cost_price.toString().replace('.', ','),
               profit_margin: productToEdit.profit_margin.toString().replace('.', ','),
               selling_price: productToEdit.selling_price.toString().replace('.', ','),
@@ -485,6 +496,112 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       setLoading(false);
     }
   };
+  
+  const loadBrands = async () => {
+    try {
+      setLoading(true);
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+      
+      // Verificar se a tabela product_brands existe
+      let brandsExist = true;
+      try {
+        const { error } = await supabase
+          .from('product_brands')
+          .select('*', { head: true });
+          
+        if (error) {
+          console.warn('Tabela de marcas pode não existir:', error.message);
+          brandsExist = false;
+        }
+      } catch (e) {
+        console.warn('Erro ao verificar tabela de marcas');
+        brandsExist = false;
+      }
+      
+      // Se a tabela não existir, usamos marcas locais
+      if (!brandsExist) {
+        const defaultBrands = [
+          { id: 'generic', name: 'Genérica' },
+          { id: 'no-brand', name: 'Sem Marca' }
+        ];
+        setBrands(defaultBrands);
+        return;
+      }
+      
+      // Se a tabela existir, carregamos as marcas
+      const { data: brandsData, error: brandsError } = await supabase
+        .from('product_brands')
+        .select('id, name')
+        .eq('company_id', profile.company_id)
+        .order('name', { ascending: true });
+        
+      if (brandsError) {
+        throw brandsError;
+      }
+      
+      // Se não existirem marcas, criar marcas padrão
+      if (!brandsData || brandsData.length === 0) {
+        const defaultBrands = [
+          { name: 'Genérica', company_id: profile.company_id },
+          { name: 'Sem Marca', company_id: profile.company_id }
+        ];
+        
+        const { data: insertedData, error: insertError } = await supabase
+          .from('product_brands')
+          .insert(defaultBrands)
+          .select();
+          
+        if (insertError) {
+          console.error('Erro ao criar marcas padrão:', insertError.message);
+          // Usar marcas locais como fallback
+          setBrands([
+            { id: 'generic', name: 'Genérica' },
+            { id: 'no-brand', name: 'Sem Marca' }
+          ]);
+        } else {
+          // Garantir o tipo correto dos dados
+          const typedBrands = (insertedData || []).map(brand => ({
+            id: brand.id as string,
+            name: brand.name as string
+          })) as ProductBrand[];
+          setBrands(typedBrands);
+          console.log('Marcas padrão criadas:', typedBrands);
+        }
+        return;
+      }
+      
+      // Processar marcas existentes
+      const typedBrands = (brandsData || []).map(brand => ({
+        id: brand.id as string,
+        name: brand.name as string
+      })) as ProductBrand[];
+      setBrands(typedBrands);
+      console.log('Marcas carregadas:', typedBrands);
+    } catch (error: any) {
+      console.error('Erro ao carregar marcas:', error.message);
+      // Usar marcas locais como fallback em caso de erro
+      setBrands([
+        { id: 'generic', name: 'Genérica' },
+        { id: 'no-brand', name: 'Sem Marca' }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadCFOPOptions = async () => {
     try {
@@ -513,6 +630,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       barcode: '',
       unit_id: '',
       group_id: '',
+      brand_id: '',
       cost_price: '',
       profit_margin: '',
       selling_price: '',
@@ -824,6 +942,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         name: formData.name,
         unit_id: formData.unit_id,
         group_id: formData.group_id || null,
+        brand_id: formData.brand_id || null,
         cost_price: parseFloat(cost_price),
         profit_margin: parseFloat(profit_margin),
         selling_price: parseFloat(selling_price),
@@ -1344,6 +1463,43 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                       </select>
                     </div>
                   </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-1">
+                        Marca
+                      </label>
+                      <select
+                        name="brand_id"
+                        value={formData.brand_id}
+                        onChange={handleChange}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Selecione uma marca</option>
+                        {brands.map(brand => (
+                          <option key={brand.id} value={brand.id}>
+                            {brand.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    {/* Campo de estoque inicial - só aparece em novos produtos */}
+                    {!productToEdit ? (
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">
+                          Estoque Inicial
+                        </label>
+                        <input
+                          type="text"
+                          name="stock"
+                          value={formData.stock}
+                          onChange={handleChange}
+                          className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                    ) : <div></div>}
+                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
@@ -1392,21 +1548,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                     </div>
                   </div>
                   
-                  {/* Campo de estoque inicial - só aparece em novos produtos */}
-                  {!productToEdit && (
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        Estoque Inicial
-                      </label>
-                      <input
-                        type="text"
-                        name="stock"
-                        value={formData.stock}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                  )}
+
 
                   <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">
