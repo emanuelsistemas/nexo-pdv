@@ -516,11 +516,11 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         throw new Error('Empresa não encontrada');
       }
       
-      // Verificar se a tabela product_brands existe
+      // Verificar se a tabela product_marca existe
       let brandsExist = true;
       try {
         const { error } = await supabase
-          .from('product_brands')
+          .from('product_marca')
           .select('*', { head: true });
           
         if (error) {
@@ -544,7 +544,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       
       // Se a tabela existir, carregamos as marcas
       const { data: brandsData, error: brandsError } = await supabase
-        .from('product_brands')
+        .from('product_marca')
         .select('id, name')
         .eq('company_id', profile.company_id)
         .order('name', { ascending: true });
@@ -561,7 +561,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         ];
         
         const { data: insertedData, error: insertError } = await supabase
-          .from('product_brands')
+          .from('product_marca')
           .insert(defaultBrands)
           .select();
           
