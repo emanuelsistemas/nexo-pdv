@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../App';
-import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Users, FileBarChart2, Moon, Sun, Bug, Maximize2, Minimize2, RefreshCw, AlertTriangle, Lock, Tag } from 'lucide-react';
+import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Users, FileBarChart2, Moon, Sun, Bug, Maximize2, Minimize2, AlertTriangle, Tag } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import GridLayout from 'react-grid-layout';
@@ -41,7 +41,7 @@ function Dashboard() {
   const [currentPath, setCurrentPath] = useState<string[]>([]);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragEnabled, setDragEnabled] = useState(false);
+  const [dragEnabled, setDragEnabled] = useState(false); // TODO: setDragEnabled não é usado
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [showCompanyPanel, setShowCompanyPanel] = useState(false);
   const [companyRegistrationStatus, setCompanyRegistrationStatus] = useState<'N' | 'S'>('N');
@@ -54,7 +54,7 @@ function Dashboard() {
   });
   const [showLogoutOverlay, setShowLogoutOverlay] = useState(false);
   const [showSystemConfigPanel, setShowSystemConfigPanel] = useState(false);
-  const [companyStatus, setCompanyStatus] = useState<CompanyStatus | null>(null);
+  const [companyStatus, setCompanyStatus] = useState<CompanyStatus | null>(null); // TODO: companyStatus não é lido
   const [showStatusAlert, setShowStatusAlert] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const logoutConfirmRef = useRef<HTMLDivElement>(null);
@@ -103,7 +103,7 @@ function Dashboard() {
           .single();
 
         if (company) {
-          setCompanyStatus({ status: company.status });
+          setCompanyStatus({ status: company.status as CompanyStatus['status'] });
           
           if (company.status === 'defaulter') {
             setShowStatusAlert(true);
@@ -175,7 +175,7 @@ function Dashboard() {
         if (profileError) throw profileError;
 
         if (profile) {
-          setUserName(profile.name);
+          setUserName(profile.name as string);
           setCompanyRegistrationStatus(profile.status_cad_empresa as 'N' | 'S');
 
           // Se o usuário já tem uma empresa vinculada
@@ -189,7 +189,7 @@ function Dashboard() {
             if (companyError) throw companyError;
 
             if (company) {
-              setCompanyName(company.trade_name);
+              setCompanyName(company.trade_name as string);
             }
           } else if (profile.status_cad_empresa === 'N') {
             // Se não tem empresa, mas deveria ter
@@ -388,7 +388,37 @@ function Dashboard() {
       toast.error('Erro ao fazer logout');
     });
   };
-  
+
+  useEffect(() => {
+    if (location.state?.openFolder) {
+      const folderToOpen = location.state.openFolder;
+
+      // Verifica se a pasta existe no layout principal
+      const folderExists = layout.some(item => item.i === folderToOpen && item.type === 'folder');
+
+      if (folderExists && currentFolder !== folderToOpen) {
+        console.log(`Dashboard: Abrindo pasta '${folderToOpen}' via location.state.`);
+        // Define a pasta atual
+        setCurrentFolder(folderToOpen);
+        // Define o caminho (assumindo que a pasta está na raiz por enquanto)
+        // Para pastas aninhadas, seria necessário reconstruir o caminho completo.
+        setCurrentPath([folderToOpen]);
+        // Filtra o layout para mostrar apenas os itens da pasta
+        setDisplayedLayout(layout.filter(item => item.parent === folderToOpen));
+
+        // Limpa o state da location para evitar reabertura em navegações futuras
+        navigate('.', { replace: true, state: null });
+      } else if (currentFolder === folderToOpen) {
+        // Já está na pasta correta, apenas limpa o state
+        navigate('.', { replace: true, state: null });
+      } else {
+        console.warn(`Dashboard: Pasta ID '${folderToOpen}' do location.state não encontrada ou inválida.`);
+        // Limpa state inválido
+        navigate('.', { replace: true, state: null });
+      }
+    }
+  }, [location.state, layout, currentFolder, navigate]);
+
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
       {showStatusAlert && <StatusAlert />}
