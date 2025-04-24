@@ -3,7 +3,7 @@ import { X, Loader2, ArrowUpDown, PlusCircle, MinusCircle, Image as ImageIcon, U
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 import { StockMovementModal } from './StockMovementModal';
-import { ProductGallery } from './ProductGallery';
+
 
 interface ProductSlidePanelProps {
   isOpen: boolean;
@@ -29,7 +29,7 @@ interface ProductSlidePanelProps {
     cfop: string;
     status: 'active' | 'inactive';
   } | null;
-  initialTab?: 'produto' | 'estoque' | 'impostos' | 'galeria';
+  initialTab?: 'produto' | 'estoque' | 'impostos';
 }
 
 interface ProductFormData {
@@ -77,7 +77,7 @@ interface ProductImage {
 }
 
 export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab = 'produto' }: ProductSlidePanelProps) {
-  const [activeTab, setActiveTab] = useState<'produto' | 'estoque' | 'impostos' | 'galeria'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'produto' | 'estoque' | 'impostos'>(initialTab);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<ProductFormData>({
     code: '',
@@ -1177,16 +1177,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
             >
               Impostos
             </button>
-            <button
-              className={`px-6 py-3 text-sm font-medium transition-colors ${
-                activeTab === 'galeria' 
-                  ? 'text-white border-b-2 border-blue-500'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-              onClick={() => setActiveTab('galeria')}
-            >
-              Galeria
-            </button>
+
           </div>
 
           <div className="flex-1 overflow-y-auto p-6">
@@ -1567,12 +1558,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                 </div>
               )}
 
-              {activeTab === 'galeria' && (
-                <ProductGallery 
-                  productId={productToEdit?.id || null}
-                  productName={formData.name}
-                />
-              )}
+
             </form>
           </div>
 
