@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Loader2, ArrowUpDown, PlusCircle, MinusCircle, Image as ImageIcon, Upload, Trash2, Star, Package, Receipt } from 'lucide-react';
+import { X, Loader2, ArrowUpDown, PlusCircle, MinusCircle, Image as ImageIcon, Upload, Trash2, Star, Package, Receipt, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 import { StockMovementModal } from './StockMovementModal';
@@ -122,6 +122,12 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   const [reservedCode, setReservedCode] = useState<string | null>(null); // Para rastrear o código reservado
   const [reservedBarcode, setReservedBarcode] = useState<string | null>(null); // Para rastrear o código de barras reservado
   const [defaultsApplied, setDefaultsApplied] = useState(false); // Para rastrear se os valores padrão já foram aplicados
+  
+  // Estados para o modal de cadastro rápido
+  const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [quickAddType, setQuickAddType] = useState<'unit' | 'group' | 'brand' | null>(null);
+  const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddCode, setQuickAddCode] = useState(''); // Apenas para unidades
 
   // Função para definir os valores padrão (unidade UN e grupo Diversos)
   const setDefaultValues = () => {
@@ -603,6 +609,181 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     }
   };
 
+  // Função para salvar um novo item adicionado pelo modal de cadastro rápido
+  const handleQuickAddSave = async () => {
+    try {
+      setLoading(true);
+      
+      // Verificar usuário e empresa
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile?.company_id) {
+        throw new Error('Empresa não encontrada');
+      }
+
+      let newItem: any = null;
+      
+      // Inserir na tabela correta baseado no tipo
+      if (quickAddType === 'unit') {
+        // Validar entradas
+        if (!quickAddCode.trim() || !quickAddName.trim()) {
+          toast.error('Por favor, preencha todos os campos');
+          return;
+        }
+        
+        // Verificar se já existe unidade com o mesmo código ou nome
+        const { data: existingUnit, error: checkError } = await supabase
+          .from('product_units')
+          .select('id')
+          .eq('company_id', profile.company_id)
+          .or(`code.eq.${quickAddCode.trim().toUpperCase()},name.ilike.${quickAddName.trim()}`);
+          
+        if (checkError) {
+          console.error('Erro ao verificar unidades existentes:', checkError);
+          throw checkError;
+        }
+        
+        if (existingUnit && existingUnit.length > 0) {
+          toast.error('Já existe uma unidade com este código ou nome');
+          return;
+        }
+        
+        // Inserir nova unidade
+        const { data, error } = await supabase
+          .from('product_units')
+          .insert([{
+            company_id: profile.company_id,
+            code: quickAddCode.trim().toUpperCase(),
+            name: quickAddName.trim()
+          }])
+          .select('id, code, name')
+          .single();
+          
+        if (error) throw error;
+        newItem = data;
+        
+        // Atualizar a lista de unidades
+        setUnits(prev => [...prev, newItem]);
+        // Selecionar a nova unidade
+        setFormData(prev => ({ ...prev, unit_id: newItem.id }));
+        
+      } else if (quickAddType === 'group') {
+        // Validar entrada
+        if (!quickAddName.trim()) {
+          toast.error('Por favor, preencha o nome do grupo');
+          return;
+        }
+        
+        // Verificar se já existe grupo com o mesmo nome
+        const { data: existingGroup, error: checkError } = await supabase
+          .from('product_groups')
+          .select('id')
+          .eq('company_id', profile.company_id)
+          .ilike('name', quickAddName.trim());
+          
+        if (checkError) {
+          console.error('Erro ao verificar grupos existentes:', checkError);
+          throw checkError;
+        }
+        
+        if (existingGroup && existingGroup.length > 0) {
+          toast.error('Já existe um grupo com este nome');
+          return;
+        }
+        
+        // Inserir novo grupo
+        const { data, error } = await supabase
+          .from('product_groups')
+          .insert([{
+            company_id: profile.company_id,
+            name: quickAddName.trim()
+          }])
+          .select('id, name')
+          .single();
+          
+        if (error) throw error;
+        newItem = data;
+        
+        // Atualizar a lista de grupos
+        setGroups(prev => [...prev, newItem]);
+        // Selecionar o novo grupo
+        setFormData(prev => ({ ...prev, group_id: newItem.id }));
+        
+      } else if (quickAddType === 'brand') {
+        // Validar entrada
+        if (!quickAddName.trim()) {
+          toast.error('Por favor, preencha o nome da marca');
+          return;
+        }
+        
+        // Verificar se já existe marca com o mesmo nome
+        try {
+          const { data: existingBrand, error: checkError } = await supabase
+            .from('product_marca')
+            .select('id')
+            .eq('company_id', profile.company_id)
+            .ilike('name', quickAddName.trim());
+            
+          if (checkError) {
+            console.error('Erro ao verificar marcas existentes:', checkError);
+            throw checkError;
+          }
+          
+          if (existingBrand && existingBrand.length > 0) {
+            toast.error('Já existe uma marca com este nome');
+            return;
+          }
+          
+          // Inserir nova marca
+          const { data, error } = await supabase
+            .from('product_marca')
+            .insert([{
+              company_id: profile.company_id,
+              name: quickAddName.trim()
+            }])
+            .select('id, name')
+            .single();
+            
+          if (error) {
+            console.error('Erro detalhado ao inserir marca:', JSON.stringify(error));
+            throw new Error(`Erro ao inserir marca: ${error.message || error.details || JSON.stringify(error)}`);
+          }
+          
+          newItem = data;
+          
+          // Atualizar a lista de marcas
+          setBrands(prev => [...prev, { id: newItem.id, name: newItem.name }]);
+          // Selecionar a nova marca
+          setFormData(prev => ({ ...prev, brand_id: newItem.id }));
+        } catch (brandError: any) {
+          console.error('Erro completo ao inserir marca:', brandError);
+          throw brandError;
+        }
+      }
+      
+      // Fechar o modal
+      setShowQuickAddModal(false);
+      toast.success(`${quickAddType === 'unit' ? 'Unidade' : quickAddType === 'group' ? 'Grupo' : 'Marca'} adicionado com sucesso!`);
+      
+    } catch (error: any) {
+      console.error(`Erro ao adicionar ${quickAddType}:`, error.message);
+      toast.error(`Erro ao adicionar: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Função para carregar os CFOP disponíveis
   const loadCFOPOptions = async () => {
     try {
       const { data, error } = await supabase
@@ -1065,7 +1246,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         if (reservedCode) {
           try {
             await releaseProductCode(reservedCode);
-            setReservedCode(null); // Limpar referência local ao código
+            setReservedCode(null); // Limpar código reservado independente de sucesso ou erro
           } catch (releaseError) {
             console.error('Erro ao liberar código após falha:', releaseError);
           }
@@ -1075,7 +1256,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         if (reservedBarcode) {
           try {
             await releaseBarcodeReservation(reservedBarcode);
-            setReservedBarcode(null); // Limpar referência local ao código de barras
+            setReservedBarcode(null); // Limpar código de barras reservado
           } catch (releaseError) {
             console.error('Erro ao liberar código de barras após falha:', releaseError);
           }
@@ -1428,39 +1609,68 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                       <label className="block text-sm font-medium text-slate-300 mb-1">
                         Unidade *
                       </label>
-                      <select
-                        name="unit_id"
-                        value={formData.unit_id}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      >
-                        <option value="">Selecione uma unidade</option>
-                        {units.map(unit => (
-                          <option key={unit.id} value={unit.id}>
-                            {unit.code} - {unit.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <select
+                          name="unit_id"
+                          value={formData.unit_id}
+                          onChange={handleChange}
+                          className="flex-grow px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required
+                        >
+                          <option value="">Selecione uma unidade</option>
+                          {units.map(unit => (
+                            <option key={unit.id} value={unit.id}>
+                              {unit.code} - {unit.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuickAddType('unit');
+                            setQuickAddName('');
+                            setQuickAddCode('');
+                            setShowQuickAddModal(true);
+                          }}
+                          className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded p-2 transition-colors"
+                          title="Adicionar nova unidade"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
                         Grupo
                       </label>
-                      <select
-                        name="group_id"
-                        value={formData.group_id}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">Selecione um grupo</option>
-                        {groups.map(group => (
-                          <option key={group.id} value={group.id}>
-                            {group.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <select
+                          name="group_id"
+                          value={formData.group_id}
+                          onChange={handleChange}
+                          className="flex-grow px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Selecione um grupo</option>
+                          {groups.map(group => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuickAddType('group');
+                            setQuickAddName('');
+                            setShowQuickAddModal(true);
+                          }}
+                          className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded p-2 transition-colors"
+                          title="Adicionar novo grupo"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                   
@@ -1469,19 +1679,33 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                       <label className="block text-sm font-medium text-slate-300 mb-1">
                         Marca
                       </label>
-                      <select
-                        name="brand_id"
-                        value={formData.brand_id}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">Selecione uma marca</option>
-                        {brands.map(brand => (
-                          <option key={brand.id} value={brand.id}>
-                            {brand.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <select
+                          name="brand_id"
+                          value={formData.brand_id}
+                          onChange={handleChange}
+                          className="flex-grow px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Selecione uma marca</option>
+                          {brands.map(brand => (
+                            <option key={brand.id} value={brand.id}>
+                              {brand.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuickAddType('brand');
+                            setQuickAddName('');
+                            setShowQuickAddModal(true);
+                          }}
+                          className="flex-shrink-0 bg-blue-500 hover:bg-blue-600 text-white rounded p-2 transition-colors"
+                          title="Adicionar nova marca"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
                     </div>
                     
                     {/* Campo de estoque inicial - só aparece em novos produtos */}
@@ -1820,17 +2044,17 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                         ref={fileInputRef}
                         onChange={(e) => {
                           const files = e.target.files;
-                          if (!files || files.length === 0) return;
+                          if (!files || files.length === 0 || !productToEdit?.id) return;
                           
                           const file = files[0];
                           
-                          // Verificar tamanho (máx 2MB)
+                          // Verificar tamanho do arquivo (limite de 2MB)
                           if (file.size > 2 * 1024 * 1024) {
                             toast.error('A imagem deve ter no máximo 2MB');
                             return;
                           }
                           
-                          // Verificar tipo
+                          // Verificar tipo de arquivo
                           if (!file.type.startsWith('image/')) {
                             toast.error('O arquivo deve ser uma imagem');
                             return;
@@ -1959,6 +2183,81 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
           movementType={movementType}
           onStockUpdated={handleStockUpdate}
         />
+      )}
+
+      {/* Quick Add Modal */}
+      {showQuickAddModal && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowQuickAddModal(false)} />
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-lg shadow-lg border border-slate-700 p-6 w-full max-w-[400px]">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-200">
+                  {quickAddType === 'unit' ? 'Nova Unidade' : 
+                   quickAddType === 'group' ? 'Novo Grupo' : 'Nova Marca'}
+                </h3>
+                <button
+                  onClick={() => setShowQuickAddModal(false)}
+                  className="text-slate-400 hover:text-slate-200"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {quickAddType === 'unit' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Código da Unidade *
+                    </label>
+                    <input
+                      type="text"
+                      value={quickAddCode}
+                      onChange={(e) => setQuickAddCode(e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Ex: UN, KG, M, CX"
+                      required
+                    />
+                  </div>
+                )}
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    Nome {quickAddType === 'unit' ? 'da Unidade' : 
+                          quickAddType === 'group' ? 'do Grupo' : 'da Marca'} *
+                  </label>
+                  <input
+                    type="text"
+                    value={quickAddName}
+                    onChange={(e) => setQuickAddName(e.target.value)}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder={quickAddType === 'unit' ? 'Ex: Unidade, Quilograma' : 
+                                quickAddType === 'group' ? 'Ex: Bebidas, Eletrônicos' : 'Ex: Samsung, Apple'}
+                    required
+                  />
+                </div>
+                
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAddModal(false)}
+                    className="px-4 py-2 text-sm font-medium text-slate-200 hover:text-slate-100 hover:bg-slate-700 rounded-lg transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleQuickAddSave}
+                    className="px-4 py-2 text-sm font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+                    disabled={quickAddType === 'unit' ? !quickAddName || !quickAddCode : !quickAddName}
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </>
   );
