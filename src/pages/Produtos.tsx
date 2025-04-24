@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Plus, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, ArrowUpDown, Loader2, ArrowDownAZ, ArrowUpAZ, Copy } from 'lucide-react';
+import { Search, Plus, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, ArrowUpDown, Loader2, ArrowDownAZ, ArrowUpAZ, Copy, Inbox } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { ProductSlidePanel } from '../components/ProductSlidePanel';
 import { AppFooter } from '../components/AppFooter';
@@ -14,6 +14,7 @@ interface Product {
   barcode: string | null;
   unit_id: string;
   group_id: string | null;
+  brand_id: string | null;
   cost_price: number;
   profit_margin: number;
   selling_price: number;
@@ -29,6 +30,7 @@ interface Product {
   unit_name?: string;
   unit_code?: string;
   group_name?: string;
+  brand_name?: string;
 }
 
 export default function Produtos() {
@@ -421,6 +423,7 @@ export default function Produtos() {
           barcode: newProduct.barcode as string | null,
           unit_id: newProduct.unit_id as string,
           group_id: newProduct.group_id as string | null,
+          brand_id: newProduct.brand_id as string | null,
           cost_price: newProduct.cost_price as number,
           profit_margin: newProduct.profit_margin as number,
           selling_price: newProduct.selling_price as number,
@@ -447,9 +450,12 @@ export default function Produtos() {
   };
 
   const handleClose = () => {
+    // Precisamos reimportar o useLocation
+    // Aqui usamos o state recebido da navegação para voltar para onde o usuário estava
     if (location.state?.from === 'produtos-folder') {
       navigate('/dashboard', { state: { openFolder: 'produtos' } });
     } else {
+      // Se não tiver informação de origem, volta para o dashboard principal
       navigate('/dashboard');
     }
   };
@@ -641,177 +647,169 @@ export default function Produtos() {
 
       {/* Content */}
       <div className="flex-1 p-4">
-        <div className="bg-slate-800 rounded-lg border border-slate-700">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-700">
-                  <th className="text-left p-4 text-slate-400 font-medium">
-                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('code')}>
-                      Código
-                      {sortField === 'code' ? (
-                        sortDirection === 'asc' ? (
-                          <ArrowUpDown size={14} className="text-blue-400" />
-                        ) : (
-                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
-                        )
-                      ) : (
-                        <ArrowUpDown size={14} className="opacity-40" />
-                      )}
-                    </div>
-                  </th>
-                  <th className="text-left p-4 text-slate-400 font-medium">
-                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('name')}>
-                      Nome
-                      {sortField === 'name' ? (
-                        sortDirection === 'asc' ? (
-                          <ArrowDownAZ size={16} className="text-blue-400" />
-                        ) : (
-                          <ArrowUpAZ size={16} className="text-blue-400" />
-                        )
-                      ) : (
-                        <ArrowDownAZ size={16} className="opacity-40" />
-                      )}
-                    </div>
-                  </th>
-                  <th className="text-left p-4 text-slate-400 font-medium">
-                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('group')}>
-                      Grupo
-                      {sortField === 'group' ? (
-                        sortDirection === 'asc' ? (
-                          <ArrowDownAZ size={16} className="text-blue-400" />
-                        ) : (
-                          <ArrowUpAZ size={16} className="text-blue-400" />
-                        )
-                      ) : (
-                        <ArrowDownAZ size={16} className="opacity-40" />
-                      )}
-                    </div>
-                  </th>
-                  {productConfig.showBarcode && (
+        {loading ? (
+          <div className="flex items-center justify-center h-64 text-slate-400">
+            <Loader2 size={24} className="animate-spin mr-2" />
+            <span>Carregando produtos...</span>
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-slate-400 bg-slate-800 rounded-lg border border-slate-700">
+            <Inbox size={48} className="mb-4 opacity-50" />
+            <span className="text-lg">Nenhum produto cadastrado</span>
+            <p className="text-sm text-slate-500 mt-1">Clique em "Novo Produto" para adicionar o primeiro.</p>
+          </div>
+        ) : (
+          <div className="bg-slate-800 rounded-lg border border-slate-700">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-700">
                     <th className="text-left p-4 text-slate-400 font-medium">
-                      <div className="flex items-center gap-1">
-                        Código de Barras
+                      <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('code')}>
+                        Código
+                        {sortField === 'code' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUpDown size={14} className="text-blue-400" />
+                          ) : (
+                            <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                          )
+                        ) : (
+                          <ArrowUpDown size={14} className="opacity-40" />
+                        )}
                       </div>
                     </th>
-                  )}
-                  <th className="text-left p-4 text-slate-400 font-medium">Un.</th>
-                  {productConfig.showNcm && (
                     <th className="text-left p-4 text-slate-400 font-medium">
-                      <div className="flex items-center gap-1">
-                        NCM
-                      </div>
-                    </th>
-                  )}
-                  {productConfig.showCfop && (
-                    <th className="text-left p-4 text-slate-400 font-medium">
-                      <div className="flex items-center gap-1">
-                        CFOP
-                      </div>
-                    </th>
-                  )}
-                  {productConfig.showCst && (
-                    <th className="text-left p-4 text-slate-400 font-medium">
-                      <div className="flex items-center gap-1">
-                        CST
-                      </div>
-                    </th>
-                  )}
-                  {productConfig.showPis && (
-                    <th className="text-left p-4 text-slate-400 font-medium">
-                      <div className="flex items-center gap-1">
-                        PIS
-                      </div>
-                    </th>
-                  )}
-                  {productConfig.showCofins && (
-                    <th className="text-left p-4 text-slate-400 font-medium">
-                      <div className="flex items-center gap-1">
-                        COFINS
-                      </div>
-                    </th>
-                  )}
-                  <th className="text-right p-4 text-slate-400 font-medium">
-                    <div className="flex items-center justify-end gap-1 cursor-pointer" onClick={() => handleSort('cost_price')}>
-                      Preço Custo
-                      {sortField === 'cost_price' ? (
-                        sortDirection === 'asc' ? (
-                          <ArrowUpDown size={14} className="text-blue-400" />
+                      <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('name')}>
+                        Nome
+                        {sortField === 'name' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowDownAZ size={16} className="text-blue-400" />
+                          ) : (
+                            <ArrowUpAZ size={16} className="text-blue-400" />
+                          )
                         ) : (
-                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
-                        )
-                      ) : (
-                        <ArrowUpDown size={14} className="opacity-40" />
-                      )}
-                    </div>
-                  </th>
-                  <th className="text-right p-4 text-slate-400 font-medium">
-                    <div className="flex items-center justify-end gap-1 cursor-pointer" onClick={() => handleSort('selling_price')}>
-                      Preço Venda
-                      {sortField === 'selling_price' ? (
-                        sortDirection === 'asc' ? (
-                          <ArrowUpDown size={14} className="text-blue-400" />
-                        ) : (
-                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
-                        )
-                      ) : (
-                        <ArrowUpDown size={14} className="opacity-40" />
-                      )}
-                    </div>
-                  </th>
-                  <th className="text-right p-4 text-slate-400 font-medium">
-                    <div className="flex items-center justify-end gap-1 cursor-pointer" onClick={() => handleSort('stock')}>
-                      Estoque
-                      {sortField === 'stock' ? (
-                        sortDirection === 'asc' ? (
-                          <ArrowUpDown size={14} className="text-blue-400" />
-                        ) : (
-                          <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
-                        )
-                      ) : (
-                        <ArrowUpDown size={14} className="opacity-40" />
-                      )}
-                    </div>
-                  </th>
-                  <th className="text-left p-4 text-slate-400 font-medium">
-                    <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('status')}>
-                      Status
-                      {sortField === 'status' ? (
-                        sortDirection === 'asc' ? (
-                          <ArrowDownAZ size={16} className="text-blue-400" />
-                        ) : (
-                          <ArrowUpAZ size={16} className="text-blue-400" />
-                        )
-                      ) : (
-                        <ArrowDownAZ size={16} className="opacity-40" />
-                      )}
-                    </div>
-                  </th>
-                  <th className="p-4 text-slate-400 font-medium w-[100px]">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={7 + (productConfig.showBarcode ? 1 : 0) + (productConfig.showNcm ? 1 : 0) + 
-                        (productConfig.showCfop ? 1 : 0) + (productConfig.showCst ? 1 : 0) + 
-                        (productConfig.showPis ? 1 : 0) + (productConfig.showCofins ? 1 : 0)} className="p-4 text-center">
-                      <div className="flex items-center justify-center text-slate-400">
-                        <Loader2 size={24} className="animate-spin mr-2" />
-                        <span>Carregando produtos...</span>
+                          <ArrowDownAZ size={16} className="opacity-40" />
+                        )}
                       </div>
-                    </td>
+                    </th>
+                    <th className="text-left p-4 text-slate-400 font-medium">
+                      <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('group')}>
+                        Grupo
+                        {sortField === 'group' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowDownAZ size={16} className="text-blue-400" />
+                          ) : (
+                            <ArrowUpAZ size={16} className="text-blue-400" />
+                          )
+                        ) : (
+                          <ArrowDownAZ size={16} className="opacity-40" />
+                        )}
+                      </div>
+                    </th>
+                    {productConfig.showBarcode && (
+                      <th className="text-left p-4 text-slate-400 font-medium">
+                        <div className="flex items-center gap-1">
+                          Código de Barras
+                        </div>
+                      </th>
+                    )}
+                    <th className="text-left p-4 text-slate-400 font-medium">Un.</th>
+                    {productConfig.showNcm && (
+                      <th className="text-left p-4 text-slate-400 font-medium">
+                        <div className="flex items-center gap-1">
+                          NCM
+                        </div>
+                      </th>
+                    )}
+                    {productConfig.showCfop && (
+                      <th className="text-left p-4 text-slate-400 font-medium">
+                        <div className="flex items-center gap-1">
+                          CFOP
+                        </div>
+                      </th>
+                    )}
+                    {productConfig.showCst && (
+                      <th className="text-left p-4 text-slate-400 font-medium">
+                        <div className="flex items-center gap-1">
+                          CST
+                        </div>
+                      </th>
+                    )}
+                    {productConfig.showPis && (
+                      <th className="text-left p-4 text-slate-400 font-medium">
+                        <div className="flex items-center gap-1">
+                          PIS
+                        </div>
+                      </th>
+                    )}
+                    {productConfig.showCofins && (
+                      <th className="text-left p-4 text-slate-400 font-medium">
+                        <div className="flex items-center gap-1">
+                          COFINS
+                        </div>
+                      </th>
+                    )}
+                    <th className="text-right p-4 text-slate-400 font-medium">
+                      <div className="flex items-center justify-end gap-1 cursor-pointer" onClick={() => handleSort('cost_price')}>
+                        Preço Custo
+                        {sortField === 'cost_price' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUpDown size={14} className="text-blue-400" />
+                          ) : (
+                            <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                          )
+                        ) : (
+                          <ArrowUpDown size={14} className="opacity-40" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="text-right p-4 text-slate-400 font-medium">
+                      <div className="flex items-center justify-end gap-1 cursor-pointer" onClick={() => handleSort('selling_price')}>
+                        Preço Venda
+                        {sortField === 'selling_price' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUpDown size={14} className="text-blue-400" />
+                          ) : (
+                            <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                          )
+                        ) : (
+                          <ArrowUpDown size={14} className="opacity-40" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="text-right p-4 text-slate-400 font-medium">
+                      <div className="flex items-center justify-end gap-1 cursor-pointer" onClick={() => handleSort('stock')}>
+                        Estoque
+                        {sortField === 'stock' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowUpDown size={14} className="text-blue-400" />
+                          ) : (
+                            <ArrowUpDown size={14} className="text-blue-400 rotate-180" />
+                          )
+                        ) : (
+                          <ArrowUpDown size={14} className="opacity-40" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="text-left p-4 text-slate-400 font-medium">
+                      <div className="flex items-center gap-1 cursor-pointer" onClick={() => handleSort('status')}>
+                        Status
+                        {sortField === 'status' ? (
+                          sortDirection === 'asc' ? (
+                            <ArrowDownAZ size={16} className="text-blue-400" />
+                          ) : (
+                            <ArrowUpAZ size={16} className="text-blue-400" />
+                          )
+                        ) : (
+                          <ArrowDownAZ size={16} className="opacity-40" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="p-4 text-slate-400 font-medium w-[100px]">Ações</th>
                   </tr>
-                ) : filteredProducts.length === 0 ? (
-                  <tr>
-                    <td colSpan={7 + (productConfig.showBarcode ? 1 : 0) + (productConfig.showNcm ? 1 : 0) + 
-                        (productConfig.showCfop ? 1 : 0) + (productConfig.showCst ? 1 : 0) + 
-                        (productConfig.showPis ? 1 : 0) + (productConfig.showCofins ? 1 : 0)} className="p-4 text-center text-slate-400">
-                      Nenhum produto encontrado
-                    </td>
-                  </tr>
-                ) : (
-                  filteredProducts.map((product) => (
+                </thead>
+                <tbody>
+                  {filteredProducts.map((product) => (
                     <tr key={product.id} className="border-b border-slate-700 hover:bg-slate-700/50">
                       <td className="p-4 text-slate-200">{product.code}</td>
                       <td className="p-4 text-slate-200">{product.name}</td>
@@ -882,35 +880,35 @@ export default function Produtos() {
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-          {/* Pagination */}
-          <div className="p-4 border-t border-slate-700">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-400">
-                Mostrando {filteredProducts.length} produto(s)
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  disabled
-                  className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <button
-                  disabled
-                  className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
-                >
-                  <ChevronRight size={20} />
-                </button>
+            {/* Pagination */}
+            <div className="p-4 border-t border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">
+                  Mostrando {filteredProducts.length} produto(s)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled
+                    className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button
+                    disabled
+                    className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Footer */}

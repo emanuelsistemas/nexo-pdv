@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Plus, Users, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, Mail, Phone } from 'lucide-react';
+import { Search, Plus, Users, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, Mail, Phone, Inbox } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { AppFooter } from '../components/AppFooter';
 
@@ -203,82 +203,90 @@ export default function Clientes() {
 
       {/* Content */}
       <div className="flex-1 p-4">
-        <div className="bg-slate-800 rounded-lg border border-slate-700">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-700">
-                  <th className="text-left p-4 text-slate-400 font-medium">Código</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Nome</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Tipo</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Documento</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Email</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Telefone</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Cidade/UF</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Status</th>
-                  <th className="p-4 text-slate-400 font-medium w-[100px]">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clientes.map((cliente) => (
-                  <tr key={cliente.id} className="border-b border-slate-700 hover:bg-slate-700/50">
-                    <td className="p-4 text-slate-200">{cliente.codigo}</td>
-                    <td className="p-4 text-slate-200">{cliente.nome}</td>
-                    <td className="p-4 text-slate-200">{cliente.tipo}</td>
-                    <td className="p-4 text-slate-200">{cliente.documento}</td>
-                    <td className="p-4 text-slate-200">{cliente.email}</td>
-                    <td className="p-4 text-slate-200">{cliente.telefone}</td>
-                    <td className="p-4 text-slate-200">{cliente.cidade}/{cliente.estado}</td>
-                    <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(cliente.status)}`}>
-                        {getStatusText(cliente.status)}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <button className="p-1 text-slate-400 hover:text-slate-200">
-                          <Mail size={16} />
-                        </button>
-                        <button className="p-1 text-slate-400 hover:text-slate-200">
-                          <Phone size={16} />
-                        </button>
-                        <button className="p-1 text-slate-400 hover:text-slate-200">
-                          <Edit size={16} />
-                        </button>
-                        <button className="p-1 text-red-400 hover:text-red-300">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {clientes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-slate-400 bg-slate-800 rounded-lg border border-slate-700">
+            <Inbox size={48} className="mb-4 opacity-50" />
+            <span className="text-lg">Nenhum cliente cadastrado</span>
+            <p className="text-sm text-slate-500 mt-1">Clique em "Novo Cliente" para adicionar o primeiro.</p>
           </div>
+        ) : (
+          <div className="bg-slate-800 rounded-lg border border-slate-700">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left p-4 text-slate-400 font-medium">Código</th>
+                    <th className="text-left p-4 text-slate-400 font-medium">Nome</th>
+                    <th className="text-left p-4 text-slate-400 font-medium">Tipo</th>
+                    <th className="text-left p-4 text-slate-400 font-medium">Documento</th>
+                    <th className="text-left p-4 text-slate-400 font-medium">Email</th>
+                    <th className="text-left p-4 text-slate-400 font-medium">Telefone</th>
+                    <th className="text-left p-4 text-slate-400 font-medium">Cidade/UF</th>
+                    <th className="text-left p-4 text-slate-400 font-medium">Status</th>
+                    <th className="p-4 text-slate-400 font-medium w-[100px]">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientes.map((cliente) => (
+                    <tr key={cliente.id} className="border-b border-slate-700 hover:bg-slate-700/50">
+                      <td className="p-4 text-slate-200">{cliente.codigo}</td>
+                      <td className="p-4 text-slate-200">{cliente.nome}</td>
+                      <td className="p-4 text-slate-200">{cliente.tipo}</td>
+                      <td className="p-4 text-slate-200">{cliente.documento}</td>
+                      <td className="p-4 text-slate-200">{cliente.email}</td>
+                      <td className="p-4 text-slate-200">{cliente.telefone}</td>
+                      <td className="p-4 text-slate-200">{cliente.cidade}/{cliente.estado}</td>
+                      <td className="p-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(cliente.status)}`}>
+                          {getStatusText(cliente.status)}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button className="p-1 text-slate-400 hover:text-slate-200">
+                            <Mail size={16} />
+                          </button>
+                          <button className="p-1 text-slate-400 hover:text-slate-200">
+                            <Phone size={16} />
+                          </button>
+                          <button className="p-1 text-slate-400 hover:text-slate-200">
+                            <Edit size={16} />
+                          </button>
+                          <button className="p-1 text-red-400 hover:text-red-300">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-          {/* Pagination */}
-          <div className="p-4 border-t border-slate-700">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-400">
-                Mostrando 1-4 de 4 resultados
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  disabled
-                  className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <button
-                  disabled
-                  className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
-                >
-                  <ChevronRight size={20} />
-                </button>
+            {/* Pagination */}
+            <div className="p-4 border-t border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">
+                  Mostrando {clientes.length} cliente(s)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled
+                    className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button
+                    disabled
+                    className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Footer */}

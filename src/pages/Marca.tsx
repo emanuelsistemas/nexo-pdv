@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Plus, Tag, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, Tag, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, Inbox } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { MarcaSlidePanel } from '../components/MarcaSlidePanel';
 import { supabase } from '../lib/supabase';
@@ -196,34 +196,30 @@ export default function Marca() {
 
       {/* Content */}
       <div className="flex-1 p-4">
-        <div className="bg-slate-800 rounded-lg border border-slate-700">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-700">
-                  <th className="text-left p-4 text-slate-400 font-medium">Nome</th>
-                  <th className="text-left p-4 text-slate-400 font-medium">Data Criação</th>
-                  <th className="p-4 text-slate-400 font-medium w-[100px]">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={3} className="p-4 text-center text-slate-400">
-                      <div className="flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
-                        <span className="ml-2">Carregando marcas...</span>
-                      </div>
-                    </td>
+        {loading ? (
+          <div className="flex items-center justify-center h-64 text-slate-400">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+            <span className="ml-2">Carregando marcas...</span>
+          </div>
+        ) : filteredMarcas.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-slate-400 bg-slate-800 rounded-lg border border-slate-700">
+            <Inbox size={48} className="mb-4 opacity-50" />
+            <span className="text-lg">Nenhuma marca cadastrada</span>
+            <p className="text-sm text-slate-500 mt-1">Clique em "Nova Marca" para adicionar a primeira.</p>
+          </div>
+        ) : (
+          <div className="bg-slate-800 rounded-lg border border-slate-700">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-700">
+                    <th className="text-left p-4 text-slate-400 font-medium">Nome</th>
+                    <th className="text-left p-4 text-slate-400 font-medium">Data Criação</th>
+                    <th className="p-4 text-slate-400 font-medium w-[100px]">Ações</th>
                   </tr>
-                ) : filteredMarcas.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="p-4 text-center text-slate-400">
-                      Nenhuma marca encontrada
-                    </td>
-                  </tr>
-                ) : (
-                  filteredMarcas.map((marca) => (
+                </thead>
+                <tbody>
+                  {filteredMarcas.map((marca) => (
                     <tr key={marca.id} className="border-b border-slate-700 hover:bg-slate-700/50">
                       <td className="p-4 text-slate-200">{marca.name}</td>
                       <td className="p-4 text-slate-200">
@@ -248,35 +244,35 @@ export default function Marca() {
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-          {/* Pagination */}
-          <div className="p-4 border-t border-slate-700">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-400">
-                Mostrando {filteredMarcas.length} marca(s)
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  disabled
-                  className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <button
-                  disabled
-                  className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
-                >
-                  <ChevronRight size={20} />
-                </button>
+            {/* Pagination */}
+            <div className="p-4 border-t border-slate-700">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">
+                  Mostrando {filteredMarcas.length} marca(s)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled
+                    className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button
+                    disabled
+                    className="p-1 text-slate-400 hover:text-slate-200 disabled:opacity-50"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Footer */}
