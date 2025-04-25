@@ -104,6 +104,12 @@ interface COFINSItem {
   descricao: string;
 }
 
+interface CSTItem {
+  id: number;
+  codigo: string;
+  descricao: string;
+}
+
 export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab = 'produto' }: ProductSlidePanelProps) {
   const [activeTab, setActiveTab] = useState<'produto' | 'estoque' | 'impostos' | 'fotos'>(initialTab);
   const [loading, setLoading] = useState(false);
@@ -138,6 +144,9 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   const [cofinsOptions, setCofinsOptions] = useState<COFINSItem[]>([]);
   const [cofinsSearchTerm, setCofinsSearchTerm] = useState('');
   const [showCofinsDropdown, setShowCofinsDropdown] = useState(false);
+  const [cstOptions, setCstOptions] = useState<CSTItem[]>([]);
+  const [cstSearchTerm, setCstSearchTerm] = useState('');
+  const [showCstDropdown, setShowCstDropdown] = useState(false);
   const [units, setUnits] = useState<ProductUnit[]>([]);
   const [groups, setGroups] = useState<ProductGroup[]>([]);
   const [brands, setBrands] = useState<ProductBrand[]>([]);
@@ -291,8 +300,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
           // Buscar regime tributário da empresa
           await loadCompanyRegimeTributario();
           
-          // Carregar unidades, grupos, marcas, opções CFOP, IPI, PIS e COFINS em paralelo
-          await Promise.all([loadUnits(), loadGroups(), loadBrands(), loadCFOPOptions(), loadIPIOptions(), loadPISOptions(), loadCOFINSOptions()]);
+          // Carregar unidades, grupos, marcas, opções CFOP, IPI, PIS, COFINS e CST em paralelo
+          await Promise.all([loadUnits(), loadGroups(), loadBrands(), loadCFOPOptions(), loadIPIOptions(), loadPISOptions(), loadCOFINSOptions(), loadCSTOptions()]);
 
           if (productToEdit) {
             setFormData({
@@ -823,6 +832,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   const ipiDropdownRef = useRef<HTMLDivElement>(null);
   const pisDropdownRef = useRef<HTMLDivElement>(null);
   const cofinsDropdownRef = useRef<HTMLDivElement>(null);
+  const cstDropdownRef = useRef<HTMLDivElement>(null);
 
   // Efeito para fechar dropdowns ao clicar fora deles
   useEffect(() => {
@@ -839,10 +849,13 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       if (cofinsDropdownRef.current && !cofinsDropdownRef.current.contains(event.target as Node)) {
         setShowCofinsDropdown(false);
       }
+      if (cstDropdownRef.current && !cstDropdownRef.current.contains(event.target as Node)) {
+        setShowCstDropdown(false);
+      }
     }
 
     // Adicionar event listener quando algum dropdown estiver aberto
-    if (showCfopDropdown || showIpiDropdown || showPisDropdown || showCofinsDropdown) {
+    if (showCfopDropdown || showIpiDropdown || showPisDropdown || showCofinsDropdown || showCstDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     
@@ -850,7 +863,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showCfopDropdown, showIpiDropdown, showPisDropdown, showCofinsDropdown]);
+  }, [showCfopDropdown, showIpiDropdown, showPisDropdown, showCofinsDropdown, showCstDropdown]);
   
   // Carregar o regime tributário da empresa atual
   const loadCompanyRegimeTributario = async () => {
@@ -966,6 +979,26 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     } catch (error: any) {
       console.error('Erro ao carregar códigos COFINS:', error.message);
       toast.error(`Erro ao carregar códigos COFINS: ${error.message}`);
+    }
+  };
+
+  const loadCSTOptions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('nfe_cst')
+        .select('id, codigo, descricao')
+        .order('codigo', { ascending: true });
+        
+      if (error) {
+        throw error;
+      }
+      
+      // Garantir o tipo correto dos dados
+      const typedData = data as CSTItem[];
+      setCstOptions(typedData);
+    } catch (error: any) {
+      console.error('Erro ao carregar códigos CST:', error.message);
+      toast.error(`Erro ao carregar códigos CST: ${error.message}`);
     }
   };
 
@@ -2092,17 +2125,70 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        CST *
-                      </label>
-                      <input
-                        type="text"
-                        name="cst"
-                        value={formData.cst}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
+                      <div className="mb-1">
+                        <label className="block text-sm font-medium text-slate-300">
+                          CST *
+                        </label>
+                      </div>
+                      <div className="relative" ref={cstDropdownRef}>
+                        <div 
+                          className="w-full h-10 px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent flex justify-between items-center cursor-pointer"
+                          onClick={() => setShowCstDropdown(!showCstDropdown)}
+                        >
+                          {/* Exibir o CST selecionado */}
+                          <div className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis pr-2">
+                            {cstOptions.find(c => c.codigo === formData.cst)?.codigo || ''} - 
+                            {cstOptions.find(c => c.codigo === formData.cst)?.descricao || 'Selecione...'}
+                          </div>
+                          <div className="flex-shrink-0 text-xs text-slate-400">
+                            {showCstDropdown ? '▲' : '▼'}
+                          </div>
+                        </div>
+                        
+                        {showCstDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10">
+                            <div className="p-2">
+                              <input
+                                type="text"
+                                placeholder="Pesquisar CST..."
+                                value={cstSearchTerm}
+                                onChange={(e) => setCstSearchTerm(e.target.value)}
+                                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </div>
+                            <div className="max-h-60 overflow-y-auto">
+                              {cstOptions
+                                .filter(cst => 
+                                  cstSearchTerm === '' || 
+                                  cst.codigo.includes(cstSearchTerm) || 
+                                  cst.descricao.toLowerCase().includes(cstSearchTerm.toLowerCase())
+                                )
+                                .map((cst) => {
+                                  // Limitar o tamanho da descrição para evitar que estoure a largura
+                                  const shortDesc = cst.descricao.length > 40 
+                                    ? cst.descricao.substring(0, 40) + '...' 
+                                    : cst.descricao;
+                                  
+                                  return (
+                                    <div 
+                                      key={cst.id}
+                                      className={`px-4 py-2 cursor-pointer hover:bg-slate-700 ${formData.cst === cst.codigo ? 'bg-blue-500/20' : ''}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setFormData(prev => ({ ...prev, cst: cst.codigo }));
+                                        setShowCstDropdown(false);
+                                      }}
+                                      title={`${cst.codigo} - ${cst.descricao}`}
+                                    >
+                                      {cst.codigo} - {shortDesc}
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
