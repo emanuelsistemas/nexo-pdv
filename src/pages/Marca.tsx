@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, Tag, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, Inbox } from 'lucide-react';
-import { Logo } from '../components/Logo';
 import { MarcaSlidePanel } from '../components/MarcaSlidePanel';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 import { AppFooter } from '../components/AppFooter';
+import { AppHeader } from '../components/AppHeader';
+import { Breadcrumb } from '../components/Breadcrumb';
+import { ContentContainer } from '../components/ContentContainer';
 
 interface Marca {
   id: string;
@@ -49,7 +51,7 @@ export default function Marca() {
         throw new Error('Empresa não encontrada');
       }
 
-      const { data: marcas, error: marcasError } = await supabase
+      const { data: marcasData, error: marcasError } = await supabase
         .from('product_marca')
         .select('*')
         .eq('company_id', profile.company_id)
@@ -59,7 +61,8 @@ export default function Marca() {
         throw marcasError;
       }
 
-      setMarcas(marcas || []);
+      // Conversão segura para o tipo Marca[]
+      setMarcas(marcasData ? (marcasData as unknown as Marca[]) : []);
     } catch (error: any) {
       console.error('Erro ao carregar marcas:', error);
       toast.error('Erro ao carregar marcas');
@@ -118,22 +121,23 @@ export default function Marca() {
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
-      {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700">
-        <div className="flex items-center justify-between h-12 px-4">
-          <div className="flex items-center gap-6">
-            <Logo variant="dashboard" />
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleClose}
-              className="text-slate-400 hover:text-slate-200"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* Header and Breadcrumb wrapper */}
+      <div className="header-breadcrumb-wrapper">
+        {/* Header */}
+        <AppHeader 
+          onShowLogoutConfirm={handleClose}
+        />
+
+        {/* Path Navigation */}
+        <ContentContainer>
+          <Breadcrumb 
+            currentPath={[{ id: 'marca', title: 'Marcas' }]}
+            onNavigate={() => {}}
+            onBack={handleClose}
+            onHome={handleClose}
+          />
+        </ContentContainer>
+      </div>
 
       {/* Toolbar */}
       <div className="bg-slate-800/50 border-b border-slate-700">
