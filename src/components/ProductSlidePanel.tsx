@@ -784,6 +784,28 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   };
 
   // Função para carregar os CFOP disponíveis
+  // Ref para detectar cliques fora do dropdown
+  const cfopDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Efeito para fechar dropdown ao clicar fora dele
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (cfopDropdownRef.current && !cfopDropdownRef.current.contains(event.target as Node)) {
+        setShowCfopDropdown(false);
+      }
+    }
+
+    // Adicionar event listener quando o dropdown estiver aberto
+    if (showCfopDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    // Cleanup
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCfopDropdown]);
+  
   const loadCFOPOptions = async () => {
     try {
       const { data, error } = await supabase
@@ -1847,45 +1869,20 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                       <label className="block text-sm font-medium text-slate-300 mb-1">
                         CFOP *
                       </label>
-                      <div className="relative">
-                        <select
-                          name="cfop"
-                          value={formData.cfop}
-                          onChange={handleChange}
+                      <div className="relative" ref={cfopDropdownRef}>
+                        <div 
+                          className="w-full h-10 px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent flex justify-between items-center cursor-pointer"
                           onClick={() => setShowCfopDropdown(!showCfopDropdown)}
-                          className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          required
                         >
-                          {cfopOptions.length > 0 ? (
-                            cfopOptions
-                              .filter(cfop => 
-                                cfopSearchTerm === '' || 
-                                cfop.codigo_cfop.includes(cfopSearchTerm) || 
-                                cfop.desc_cfop.toLowerCase().includes(cfopSearchTerm.toLowerCase())
-                              )
-                              .map((cfop) => {
-                                // Limitar o tamanho da descrição para evitar que estoure a largura
-                                const shortDesc = cfop.desc_cfop.length > 40 
-                                  ? cfop.desc_cfop.substring(0, 40) + '...' 
-                                  : cfop.desc_cfop;
-                                
-                                return (
-                                  <option 
-                                    key={cfop.id_cfop} 
-                                    value={cfop.codigo_cfop}
-                                    title={`${cfop.codigo_cfop} - ${cfop.desc_cfop}`}
-                                  >
-                                    {cfop.codigo_cfop} - {shortDesc}
-                                  </option>
-                                );
-                              })
-                          ) : (
-                            <>
-                              <option value="5405">5405 - Venda de mercadoria adquirida</option>
-                              <option value="5102">5102 - Venda de mercadoria</option>
-                            </>
-                          )}
-                        </select>
+                          {/* Exibir o CFOP selecionado */}
+                          <div className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis pr-2">
+                            {formData.cfop} - 
+                            {cfopOptions.find(c => c.codigo_cfop === formData.cfop)?.desc_cfop || 'Selecione...'}
+                          </div>
+                          <div className="flex-shrink-0 text-xs text-slate-400">
+                            {showCfopDropdown ? '▲' : '▼'}
+                          </div>
+                        </div>
                         
                         {showCfopDropdown && (
                           <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10">
