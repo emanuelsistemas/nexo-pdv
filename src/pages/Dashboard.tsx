@@ -424,20 +424,20 @@ function Dashboard() {
     <div className="min-h-screen bg-slate-900 flex flex-col">
       {showStatusAlert && <StatusAlert />}
       
-      {/* Header */}
-      <AppHeader 
-        userName={userName}
-        companyName={companyName}
-        onToggleFullscreen={toggleFullscreen}
-        isFullscreen={isFullscreen}
-        onShowLogoutConfirm={() => setShowLogoutConfirm(true)}
-        onShowMobileMenu={() => setShowMobileMenu(!showMobileMenu)}
-      />
+      {/* Header and Breadcrumb wrapper */}
+      <div className="header-breadcrumb-wrapper">
+        {/* Header */}
+        <AppHeader 
+          userName={userName}
+          companyName={companyName}
+          onToggleFullscreen={toggleFullscreen}
+          isFullscreen={isFullscreen}
+          onShowLogoutConfirm={() => setShowLogoutConfirm(true)}
+          onShowMobileMenu={() => setShowMobileMenu(!showMobileMenu)}
+        />
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+        {/* Path Navigation */}
         <div className="p-4">
-          {/* Path Navigation */}
           <Breadcrumb 
             currentPath={currentPath.map(path => {
               const pathItem = layout.find(item => item.i === path);
@@ -463,6 +463,12 @@ function Dashboard() {
             }}
             className="mb-4"
           />
+        </div>
+      </div>
+      
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto">
+        <div className="p-4">
           
           {/* Grid Layout */}
           <GridLayout
