@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useTheme } from '../App';
-import { Folder, File, Home, Search, LogOut, Settings, Store, ChevronLeft, X, FileText, Package, Grid2X2, Ruler, Users, FileBarChart2, AlertTriangle, Tag } from 'lucide-react';
+// import { useTheme } from '../App';
+import { Folder, File, Search, LogOut, Settings, Store, X, FileText, Package, Grid2X2, Ruler, Users, FileBarChart2, AlertTriangle, Tag } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import GridLayout from 'react-grid-layout';
@@ -11,6 +11,7 @@ import { HumanVerification } from '../components/HumanVerification';
 import LogoutOverlay from '../components/LogoutOverlay';
 import { SystemConfigPanel } from '../components/SystemConfigPanel';
 import { AppHeader } from '../components/AppHeader';
+import { Breadcrumb, PathItem } from '../components/Breadcrumb';
 import { closeWindow } from '../utils/windowUtils';
 import { clearLoginState } from '../utils/authUtils';
 
@@ -41,7 +42,7 @@ function Dashboard() {
   const [currentPath, setCurrentPath] = useState<string[]>([]);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragEnabled, setDragEnabled] = useState(false); // TODO: setDragEnabled não é usado
+  const [dragEnabled] = useState(false); // Removemos o setter pois não é usado
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [showCompanyPanel, setShowCompanyPanel] = useState(false);
   const [companyRegistrationStatus, setCompanyRegistrationStatus] = useState<'N' | 'S'>('N');
@@ -54,11 +55,11 @@ function Dashboard() {
   });
   const [showLogoutOverlay, setShowLogoutOverlay] = useState(false);
   const [showSystemConfigPanel, setShowSystemConfigPanel] = useState(false);
-  const [companyStatus, setCompanyStatus] = useState<CompanyStatus | null>(null); // TODO: companyStatus não é lido
+  const [, setCompanyStatus] = useState<CompanyStatus | null>(null); // Mantemos apenas o setter
   const [showStatusAlert, setShowStatusAlert] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const logoutConfirmRef = useRef<HTMLDivElement>(null);
-  const { theme } = useTheme();
+
 
   // Rest of the component implementation remains exactly the same...
   // (All the existing code from the original file should be included here)
@@ -437,46 +438,31 @@ function Dashboard() {
       <main className="flex-1 overflow-auto">
         <div className="p-4">
           {/* Path Navigation */}
-          <div className="flex items-center mb-4 bg-slate-800 rounded-lg p-1 overflow-x-auto">
-            <button
-              onClick={handleBackClick}
-              disabled={currentPath.length === 0}
-              className={`p-2 rounded-lg flex items-center justify-center ${currentPath.length === 0 ? 'text-slate-600 cursor-not-allowed' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button
-              onClick={() => {
-                setCurrentFolder(null);
-                setCurrentPath([]);
-                setDisplayedLayout(layout.filter(item => !item.parent));
-              }}
-              className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700 flex items-center justify-center"
-            >
-              <Home size={18} />
-            </button>
-            
-            {/* Path segments */}
-            {currentPath.map((path, index) => {
+          <Breadcrumb 
+            currentPath={currentPath.map(path => {
               const pathItem = layout.find(item => item.i === path);
-              return (
-                <div key={path} className="flex items-center">
-                  <span className="text-slate-500 mx-1">/</span>
-                  <button
-                    onClick={() => {
-                      const newPath = currentPath.slice(0, index + 1);
-                      setCurrentPath(newPath);
-                      setCurrentFolder(path);
-                      setDisplayedLayout(layout.filter(item => item.parent === path));
-                    }}
-                    className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700"
-                  >
-                    {pathItem?.title || path}
-                  </button>
-                </div>
-              );
+              return {
+                id: path,
+                title: pathItem?.title || path
+              };
             })}
-          </div>
+            onNavigate={(pathItem: PathItem | null, index?: number) => {
+              if (!pathItem) return;
+              if (index !== undefined) {
+                const newPath = currentPath.slice(0, index + 1);
+                setCurrentPath(newPath);
+                setCurrentFolder(pathItem.id);
+                setDisplayedLayout(layout.filter(item => item.parent === pathItem.id));
+              }
+            }}
+            onBack={handleBackClick}
+            onHome={() => {
+              setCurrentFolder(null);
+              setCurrentPath([]);
+              setDisplayedLayout(layout.filter(item => !item.parent));
+            }}
+            className="mb-4"
+          />
           
           {/* Grid Layout */}
           <GridLayout
