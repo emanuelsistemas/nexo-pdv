@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../App';
-import { Folder, File, Home, Search, Bell, LogOut, User, Key, Settings, Store, ChevronLeft, X, Menu, FileText, Package, Grid2X2, Ruler, Users, FileBarChart2, Moon, Sun, Bug, Maximize2, Minimize2, AlertTriangle, Tag } from 'lucide-react';
+import { Folder, File, Home, Search, LogOut, Settings, Store, ChevronLeft, X, FileText, Package, Grid2X2, Ruler, Users, FileBarChart2, AlertTriangle, Tag } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import GridLayout from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { supabase } from '../lib/supabase';
-import { Logo } from '../components/Logo';
 import { CompanySlidePanel } from '../components/CompanySlidePanel';
 import { HumanVerification } from '../components/HumanVerification';
 import LogoutOverlay from '../components/LogoutOverlay';
 import { SystemConfigPanel } from '../components/SystemConfigPanel';
+import { AppHeader } from '../components/AppHeader';
 import { closeWindow } from '../utils/windowUtils';
 import { clearLoginState } from '../utils/authUtils';
 
@@ -58,7 +58,7 @@ function Dashboard() {
   const [showStatusAlert, setShowStatusAlert] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const logoutConfirmRef = useRef<HTMLDivElement>(null);
-  const { theme, toggleTheme } = useTheme();
+  const { theme } = useTheme();
 
   // Rest of the component implementation remains exactly the same...
   // (All the existing code from the original file should be included here)
@@ -424,107 +424,14 @@ function Dashboard() {
       {showStatusAlert && <StatusAlert />}
       
       {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700 py-2 px-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setShowMobileMenu(!showMobileMenu)}
-              className="md:hidden text-slate-300 hover:text-white"
-            >
-              <Menu size={24} />
-            </button>
-            <div className="flex items-center gap-2">
-              <Logo variant="dashboard" />
-              <span className="text-slate-300 hidden sm:inline">|</span>
-              <span className="text-slate-300 hidden sm:inline">{companyName}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 md:gap-4">
-            <button
-              onClick={() => alert('Relatório de bugs - Em desenvolvimento')}
-              className="text-slate-300 hover:text-white hidden md:flex items-center justify-center p-2 rounded-lg hover:bg-slate-700 transition-colors"
-              title="Reportar um problema"
-            >
-              <Bug size={18} />
-            </button>
-
-            <button
-              onClick={() => alert('Notificações - Em desenvolvimento')}
-              className="text-slate-300 hover:text-white hidden md:flex items-center justify-center p-2 rounded-lg hover:bg-slate-700 transition-colors"
-              title="Notificações"
-            >
-              <Bell size={18} />
-            </button>
-
-            <button
-              onClick={toggleFullscreen}
-              className="text-slate-300 hover:text-white flex items-center justify-center p-2 rounded-lg hover:bg-slate-700 transition-colors"
-              title={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
-            >
-              {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-            </button>
-
-            <div className="relative">
-              <button
-                id="user-menu-button"
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-3 px-3 py-1.5 rounded-lg hover:bg-slate-700 transition-colors relative"
-              >
-                <div className="h-8 w-8 rounded-full bg-blue-500 text-white flex items-center justify-center">
-                  <User size={16} />
-                </div>
-                <span className="text-slate-200 text-sm font-medium md:block">{userName}</span>
-              </button>
-              
-              {showUserMenu && (
-                <div 
-                  ref={userMenuRef}
-                  className="absolute right-0 top-full mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-lg overflow-hidden z-10">
-                  <ul>
-                    <li>
-                      <button
-                        onClick={() => alert('Perfil do usuário - Em desenvolvimento')}
-                        className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 transition-colors"
-                      >
-                        <User size={16} />
-                        <span>Perfil de usuário</span>
-                      </button>
-                    </li>
-                    <li>
-                      <button
-                        onClick={() => alert('Alterar senha - Em desenvolvimento')}
-                        className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 transition-colors"
-                      >
-                        <Key size={16} />
-                        <span>Alterar senha</span>
-                      </button>
-                    </li>
-                    <li>
-                      <button
-                        onClick={toggleTheme}
-                        className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 transition-colors"
-                      >
-                        {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-                        <span>{theme === 'dark' ? "Modo claro" : "Modo escuro"}</span>
-                      </button>
-                    </li>
-                    <li className="border-t border-slate-700">
-                      <button
-                        onClick={() => setShowLogoutConfirm(true)}
-                        className="flex items-center gap-2 w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-slate-700 transition-colors"
-                      >
-                        <LogOut size={16} />
-                        <span>Sair</span>
-                      </button>
-                    </li>
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader 
+        userName={userName}
+        companyName={companyName}
+        onToggleFullscreen={toggleFullscreen}
+        isFullscreen={isFullscreen}
+        onShowLogoutConfirm={() => setShowLogoutConfirm(true)}
+        onShowMobileMenu={() => setShowMobileMenu(!showMobileMenu)}
+      />
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
