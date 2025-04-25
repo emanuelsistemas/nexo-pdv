@@ -119,6 +119,31 @@ export default function Marca() {
     return marca.name.toLowerCase().includes(searchLower);
   });
 
+  // Construir o caminho do breadcrumb com base no estado de navegação
+  const getBreadcrumbPath = () => {
+    const path = [];
+    
+    // Se veio da pasta produtos, adiciona "Produtos" ao caminho
+    if (location.state && location.state.from === 'produtos-folder') {
+      path.push({ id: 'produtos', title: 'Produtos' });
+    }
+    
+    // Adiciona "Marcas" ao final do caminho
+    path.push({ id: 'marca', title: 'Marcas' });
+    
+    return path;
+  };
+
+  // Função para lidar com a navegação do breadcrumb
+  const handleBreadcrumbNavigate = (pathItem: { id: string, title: string } | null, index?: number) => {
+    if (!pathItem) return;
+    
+    // Se clicou em "Produtos", volta para o Dashboard com a pasta produtos aberta
+    if (pathItem.id === 'produtos') {
+      navigate('/dashboard', { state: { openFolder: 'produtos' } });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
       {/* Header and Breadcrumb wrapper */}
@@ -131,16 +156,16 @@ export default function Marca() {
         {/* Path Navigation */}
         <ContentContainer>
           <Breadcrumb 
-            currentPath={[{ id: 'marca', title: 'Marcas' }]}
-            onNavigate={() => {}}
+            currentPath={getBreadcrumbPath()}
+            onNavigate={handleBreadcrumbNavigate}
             onBack={handleClose}
-            onHome={handleClose}
+            onHome={() => navigate('/dashboard')}
           />
         </ContentContainer>
       </div>
 
       {/* Toolbar */}
-      <div className="bg-slate-800/50 border-b border-slate-700">
+      <div className="border-b border-slate-700">
         <div className="p-4">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">
