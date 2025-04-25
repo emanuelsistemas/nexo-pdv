@@ -437,7 +437,7 @@ function Dashboard() {
         />
 
         {/* Path Navigation */}
-        <div className="p-4">
+        <div className="px-4 pt-4 pb-0">
           <Breadcrumb 
             currentPath={currentPath.map(path => {
               const pathItem = layout.find(item => item.i === path);
@@ -461,14 +461,13 @@ function Dashboard() {
               setCurrentPath([]);
               setDisplayedLayout(layout.filter(item => !item.parent));
             }}
-            className="mb-4"
           />
         </div>
       </div>
       
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        <div className="p-4">
+        <div className="px-4 pt-4">
           
           {/* Grid Layout */}
           <GridLayout
