@@ -28,6 +28,7 @@ interface ProductSlidePanelProps {
     pis: string;
     cofins: string;
     ncm: string;
+    cest?: string; // Novo campo adicionado como opcional (alguns produtos existentes podem não ter)
     cfop: string;
     status: 'active' | 'inactive';
   } | null;
@@ -49,6 +50,7 @@ interface ProductFormData {
   pis: string;
   cofins: string;
   ncm: string;
+  cest: string;
   cfop: string;
   status: 'active' | 'inactive';
 }
@@ -84,6 +86,24 @@ interface ProductImage {
   created_at: string;
 }
 
+interface IPIItem {
+  id: number;
+  codigo: string;
+  descricao: string;
+}
+
+interface PISItem {
+  id: number;
+  codigo: string;
+  descricao: string;
+}
+
+interface COFINSItem {
+  id: number;
+  codigo: string;
+  descricao: string;
+}
+
 export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab = 'produto' }: ProductSlidePanelProps) {
   const [activeTab, setActiveTab] = useState<'produto' | 'estoque' | 'impostos' | 'fotos'>(initialTab);
   const [loading, setLoading] = useState(false);
@@ -102,12 +122,22 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     pis: '',
     cofins: '',
     ncm: '',
+    cest: '',
     cfop: '5405',
     status: 'active'
   });
   const [cfopOptions, setCfopOptions] = useState<CFOPItem[]>([]);
   const [cfopSearchTerm, setCfopSearchTerm] = useState('');
   const [showCfopDropdown, setShowCfopDropdown] = useState(false);
+  const [ipiOptions, setIpiOptions] = useState<IPIItem[]>([]);
+  const [ipiSearchTerm, setIpiSearchTerm] = useState('');
+  const [showIpiDropdown, setShowIpiDropdown] = useState(false);
+  const [pisOptions, setPisOptions] = useState<PISItem[]>([]);
+  const [pisSearchTerm, setPisSearchTerm] = useState('');
+  const [showPisDropdown, setShowPisDropdown] = useState(false);
+  const [cofinsOptions, setCofinsOptions] = useState<COFINSItem[]>([]);
+  const [cofinsSearchTerm, setCofinsSearchTerm] = useState('');
+  const [showCofinsDropdown, setShowCofinsDropdown] = useState(false);
   const [units, setUnits] = useState<ProductUnit[]>([]);
   const [groups, setGroups] = useState<ProductGroup[]>([]);
   const [brands, setBrands] = useState<ProductBrand[]>([]);
@@ -261,8 +291,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
           // Buscar regime tributário da empresa
           await loadCompanyRegimeTributario();
           
-          // Carregar unidades, grupos, marcas e opções CFOP em paralelo
-          await Promise.all([loadUnits(), loadGroups(), loadBrands(), loadCFOPOptions()]);
+          // Carregar unidades, grupos, marcas, opções CFOP, IPI, PIS e COFINS em paralelo
+          await Promise.all([loadUnits(), loadGroups(), loadBrands(), loadCFOPOptions(), loadIPIOptions(), loadPISOptions(), loadCOFINSOptions()]);
 
           if (productToEdit) {
             setFormData({
@@ -280,6 +310,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
               pis: productToEdit.pis,
               cofins: productToEdit.cofins,
               ncm: productToEdit.ncm,
+              cest: productToEdit.cest || '',
               cfop: productToEdit.cfop,
               status: productToEdit.status
             });
@@ -787,20 +818,31 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     }
   };
 
-  // Função para carregar os CFOP disponíveis
-  // Ref para detectar cliques fora do dropdown
+  // Refs para detectar cliques fora dos dropdowns
   const cfopDropdownRef = useRef<HTMLDivElement>(null);
+  const ipiDropdownRef = useRef<HTMLDivElement>(null);
+  const pisDropdownRef = useRef<HTMLDivElement>(null);
+  const cofinsDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Efeito para fechar dropdown ao clicar fora dele
+  // Efeito para fechar dropdowns ao clicar fora deles
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (cfopDropdownRef.current && !cfopDropdownRef.current.contains(event.target as Node)) {
         setShowCfopDropdown(false);
       }
+      if (ipiDropdownRef.current && !ipiDropdownRef.current.contains(event.target as Node)) {
+        setShowIpiDropdown(false);
+      }
+      if (pisDropdownRef.current && !pisDropdownRef.current.contains(event.target as Node)) {
+        setShowPisDropdown(false);
+      }
+      if (cofinsDropdownRef.current && !cofinsDropdownRef.current.contains(event.target as Node)) {
+        setShowCofinsDropdown(false);
+      }
     }
 
-    // Adicionar event listener quando o dropdown estiver aberto
-    if (showCfopDropdown) {
+    // Adicionar event listener quando algum dropdown estiver aberto
+    if (showCfopDropdown || showIpiDropdown || showPisDropdown || showCofinsDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     
@@ -808,7 +850,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showCfopDropdown]);
+  }, [showCfopDropdown, showIpiDropdown, showPisDropdown, showCofinsDropdown]);
   
   // Carregar o regime tributário da empresa atual
   const loadCompanyRegimeTributario = async () => {
@@ -867,6 +909,66 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     }
   };
 
+  const loadIPIOptions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('nfe_cst_ipi')
+        .select('id, codigo, descricao')
+        .order('codigo', { ascending: true });
+        
+      if (error) {
+        throw error;
+      }
+      
+      // Garantir o tipo correto dos dados
+      const typedData = data as IPIItem[];
+      setIpiOptions(typedData);
+    } catch (error: any) {
+      console.error('Erro ao carregar códigos IPI:', error.message);
+      toast.error(`Erro ao carregar códigos IPI: ${error.message}`);
+    }
+  };
+
+  const loadPISOptions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('nfe_cst_pis')
+        .select('id, codigo, descricao')
+        .order('codigo', { ascending: true });
+        
+      if (error) {
+        throw error;
+      }
+      
+      // Garantir o tipo correto dos dados
+      const typedData = data as PISItem[];
+      setPisOptions(typedData);
+    } catch (error: any) {
+      console.error('Erro ao carregar códigos PIS:', error.message);
+      toast.error(`Erro ao carregar códigos PIS: ${error.message}`);
+    }
+  };
+
+  const loadCOFINSOptions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('nfe_cst_cofins')
+        .select('id, codigo, descricao')
+        .order('codigo', { ascending: true });
+        
+      if (error) {
+        throw error;
+      }
+      
+      // Garantir o tipo correto dos dados
+      const typedData = data as COFINSItem[];
+      setCofinsOptions(typedData);
+    } catch (error: any) {
+      console.error('Erro ao carregar códigos COFINS:', error.message);
+      toast.error(`Erro ao carregar códigos COFINS: ${error.message}`);
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       code: '',
@@ -883,6 +985,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       pis: '',
       cofins: '',
       ncm: '',
+      cest: '',
       cfop: '5405',
       status: 'active'
     });
@@ -2006,36 +2109,227 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                   {/* PIS e COFINS na segunda linha */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        PIS *
-                      </label>
-                      <input
-                        type="text"
-                        name="pis"
-                        value={formData.pis}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
+                      <div className="mb-1">
+                        <label className="block text-sm font-medium text-slate-300">
+                          PIS *
+                        </label>
+                      </div>
+                      <div className="relative" ref={pisDropdownRef}>
+                        <div 
+                          className="w-full h-10 px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent flex justify-between items-center cursor-pointer"
+                          onClick={() => setShowPisDropdown(!showPisDropdown)}
+                        >
+                          {/* Exibir o PIS selecionado */}
+                          <div className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis pr-2">
+                            {pisOptions.find(p => p.codigo === formData.pis)?.codigo || ''} - 
+                            {pisOptions.find(p => p.codigo === formData.pis)?.descricao || 'Selecione...'}
+                          </div>
+                          <div className="flex-shrink-0 text-xs text-slate-400">
+                            {showPisDropdown ? '▲' : '▼'}
+                          </div>
+                        </div>
+                        
+                        {showPisDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10">
+                            <div className="p-2">
+                              <input
+                                type="text"
+                                placeholder="Pesquisar PIS..."
+                                value={pisSearchTerm}
+                                onChange={(e) => setPisSearchTerm(e.target.value)}
+                                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </div>
+                            <div className="max-h-60 overflow-y-auto">
+                              {pisOptions
+                                .filter(pis => 
+                                  pisSearchTerm === '' || 
+                                  pis.codigo.includes(pisSearchTerm) || 
+                                  pis.descricao.toLowerCase().includes(pisSearchTerm.toLowerCase())
+                                )
+                                .map((pis) => {
+                                  // Limitar o tamanho da descrição para evitar que estoure a largura
+                                  const shortDesc = pis.descricao.length > 40 
+                                    ? pis.descricao.substring(0, 40) + '...' 
+                                    : pis.descricao;
+                                  
+                                  return (
+                                    <div 
+                                      key={pis.id}
+                                      className={`px-4 py-2 cursor-pointer hover:bg-slate-700 ${formData.pis === pis.codigo ? 'bg-blue-500/20' : ''}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setFormData(prev => ({ ...prev, pis: pis.codigo }));
+                                        setShowPisDropdown(false);
+                                      }}
+                                      title={`${pis.codigo} - ${pis.descricao}`}
+                                    >
+                                      {pis.codigo} - {shortDesc}
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        COFINS *
-                      </label>
-                      <input
-                        type="text"
-                        name="cofins"
-                        value={formData.cofins}
-                        onChange={handleChange}
-                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        required
-                      />
+                      <div className="mb-1">
+                        <label className="block text-sm font-medium text-slate-300">
+                          COFINS *
+                        </label>
+                      </div>
+                      <div className="relative" ref={cofinsDropdownRef}>
+                        <div 
+                          className="w-full h-10 px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent flex justify-between items-center cursor-pointer"
+                          onClick={() => setShowCofinsDropdown(!showCofinsDropdown)}
+                        >
+                          {/* Exibir o COFINS selecionado */}
+                          <div className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis pr-2">
+                            {cofinsOptions.find(c => c.codigo === formData.cofins)?.codigo || ''} - 
+                            {cofinsOptions.find(c => c.codigo === formData.cofins)?.descricao || 'Selecione...'}
+                          </div>
+                          <div className="flex-shrink-0 text-xs text-slate-400">
+                            {showCofinsDropdown ? '▲' : '▼'}
+                          </div>
+                        </div>
+                        
+                        {showCofinsDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10">
+                            <div className="p-2">
+                              <input
+                                type="text"
+                                placeholder="Pesquisar COFINS..."
+                                value={cofinsSearchTerm}
+                                onChange={(e) => setCofinsSearchTerm(e.target.value)}
+                                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </div>
+                            <div className="max-h-60 overflow-y-auto">
+                              {cofinsOptions
+                                .filter(cofins => 
+                                  cofinsSearchTerm === '' || 
+                                  cofins.codigo.includes(cofinsSearchTerm) || 
+                                  cofins.descricao.toLowerCase().includes(cofinsSearchTerm.toLowerCase())
+                                )
+                                .map((cofins) => {
+                                  // Limitar o tamanho da descrição para evitar que estoure a largura
+                                  const shortDesc = cofins.descricao.length > 40 
+                                    ? cofins.descricao.substring(0, 40) + '...' 
+                                    : cofins.descricao;
+                                  
+                                  return (
+                                    <div 
+                                      key={cofins.id}
+                                      className={`px-4 py-2 cursor-pointer hover:bg-slate-700 ${formData.cofins === cofins.codigo ? 'bg-blue-500/20' : ''}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setFormData(prev => ({ ...prev, cofins: cofins.codigo }));
+                                        setShowCofinsDropdown(false);
+                                      }}
+                                      title={`${cofins.codigo} - ${cofins.descricao}`}
+                                    >
+                                      {cofins.codigo} - {shortDesc}
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* NCM sozinho na última posição */}
+                  {/* NCM, CEST e IPI */}
                   <div className="grid grid-cols-1 gap-6">
+                    {/* CEST e IPI só aparecem para CFOPs de ST (5405 no Simples ou começando com 60 no regime normal) */}
+                    {(formData.cfop === '5405' || formData.cfop.startsWith('60')) && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-300 mb-1">
+                            CEST
+                          </label>
+                          <input
+                            type="text"
+                            name="cest"
+                            value={formData.cest}
+                            onChange={handleChange}
+                            placeholder="Para produtos com substituição tributária"
+                            className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                        </div>
+                        
+                        <div>
+                          <div className="mb-1">
+                            <label className="block text-sm font-medium text-slate-300">
+                              IPI
+                            </label>
+                          </div>
+                          <div className="relative" ref={ipiDropdownRef}>
+                            <div 
+                              className="w-full h-10 px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent flex justify-between items-center cursor-pointer"
+                              onClick={() => setShowIpiDropdown(!showIpiDropdown)}
+                            >
+                              {/* Exibir o IPI selecionado */}
+                              <div className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis pr-2">
+                                {ipiOptions.find(i => i.codigo === formData.cst)?.codigo || ''} - 
+                                {ipiOptions.find(i => i.codigo === formData.cst)?.descricao || 'Selecione...'}
+                              </div>
+                              <div className="flex-shrink-0 text-xs text-slate-400">
+                                {showIpiDropdown ? '▲' : '▼'}
+                              </div>
+                            </div>
+                            
+                            {showIpiDropdown && (
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-10">
+                                <div className="p-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Pesquisar IPI..."
+                                    value={ipiSearchTerm}
+                                    onChange={(e) => setIpiSearchTerm(e.target.value)}
+                                    className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+                                <div className="max-h-60 overflow-y-auto">
+                                  {ipiOptions
+                                    .filter(ipi => 
+                                      ipiSearchTerm === '' || 
+                                      ipi.codigo.includes(ipiSearchTerm) || 
+                                      ipi.descricao.toLowerCase().includes(ipiSearchTerm.toLowerCase())
+                                    )
+                                    .map((ipi) => {
+                                      // Limitar o tamanho da descrição para evitar que estoure a largura
+                                      const shortDesc = ipi.descricao.length > 40 
+                                        ? ipi.descricao.substring(0, 40) + '...' 
+                                        : ipi.descricao;
+                                      
+                                      return (
+                                        <div 
+                                          key={ipi.id}
+                                          className={`px-4 py-2 cursor-pointer hover:bg-slate-700 ${formData.cst === ipi.codigo ? 'bg-blue-500/20' : ''}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setFormData(prev => ({ ...prev, cst: ipi.codigo }));
+                                            setShowIpiDropdown(false);
+                                          }}
+                                          title={`${ipi.codigo} - ${ipi.descricao}`}
+                                        >
+                                          {ipi.codigo} - {shortDesc}
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-1">
                         NCM *
