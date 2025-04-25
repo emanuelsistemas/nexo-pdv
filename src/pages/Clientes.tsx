@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, Users, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, Mail, Phone, Inbox } from 'lucide-react';
 import { AppFooter } from '../components/AppFooter';
 import { AppHeader } from '../components/AppHeader';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { ContentContainer } from '../components/ContentContainer';
+import { supabase } from '../lib/supabase';
 
 export default function Clientes() {
   const navigate = useNavigate();
@@ -13,6 +14,54 @@ export default function Clientes() {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
+  const [userName, setUserName] = useState('');
+  const [companyName, setCompanyName] = useState('');
+
+  useEffect(() => {
+    loadUserInfo();
+  }, []);
+
+  const loadUserInfo = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('Usuário não autenticado');
+        navigate('/login');
+        return;
+      }
+
+      // Buscar perfil e detalhes da empresa
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('name, company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      if (profile) {
+        setUserName(profile.name as string);
+
+        // Se o usuário já tem uma empresa vinculada
+        if (profile.company_id) {
+          const { data: company, error: companyError } = await supabase
+            .from('companies')
+            .select('trade_name')
+            .eq('id', profile.company_id)
+            .single();
+
+          if (companyError) throw companyError;
+
+          if (company) {
+            setCompanyName(company.trade_name as string);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar informações do usuário:', error);
+    }
+  };
 
   // Mock data for demonstration
   const clientes = [
@@ -130,6 +179,8 @@ export default function Clientes() {
       <div className="header-breadcrumb-wrapper">
         {/* Header */}
         <AppHeader 
+          userName={userName}
+          companyName={companyName}
           onShowLogoutConfirm={handleClose}
         />
 

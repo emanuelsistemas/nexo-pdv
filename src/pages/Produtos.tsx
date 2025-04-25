@@ -52,6 +52,8 @@ export default function Produtos() {
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [sortField, setSortField] = useState<string | null>('code');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [userName, setUserName] = useState('');
+  const [companyName, setCompanyName] = useState('');
   
   // Configurações de exibição dos campos adicionais
   const [productConfig, setProductConfig] = useState({
@@ -64,10 +66,53 @@ export default function Produtos() {
   });
 
   useEffect(() => {
+    loadUserInfo();
     loadProducts();
     loadGroups();
     loadProductConfig();
   }, []);
+
+  const loadUserInfo = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('Usuário não autenticado');
+        navigate('/login');
+        return;
+      }
+
+      // Buscar perfil e detalhes da empresa
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('name, company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      if (profile) {
+        setUserName(profile.name as string);
+
+        // Se o usuário já tem uma empresa vinculada
+        if (profile.company_id) {
+          const { data: company, error: companyError } = await supabase
+            .from('companies')
+            .select('trade_name')
+            .eq('id', profile.company_id)
+            .single();
+
+          if (companyError) throw companyError;
+
+          if (company) {
+            setCompanyName(company.trade_name as string);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar informações do usuário:', error);
+    }
+  };
 
   const loadProductConfig = async () => {
     try {
@@ -569,6 +614,8 @@ export default function Produtos() {
       <div className="header-breadcrumb-wrapper">
         {/* Header */}
         <AppHeader 
+          userName={userName}
+          companyName={companyName}
           onShowLogoutConfirm={handleClose}
         />
 

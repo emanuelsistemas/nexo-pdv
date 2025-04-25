@@ -27,10 +27,55 @@ export default function Unidade() {
   const [unitToEdit, setUnitToEdit] = useState<Unit | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState('');
+  const [companyName, setCompanyName] = useState('');
 
   useEffect(() => {
+    loadUserInfo();
     loadUnits();
   }, []);
+
+  const loadUserInfo = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        console.error('Usuário não autenticado');
+        navigate('/login');
+        return;
+      }
+
+      // Buscar perfil e detalhes da empresa
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('name, company_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      if (profile) {
+        setUserName(profile.name as string);
+
+        // Se o usuário já tem uma empresa vinculada
+        if (profile.company_id) {
+          const { data: company, error: companyError } = await supabase
+            .from('companies')
+            .select('trade_name')
+            .eq('id', profile.company_id)
+            .single();
+
+          if (companyError) throw companyError;
+
+          if (company) {
+            setCompanyName(company.trade_name as string);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar informações do usuário:', error);
+    }
+  };
 
   const loadUnits = async () => {
     try {
@@ -172,6 +217,8 @@ export default function Unidade() {
       <div className="header-breadcrumb-wrapper">
         {/* Header */}
         <AppHeader 
+          userName={userName}
+          companyName={companyName}
           onShowLogoutConfirm={handleClose}
         />
 
