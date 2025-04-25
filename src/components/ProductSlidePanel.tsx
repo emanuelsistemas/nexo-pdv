@@ -1562,7 +1562,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
               {formData.name ? (
                 <span className="text-white">{formData.name}</span>
               ) : (
-                <span className="text-slate-400">[ Nome do Produto ]</span>
+                <span className="text-slate-400 inline-block min-h-[1.5rem]">&nbsp;</span>
               )}
             </h2>
           </div>
