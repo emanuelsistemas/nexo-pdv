@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, Users, Calendar, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, Mail, Phone, Inbox } from 'lucide-react';
-import { Logo } from '../components/Logo';
 import { AppFooter } from '../components/AppFooter';
+import { AppHeader } from '../components/AppHeader';
+import { Breadcrumb } from '../components/Breadcrumb';
+import { ContentContainer } from '../components/ContentContainer';
 
 export default function Clientes() {
   const navigate = useNavigate();
@@ -97,27 +99,53 @@ export default function Clientes() {
     }
   };
 
+  // Construir o caminho do breadcrumb com base no estado de navegação
+  const getBreadcrumbPath = () => {
+    const path = [];
+    
+    // Se veio da pasta clientes, adiciona "Clientes" ao caminho
+    if (location.state && location.state.from === 'clientes-folder') {
+      path.push({ id: 'clientes', title: 'Clientes' });
+    }
+    
+    // Adiciona "Clientes" ao final do caminho
+    path.push({ id: 'clientes-app', title: 'Clientes' });
+    
+    return path;
+  };
+
+  // Função para lidar com a navegação do breadcrumb
+  const handleBreadcrumbNavigate = (pathItem: { id: string, title: string } | null, index?: number) => {
+    if (!pathItem) return;
+    
+    // Se clicou em "Clientes", volta para o Dashboard com a pasta clientes aberta
+    if (pathItem.id === 'clientes') {
+      navigate('/dashboard', { state: { openFolder: 'clientes' } });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
-      {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700">
-        <div className="flex items-center justify-between h-12 px-4">
-          <div className="flex items-center gap-6">
-            <Logo variant="dashboard" />
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleClose}
-              className="text-slate-400 hover:text-slate-200"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* Header and Breadcrumb wrapper */}
+      <div className="header-breadcrumb-wrapper">
+        {/* Header */}
+        <AppHeader 
+          onShowLogoutConfirm={handleClose}
+        />
+
+        {/* Path Navigation */}
+        <ContentContainer>
+          <Breadcrumb 
+            currentPath={getBreadcrumbPath()}
+            onNavigate={handleBreadcrumbNavigate}
+            onBack={handleClose}
+            onHome={() => navigate('/dashboard')}
+          />
+        </ContentContainer>
+      </div>
 
       {/* Toolbar */}
-      <div className="bg-slate-800/50 border-b border-slate-700">
+      <div className="border-b border-slate-700">
         <div className="p-4">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">

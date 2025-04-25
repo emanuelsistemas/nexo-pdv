@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, FileText, Calendar, Filter, X, ChevronLeft, ChevronRight, MoreVertical, Printer, Trash2, Copy, Edit, ArrowUpDown, ArrowDownAZ, ArrowUpAZ } from 'lucide-react';
-import { Logo } from '../components/Logo';
 import { AppFooter } from '../components/AppFooter';
+import { AppHeader } from '../components/AppHeader';
+import { Breadcrumb } from '../components/Breadcrumb';
+import { ContentContainer } from '../components/ContentContainer';
 
 export default function Orcamento() {
   const navigate = useNavigate();
@@ -140,27 +142,42 @@ export default function Orcamento() {
     }
   };
 
+  // Construir o caminho do breadcrumb
+  const getBreadcrumbPath = () => {
+    return [{ id: 'orcamento', title: 'Orçamentos' }];
+  };
+
+  // Função para lidar com a navegação do breadcrumb
+  const handleBreadcrumbNavigate = () => {
+    // Não há navegação específica para orçamentos
+  };
+
+  const handleClose = () => {
+    navigate('/dashboard');
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
-      {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700">
-        <div className="flex items-center justify-between h-12 px-4">
-          <div className="flex items-center gap-6">
-            <Logo variant="dashboard" />
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="text-slate-400 hover:text-slate-200"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* Header and Breadcrumb wrapper */}
+      <div className="header-breadcrumb-wrapper">
+        {/* Header */}
+        <AppHeader 
+          onShowLogoutConfirm={handleClose}
+        />
+
+        {/* Path Navigation */}
+        <ContentContainer>
+          <Breadcrumb 
+            currentPath={getBreadcrumbPath()}
+            onNavigate={handleBreadcrumbNavigate}
+            onBack={handleClose}
+            onHome={() => navigate('/dashboard')}
+          />
+        </ContentContainer>
+      </div>
 
       {/* Toolbar */}
-      <div className="bg-slate-800/50 border-b border-slate-700">
+      <div className="border-b border-slate-700">
         <div className="p-4">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">

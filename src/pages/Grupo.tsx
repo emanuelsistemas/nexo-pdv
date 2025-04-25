@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Plus, Grid2X2, Filter, X, ChevronLeft, ChevronRight, Edit, Trash2, Lock } from 'lucide-react';
-import { Logo } from '../components/Logo';
 import { GroupSlidePanel } from '../components/GroupSlidePanel';
+import { AppHeader } from '../components/AppHeader';
+import { Breadcrumb } from '../components/Breadcrumb';
+import { ContentContainer } from '../components/ContentContainer';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -49,7 +51,7 @@ export default function Grupo() {
         throw new Error('Empresa não encontrada');
       }
 
-      const { data: groups, error: groupsError } = await supabase
+      const { data: groupsData, error: groupsError } = await supabase
         .from('product_groups')
         .select('*')
         .eq('company_id', profile.company_id)
@@ -59,7 +61,8 @@ export default function Grupo() {
         throw groupsError;
       }
 
-      setGroups(groups || []);
+      // Conversão segura para o tipo Group[]
+      setGroups(groupsData ? (groupsData as unknown as Group[]) : []);
     } catch (error: any) {
       console.error('Erro ao carregar grupos:', error);
       toast.error('Erro ao carregar grupos');
@@ -136,27 +139,53 @@ export default function Grupo() {
     );
   });
 
+  // Construir o caminho do breadcrumb com base no estado de navegação
+  const getBreadcrumbPath = () => {
+    const path = [];
+    
+    // Se veio da pasta produtos, adiciona "Produtos" ao caminho
+    if (location.state && location.state.from === 'produtos-folder') {
+      path.push({ id: 'produtos', title: 'Produtos' });
+    }
+    
+    // Adiciona "Grupos" ao final do caminho
+    path.push({ id: 'grupo-app', title: 'Grupos' });
+    
+    return path;
+  };
+
+  // Função para lidar com a navegação do breadcrumb
+  const handleBreadcrumbNavigate = (pathItem: { id: string, title: string } | null, index?: number) => {
+    if (!pathItem) return;
+    
+    // Se clicou em "Produtos", volta para o Dashboard com a pasta produtos aberta
+    if (pathItem.id === 'produtos') {
+      navigate('/dashboard', { state: { openFolder: 'produtos' } });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
-      {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700">
-        <div className="flex items-center justify-between h-12 px-4">
-          <div className="flex items-center gap-6">
-            <Logo variant="dashboard" />
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleClose}
-              className="text-slate-400 hover:text-slate-200"
-            >
-              <X size={20} />
-            </button>
-          </div>
-        </div>
-      </header>
+      {/* Header and Breadcrumb wrapper */}
+      <div className="header-breadcrumb-wrapper">
+        {/* Header */}
+        <AppHeader 
+          onShowLogoutConfirm={handleClose}
+        />
+
+        {/* Path Navigation */}
+        <ContentContainer>
+          <Breadcrumb 
+            currentPath={getBreadcrumbPath()}
+            onNavigate={handleBreadcrumbNavigate}
+            onBack={handleClose}
+            onHome={() => navigate('/dashboard')}
+          />
+        </ContentContainer>
+      </div>
 
       {/* Toolbar */}
-      <div className="bg-slate-800/50 border-b border-slate-700">
+      <div className="border-b border-slate-700">
         <div className="p-4">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">
