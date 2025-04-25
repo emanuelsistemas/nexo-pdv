@@ -122,6 +122,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   const [reservedCode, setReservedCode] = useState<string | null>(null); // Para rastrear o código reservado
   const [reservedBarcode, setReservedBarcode] = useState<string | null>(null); // Para rastrear o código de barras reservado
   const [defaultsApplied, setDefaultsApplied] = useState(false); // Para rastrear se os valores padrão já foram aplicados
+  const [regimeTributario, setRegimeTributario] = useState<string>(''); // Estado para armazenar o regime tributário da empresa
   
   // Estados para o modal de cadastro rápido
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
@@ -256,6 +257,9 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         try {
           // Limpar reservas antigas do usuário atual
           await cleanUserReservations();
+          
+          // Buscar regime tributário da empresa
+          await loadCompanyRegimeTributario();
           
           // Carregar unidades, grupos, marcas e opções CFOP em paralelo
           await Promise.all([loadUnits(), loadGroups(), loadBrands(), loadCFOPOptions()]);
@@ -806,10 +810,47 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     };
   }, [showCfopDropdown]);
   
+  // Carregar o regime tributário da empresa atual
+  const loadCompanyRegimeTributario = async () => {
+    try {
+      // Obter usuário atual
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error('Usuário não autenticado');
+        return;
+      }
+      
+      // Obter perfil do usuário para identificar a empresa
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', user.id)
+        .single();
+      
+      if (profile?.company_id) {
+        // Buscar regime tributário da empresa
+        const { data: company, error: companyError } = await supabase
+          .from('companies')
+          .select('regime_tributario')
+          .eq('id', profile.company_id)
+          .single();
+        
+        if (companyError) {
+          throw companyError;
+        }
+        
+        setRegimeTributario(company?.regime_tributario || '1');
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar regime tributário:', error.message);
+    }
+  };
+
   const loadCFOPOptions = async () => {
     try {
       const { data, error } = await supabase
-        .from('cfop')
+        .from('nfe_cfop') // Alterado de 'cfop'
         .select('id_cfop, codigo_cfop, desc_cfop, tipo')
         .order('codigo_cfop', { ascending: true });
         
@@ -1863,12 +1904,29 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
 
               {activeTab === 'impostos' && (
                 <div className="space-y-6">
+                  {/* Indicador de Regime Tributário em div separada */}
+                  {regimeTributario && (
+                    <div className="mb-4">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        regimeTributario === '1' ? 'bg-green-900 text-green-100' : 
+                        regimeTributario === '2' ? 'bg-yellow-700 text-yellow-100' : 
+                        'bg-blue-900 text-blue-100'
+                      }`}>
+                        {regimeTributario === '1' ? 'Simples Nacional' : 
+                         regimeTributario === '2' ? 'Simples Nacional - Excesso Sublimite' : 
+                         'Regime Normal'}
+                      </span>
+                    </div>
+                  )}
+                  
                   {/* CFOP e CST na primeira posição, na mesma linha */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-1">
-                        CFOP *
-                      </label>
+                      <div className="mb-1">
+                        <label className="block text-sm font-medium text-slate-300">
+                          CFOP *
+                        </label>
+                      </div>
                       <div className="relative" ref={cfopDropdownRef}>
                         <div 
                           className="w-full h-10 px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent flex justify-between items-center cursor-pointer"
