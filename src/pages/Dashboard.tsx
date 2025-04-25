@@ -12,6 +12,7 @@ import LogoutOverlay from '../components/LogoutOverlay';
 import { SystemConfigPanel } from '../components/SystemConfigPanel';
 import { AppHeader } from '../components/AppHeader';
 import { Breadcrumb, PathItem } from '../components/Breadcrumb';
+import { ContentContainer } from '../components/ContentContainer';
 import { closeWindow } from '../utils/windowUtils';
 import { clearLoginState } from '../utils/authUtils';
 
@@ -437,7 +438,7 @@ function Dashboard() {
         />
 
         {/* Path Navigation */}
-        <div className="px-4 pt-4 pb-0">
+        <ContentContainer>
           <Breadcrumb 
             currentPath={currentPath.map(path => {
               const pathItem = layout.find(item => item.i === path);
@@ -462,7 +463,7 @@ function Dashboard() {
               setDisplayedLayout(layout.filter(item => !item.parent));
             }}
           />
-        </div>
+        </ContentContainer>
       </div>
       
       {/* Main Content */}
