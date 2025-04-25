@@ -34,17 +34,18 @@ const SEGMENTS = [
   'Varejo em Geral'
 ];
 
-// Lista de regimes tributários
-const TAX_REGIMES = [
-  'Simples Nacional',
-  'Normal'
-];
-
 // Lista de estados brasileiros
 const STATES = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
   'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
 ];
+
+// Interface para os itens do regime tributário buscados do DB
+interface RegimeTributarioItem {
+  id: number;
+  codigo: string;
+  descricao: string;
+}
 
 export default function Register() {
   const navigate = useNavigate();
@@ -56,8 +57,14 @@ export default function Register() {
   const [showSegmentDropdown, setShowSegmentDropdown] = useState(false);
   const [searchingCNPJ, setSearchingCNPJ] = useState(false);
 
-  // Referência para o dropdown de segmento
+  // Estado para o dropdown de Regime Tributário
+  const [regimeOptions, setRegimeOptions] = useState<RegimeTributarioItem[]>([]);
+  const [showRegimeDropdown, setShowRegimeDropdown] = useState(false);
+  // const [regimeSearchTerm, setRegimeSearchTerm] = useState('');
+
+  // Referência para os dropdowns
   const segmentDropdownRef = useRef<HTMLDivElement>(null);
+  const regimeDropdownRef = useRef<HTMLDivElement>(null); // Ref para regime tributário
 
   // Form data state
   const [formData, setFormData] = useState({
@@ -76,7 +83,7 @@ export default function Register() {
     documentNumber: '',
     legalName: '',
     tradeName: '',
-    taxRegime: '',
+    taxRegime: '1', // Armazenará o ID como string, default '1' (Simples Nacional ID)
     whatsapp: '',
     
     // Step 3 - Address
@@ -197,18 +204,42 @@ export default function Register() {
       if (segmentDropdownRef.current && !segmentDropdownRef.current.contains(event.target as Node)) {
         setShowSegmentDropdown(false);
       }
+      // Adiciona verificação para o dropdown de regime
+      if (regimeDropdownRef.current && !regimeDropdownRef.current.contains(event.target as Node)) {
+        setShowRegimeDropdown(false);
+      }
     };
 
-    // Adicionar listener quando o dropdown estiver aberto
-    if (showSegmentDropdown) {
+    // Adiciona listener se algum dropdown estiver aberto
+    if (showSegmentDropdown || showRegimeDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-    
-    // Limpar listener quando o componente for desmontado ou o dropdown for fechado
+
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showSegmentDropdown]);
+  }, [showSegmentDropdown, showRegimeDropdown]); // Adiciona showRegimeDropdown às dependências
+
+  // Efeito para carregar dados iniciais (regimes tributários)
+  useEffect(() => {
+    const loadRegimes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('nfe_regime_tributario')
+          .select('id, codigo, descricao')
+          .order('id', { ascending: true });
+
+        if (error) {
+          throw error;
+        }
+        setRegimeOptions(data as RegimeTributarioItem[]);
+      } catch (error: any) {
+        console.error('Erro ao carregar regimes tributários:', error.message);
+        toast.error(`Falha ao carregar regimes: ${error.message}`);
+      }
+    };
+    loadRegimes();
+  }, []);
 
   const searchCNPJ = async () => {
     try {
@@ -439,7 +470,8 @@ const handleRegister = async () => {
         document_type: formData.documentType, // Adicionar o tipo de documento (CNPJ/CPF)
         document_number: formData.documentNumber.replace(/[^\d]/g, ''),
         segment: formData.segment,
-        tax_regime: formData.taxRegime,
+        // CORRIGIDO: Usa regime_tributario_id (novo campo) em vez de tax_regime (removido)
+        regime_tributario_id: parseInt(formData.taxRegime),
         whatsapp: formData.whatsapp,
         address_cep: formData.cep.replace(/[^\d]/g, ''),
         address_street: formData.street,
@@ -793,20 +825,40 @@ const renderStep = () => {
             {/* Regime Tributário */}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
-                Regime Tributário
+                Regime Tributário *
               </label>
-              <select
-                name="taxRegime"
-                value={formData.taxRegime}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                required
-              >
-                <option value="">Selecione um regime tributário</option>
-                {TAX_REGIMES.map(regime => (
-                  <option key={regime} value={regime}>{regime}</option>
-                ))}
-              </select>
+              <div className="relative" ref={regimeDropdownRef}>
+                <button
+                  type="button"
+                  className="w-full h-10 px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent flex justify-between items-center text-left"
+                  onClick={() => setShowRegimeDropdown(!showRegimeDropdown)}
+                >
+                  <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis pr-2">
+                    {regimeOptions.find(r => r.id.toString() === formData.taxRegime)?.descricao || 'Selecione...'}
+                  </span>
+                  <ChevronDown size={16} className={`transition-transform ${showRegimeDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showRegimeDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-20">
+                    <div className="max-h-48 overflow-y-auto">
+                      {regimeOptions.map((regime) => (
+                        <div
+                          key={regime.id}
+                          className={`px-4 py-2 cursor-pointer hover:bg-slate-700 ${formData.taxRegime === regime.id.toString() ? 'bg-blue-500/20' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFormData(prev => ({ ...prev, taxRegime: regime.id.toString() }));
+                            setShowRegimeDropdown(false);
+                          }}
+                          title={`${regime.codigo} - ${regime.descricao}`}
+                        >
+                          {regime.descricao}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* WhatsApp */}
