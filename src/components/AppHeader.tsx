@@ -11,6 +11,8 @@ interface AppHeaderProps {
   onLogout?: () => void;
   onShowMobileMenu?: () => void;
   onShowLogoutConfirm?: () => void;
+  showBugIcon?: boolean;
+  showNotificationIcon?: boolean;
 }
 
 export function AppHeader({
@@ -20,7 +22,9 @@ export function AppHeader({
   isFullscreen = false,
   onLogout,
   onShowMobileMenu,
-  onShowLogoutConfirm
+  onShowLogoutConfirm,
+  showBugIcon = true,
+  showNotificationIcon = true
 }: AppHeaderProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -83,21 +87,25 @@ export function AppHeader({
         </div>
 
         <div className="flex items-center gap-2 md:gap-4">
-          <button
-            onClick={() => alert('Relatório de bugs - Em desenvolvimento')}
-            className="text-slate-300 hover:text-white hidden md:flex items-center justify-center p-2 rounded-lg hover:bg-slate-700 transition-colors"
-            title="Reportar um problema"
-          >
-            <Bug size={18} />
-          </button>
+          {showBugIcon && (
+            <button
+              onClick={() => alert('Relatório de bugs - Em desenvolvimento')}
+              className="text-slate-300 hover:text-white hidden md:flex items-center justify-center p-2 rounded-lg hover:bg-slate-700 transition-colors"
+              title="Reportar um problema"
+            >
+              <Bug size={18} />
+            </button>
+          )}
 
-          <button
-            onClick={() => alert('Notificações - Em desenvolvimento')}
-            className="text-slate-300 hover:text-white hidden md:flex items-center justify-center p-2 rounded-lg hover:bg-slate-700 transition-colors"
-            title="Notificações"
-          >
-            <Bell size={18} />
-          </button>
+          {showNotificationIcon && (
+            <button
+              onClick={() => alert('Notificações - Em desenvolvimento')}
+              className="text-slate-300 hover:text-white hidden md:flex items-center justify-center p-2 rounded-lg hover:bg-slate-700 transition-colors"
+              title="Notificações"
+            >
+              <Bell size={18} />
+            </button>
+          )}
 
           <button
             onClick={handleFullscreenToggle}

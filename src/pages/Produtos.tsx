@@ -54,6 +54,7 @@ export default function Produtos() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [userName, setUserName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Configurações de exibição dos campos adicionais
   const [productConfig, setProductConfig] = useState({
@@ -496,6 +497,21 @@ export default function Produtos() {
     }
   };
 
+  // Lidar com tela cheia
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Erro ao tentar entrar em tela cheia: ${err.message}`);
+      });
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+
   const handleClose = () => {
     // Precisamos reimportar o useLocation
     // Aqui usamos o state recebido da navegação para voltar para onde o usuário estava
@@ -616,7 +632,11 @@ export default function Produtos() {
         <AppHeader 
           userName={userName}
           companyName={companyName}
+          onToggleFullscreen={toggleFullscreen}
+          isFullscreen={isFullscreen}
           onShowLogoutConfirm={handleClose}
+          showBugIcon={true}
+          showNotificationIcon={true}
         />
 
         {/* Path Navigation */}

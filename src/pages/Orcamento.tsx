@@ -18,6 +18,7 @@ export default function Orcamento() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [userName, setUserName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     loadUserInfo();
@@ -201,6 +202,21 @@ export default function Orcamento() {
     // Não há navegação específica para orçamentos
   };
 
+  // Lidar com tela cheia
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Erro ao tentar entrar em tela cheia: ${err.message}`);
+      });
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+
   const handleClose = () => {
     navigate('/dashboard');
   };
@@ -213,7 +229,11 @@ export default function Orcamento() {
         <AppHeader 
           userName={userName}
           companyName={companyName}
+          onToggleFullscreen={toggleFullscreen}
+          isFullscreen={isFullscreen}
           onShowLogoutConfirm={handleClose}
+          showBugIcon={true}
+          showNotificationIcon={true}
         />
 
         {/* Path Navigation */}

@@ -29,6 +29,7 @@ export default function Unidade() {
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     loadUserInfo();
@@ -175,6 +176,21 @@ export default function Unidade() {
     );
   });
 
+  // Lidar com tela cheia
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Erro ao tentar entrar em tela cheia: ${err.message}`);
+      });
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+
   const handleClose = () => {
     // Verifica se há um estado de navegação e redireciona de acordo
     if (location.state && location.state.from === 'produtos-folder') {
@@ -219,7 +235,11 @@ export default function Unidade() {
         <AppHeader 
           userName={userName}
           companyName={companyName}
+          onToggleFullscreen={toggleFullscreen}
+          isFullscreen={isFullscreen}
           onShowLogoutConfirm={handleClose}
+          showBugIcon={true}
+          showNotificationIcon={true}
         />
 
         {/* Path Navigation */}
