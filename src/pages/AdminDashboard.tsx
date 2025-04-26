@@ -10,7 +10,8 @@ interface Company {
   name: string;
   document: string;
   segment: string;
-  tax_regime: string;
+  regime_tributario_id: number;
+  regime_tributario_descricao?: string; // Descrição do regime obtida por JOIN
   legal_name: string;
   created_at: string;
   status: string;
@@ -83,10 +84,25 @@ export default function AdminDashboard() {
           }
         }
 
+        // Buscar a descrição do regime tributário se o ID estiver definido
+        let regimeTributarioDescricao = '';
+        if (company.regime_tributario_id) {
+          const { data: regimeData } = await supabase
+            .from('nfe_regime_tributario')
+            .select('descricao')
+            .eq('id', company.regime_tributario_id)
+            .maybeSingle();
+            
+          if (regimeData && typeof regimeData.descricao === 'string') {
+            regimeTributarioDescricao = regimeData.descricao;
+          }
+        }
+
         return {
           ...company,
           user_pai: userPai,
-          reseller_display: resellerInfo
+          reseller_display: resellerInfo,
+          regime_tributario_descricao: regimeTributarioDescricao
         };
       }));
 
