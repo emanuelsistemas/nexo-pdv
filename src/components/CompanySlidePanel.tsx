@@ -472,16 +472,59 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           const ibgeResponse = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${data.uf}/municipios`);
           if (ibgeResponse.ok) {
             const municipios = await ibgeResponse.json();
-            const foundCity = municipios.find((city: any) => {
-              return city.nome.toLowerCase() === data.municipio.toLowerCase();
+            
+            // Normalização de strings: remove acentos, converte para lowercase e remove espaços extras
+            const normalizeMunicipio = (name: string) => {
+              return name.normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+                .toLowerCase()
+                .trim()
+                .replace(/\s+/g, ' '); // Remove espaços extras
+            };
+            
+            const municipioNormalizado = normalizeMunicipio(data.municipio);
+            console.log(`Buscando código IBGE para: "${data.municipio}" (normalizado: "${municipioNormalizado}")`);
+            
+            // Tenta encontrar correspondência exata primeiro
+            let foundCity = municipios.find((city: any) => {
+              return normalizeMunicipio(city.nome) === municipioNormalizado;
             });
             
+            // Se não encontrar correspondência exata, tenta correspondência parcial
+            if (!foundCity) {
+              foundCity = municipios.find((city: any) => {
+                const cityNameNormalized = normalizeMunicipio(city.nome);
+                return municipioNormalizado.includes(cityNameNormalized) || 
+                       cityNameNormalized.includes(municipioNormalizado);
+              });
+            }
+            
             if (foundCity && foundCity.id) {
+              console.log(`Código IBGE encontrado: ${foundCity.id} para cidade: ${foundCity.nome}`);
               // Atualizar o código da cidade
               setFormData(prev => ({
                 ...prev,
                 address_city_code: foundCity.id.toString()
               }));
+            } else {
+              console.warn(`Não foi possível encontrar código IBGE para: ${data.municipio}`);
+              // Tenta uma última busca manual para alguns municípios conhecidos que podem ter diferenças de nome
+              const manualMappings: {[key: string]: string} = {
+                'SAO PAULO': '3550308',
+                'RIO DE JANEIRO': '3304557',
+                'BRASILIA': '5300108',
+                'BELO HORIZONTE': '3106200'
+              };
+              
+              // Tentar obter do mapeamento manual
+              const manualKey = municipioNormalizado.toUpperCase().replace(/[^A-Z\s]/g, '');
+              if (manualMappings[manualKey]) {
+                console.log(`Código IBGE encontrado via mapeamento manual: ${manualMappings[manualKey]}`);
+                setFormData(prev => ({
+                  ...prev,
+                  address_city_code: manualMappings[manualKey]
+                }));
+              }
             }
           }
         } catch (error) {
