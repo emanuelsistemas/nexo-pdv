@@ -62,6 +62,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isIeExempt, setIsIeExempt] = useState(false); // Estado para controlar se é isento de IE
 
   useEffect(() => {
     if (isOpen) {
@@ -69,6 +70,12 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
       loadRegimes();
     }
   }, [isOpen]);
+  
+  // Effect para atualizar o estado de isento quando o valor da inscrição estadual mudar
+  useEffect(() => {
+    // Verifica se o valor da IE é "ISENTO" (insensitive) ou vazio
+    setIsIeExempt(formData.state_registration?.toUpperCase() === 'ISENTO');
+  }, [formData.state_registration]);
   
   // Função para carregar os regimes tributários do banco de dados
   const loadRegimes = async () => {
@@ -189,6 +196,12 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
       case 'whatsapp':
         formattedValue = formatWhatsApp(value);
         break;
+      case 'state_registration':
+        formattedValue = formatStateRegistration(value);
+        break;
+      case 'cnae':
+        formattedValue = formatCNAE(value);
+        break;
     }
     
     setFormData(prev => ({ ...prev, [name]: formattedValue }));
@@ -222,6 +235,30 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
       .replace(/^(\d{2})(\d)/, '($1) $2')
       .replace(/(\d)(\d{4})$/, '$1-$2')
       .slice(0, 15);
+  };
+  
+  // Função para formatação da Inscrição Estadual
+  // Como cada estado tem um formato diferente, esta é uma implementação genérica
+  const formatStateRegistration = (value: string) => {
+    // Remove caracteres inválidos, deixando apenas números, letras e pontos/traços/barras
+    const formattedValue = value.replace(/[^a-zA-Z0-9.\-\/]/g, '');
+    return formattedValue;
+  };
+  
+  // Função para formatação do CNAE no formato padrão 0000-0/00
+  const formatCNAE = (value: string) => {
+    // Remove todos os caracteres não numéricos
+    const numbers = value.replace(/\D/g, '');
+    
+    if (numbers.length <= 4) {
+      return numbers;
+    } else if (numbers.length <= 5) {
+      return `${numbers.slice(0, 4)}-${numbers.slice(4)}`;
+    } else if (numbers.length <= 6) {
+      return `${numbers.slice(0, 4)}-${numbers.slice(4, 5)}/${numbers.slice(5)}`;
+    } else {
+      return `${numbers.slice(0, 4)}-${numbers.slice(4, 5)}/${numbers.slice(5, 7)}`;
+    }
   };
 
   const searchCompany = async () => {
@@ -606,17 +643,50 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Inscrição Estadual *
-                </label>
-                <input
-                  type="text"
-                  name="state_registration"
-                  value={formData.state_registration}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm font-medium text-slate-300">
+                    Inscrição Estadual *
+                  </label>
+                  <div className="flex items-center">
+                    <span className="text-sm text-slate-400 mr-2">Isento</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newIsExempt = !isIeExempt;
+                        setIsIeExempt(newIsExempt);
+                        // Se marcar como isento, atualiza o campo para "ISENTO"
+                        // Se desmarcar, limpa o campo
+                        setFormData(prev => ({
+                          ...prev,
+                          state_registration: newIsExempt ? 'ISENTO' : ''
+                        }));
+                      }}
+                      className={`w-12 h-6 rounded-full focus:outline-none transition-colors duration-200 ease-in-out ${isIeExempt ? 'bg-green-500' : 'bg-slate-600'}`}
+                    >
+                      <div
+                        className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${isIeExempt ? 'translate-x-6' : 'translate-x-1'}`}
+                      />
+                    </button>
+                  </div>
+                </div>
+                
+                {!isIeExempt ? (
+                  <input
+                    type="text"
+                    name="state_registration"
+                    value={formData.state_registration}
+                    onChange={handleChange}
+                    placeholder="Formato varia conforme o estado"
+                    maxLength={18} // Tamanho máximo para cobrir a maior IE
+                    className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                ) : (
+                  <div className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 flex items-center justify-between">
+                    <span>ISENTO</span>
+                    <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">Contribuinte isento de IE</span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -629,6 +699,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                   value={formData.cnae}
                   onChange={handleChange}
                   placeholder="Ex: 5611-2/01"
+                  maxLength={9} // Tamanho exato do CNAE formatado
                   className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
