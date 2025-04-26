@@ -57,6 +57,10 @@ export default function Register() {
   const [showSegmentDropdown, setShowSegmentDropdown] = useState(false);
   const [searchingCNPJ, setSearchingCNPJ] = useState(false);
 
+  // Estado para controlar a visibilidade do campo CNAE - aparece somente após a busca do CNPJ
+  // Inicializado como false para garantir que o campo comece escondido
+  const [cnaeVisible, setCnaeVisible] = useState(false);
+
   // Estado para o dropdown de Regime Tributário
   const [regimeOptions, setRegimeOptions] = useState<RegimeTributarioItem[]>([]);
   const [showRegimeDropdown, setShowRegimeDropdown] = useState(false);
@@ -84,8 +88,7 @@ export default function Register() {
     legalName: '',
     tradeName: '',
     taxRegime: '1', // Armazenará o ID como string, default '1' (Simples Nacional ID)
-    stateRegistration: '', // IE (Inscrição Estadual)
-    cnae: '', // CNAE (Código Nacional de Atividade Econômica)
+    cnae: '', // CNAE (Código Nacional de Atividade Econômica) - Só aparecerá após busca do CNPJ
     whatsapp: '',
     
     // Step 3 - Address
@@ -244,10 +247,21 @@ export default function Register() {
   }, []);
 
   const searchCNPJ = async () => {
+    // Inicialmente esconder o campo CNAE - só mostrará após busca bem-sucedida
+    setCnaeVisible(false);
+    
+    // Remove caracteres não numéricos do CNPJ
+    const cnpj = formData.documentNumber.replace(/\D/g, '');
+    
+    // Valida o comprimento do CNPJ
+    if (cnpj.length !== 14) {
+      toast.warning('Digite um CNPJ válido com 14 dígitos');
+      return;
+    }
+    
     try {
-      const cnpj = formData.documentNumber.replace(/[^\d]/g, '');
-      
-      if (!isValidCNPJ(cnpj)) {
+      // Verifica se o CNPJ foi digitado no formato correto
+      if (!/^\d{14}$/.test(cnpj)) {
         toast.error('CNPJ inválido. Verifique os números digitados.');
         return;
       }
@@ -276,13 +290,14 @@ export default function Register() {
       // A API Brasil não retorna a Inscrição Estadual, apenas o CNAE
       const cnaeCode = data.cnae_fiscal || '';
       
+      // Não vamos tentar deduzir a inscrição estadual - o usuário precisa informar
+      
       // Atualizar o estado com os dados formatados
       setFormData(prev => ({
         ...prev,
         legalName: data.razao_social || '',
         tradeName: data.nome_fantasia || '',
         // Não atualiza o regime tributário com os dados do CNPJ
-        // A API não retorna inscrição estadual, usuário deve preencher manualmente
         cnae: cnaeCode, // Código numérico do CNAE
         cep: formattedCep,
         street: data.logradouro || '',
@@ -301,6 +316,9 @@ export default function Register() {
       //   }, 500);
       // }
 
+      // Torna o campo CNAE visível após a consulta do CNPJ
+      setCnaeVisible(true);
+      
       toast.success('Dados da empresa carregados com sucesso!');
     } catch (error) {
       console.error('Erro ao consultar CNPJ:', error);
@@ -469,8 +487,8 @@ const handleRegister = async () => {
         segment: formData.segment,
         // CORRIGIDO: Usa regime_tributario_id (novo campo) em vez de tax_regime (removido)
         regime_tributario_id: parseInt(formData.taxRegime),
-        state_registration: formData.stateRegistration,
-        cnae: formData.cnae,
+        // Só inclui o CNAE se o campo estiver visível (após busca de CNPJ)
+        ...(cnaeVisible ? { cnae: formData.cnae } : {}),
         whatsapp: formData.whatsapp,
         address_cep: formData.cep.replace(/[^\d]/g, ''),
         address_street: formData.street,
@@ -480,7 +498,8 @@ const handleRegister = async () => {
         address_city: formData.city,
         address_state: formData.state,
         legal_name: formData.legalName,
-        // Removendo completamente o campo reseller_id para evitar problemas de chave estrangeira
+        // Adicionando o campo reseller_id para garantir que o revendedor seja salvo
+        reseller_id: resellerIdToUse, // Usar o revendedor selecionado ou o padrão (Sem Revenda)
         status: 'active',
         created_by: authData.user.id // Agora temos essa coluna no banco de dados
       })
@@ -860,37 +879,25 @@ const renderStep = () => {
               </div>
             </div>
 
-            {/* IE (Inscrição Estadual) */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                Inscrição Estadual (IE)
-              </label>
-              <input
-                type="text"
-                name="stateRegistration"
-                value={formData.stateRegistration}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="Digite a Inscrição Estadual"
-                required
-              />
-            </div>
+            {/* Campo de IE removido - será preenchido posteriormente pelo usuário dentro do sistema */}
 
-            {/* CNAE */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
-                CNAE (Código Nacional de Atividade Econômica)
-              </label>
-              <input
-                type="text"
-                name="cnae"
-                value={formData.cnae}
-                onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="00.00-0/00"
-                required
-              />
-            </div>
+            {/* CNAE - visível somente após busca de CNPJ */}
+            {cnaeVisible && (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  CNAE (Código Nacional de Atividade Econômica)
+                </label>
+                <input
+                  type="text"
+                  name="cnae"
+                  value={formData.cnae}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  placeholder="00.00-0/00"
+                  required
+                />
+              </div>
+            )}
 
             {/* WhatsApp */}
             <div>
