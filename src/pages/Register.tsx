@@ -273,8 +273,7 @@ export default function Register() {
         ? data.cep.replace(/[^\d]/g, '').replace(/^(\d{2})(\d{3})(\d{3})$/, '$1.$2-$3')
         : '';
 
-      // Extrair a inscrição estadual e CNAE dos dados retornados pela API
-      const estadualReg = data.inscricao_estadual || '';
+      // A API Brasil não retorna a Inscrição Estadual, apenas o CNAE
       const cnaeCode = data.cnae_fiscal || '';
       
       // Atualizar o estado com os dados formatados
@@ -283,7 +282,7 @@ export default function Register() {
         legalName: data.razao_social || '',
         tradeName: data.nome_fantasia || '',
         // Não atualiza o regime tributário com os dados do CNPJ
-        stateRegistration: estadualReg,
+        // A API não retorna inscrição estadual, usuário deve preencher manualmente
         cnae: cnaeCode, // Código numérico do CNAE
         cep: formattedCep,
         street: data.logradouro || '',
@@ -871,9 +870,8 @@ const renderStep = () => {
                 name="stateRegistration"
                 value={formData.stateRegistration}
                 onChange={handleChange}
-                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors bg-slate-800 cursor-not-allowed"
-                placeholder="Inscrição Estadual (preenchido automaticamente)"
-                readOnly
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                placeholder="Digite a Inscrição Estadual"
                 required
               />
             </div>
