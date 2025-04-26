@@ -164,23 +164,37 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
         document_type: value as 'CNPJ' | 'CPF',
         document_number: '' // Limpar o número do documento quando mudar o tipo
       }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      return;
     }
+    
+    // Aplicar máscaras conforme o campo
+    let formattedValue = value;
+    
+    switch (name) {
+      case 'document_number':
+        formattedValue = formatDocument(value);
+        break;
+      case 'whatsapp':
+        formattedValue = formatWhatsApp(value);
+        break;
+    }
+    
+    setFormData(prev => ({ ...prev, [name]: formattedValue }));
   };
 
   const formatDocument = (value: string) => {
+    // Primeiro limpar todos os caracteres não numéricos para garantir consistencia
+    const numbers = value.replace(/\D/g, '');
+    
     if (formData.document_type === 'CNPJ') {
-      return value
-        .replace(/\D/g, '')
+      return numbers
         .replace(/^(\d{2})(\d)/, '$1.$2')
         .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
         .replace(/\.(\d{3})(\d)/, '.$1/$2')
         .replace(/(\d{4})(\d)/, '$1-$2')
         .slice(0, 18);
     } else {
-      return value
-        .replace(/\D/g, '')
+      return numbers
         .replace(/^(\d{3})(\d)/, '$1.$2')
         .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
         .replace(/\.(\d{3})(\d)/, '.$1-$2')
@@ -194,16 +208,6 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
       .replace(/^(\d{2})(\d)/, '($1) $2')
       .replace(/(\d)(\d{4})$/, '$1-$2')
       .slice(0, 15);
-  };
-
-  const handleWhatsAppChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatWhatsApp(e.target.value);
-    setFormData(prev => ({ ...prev, whatsapp: formatted }));
-  };
-
-  const handleDocumentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatDocument(e.target.value);
-    setFormData(prev => ({ ...prev, document_number: formatted }));
   };
 
   const searchCompany = async () => {
@@ -523,7 +527,8 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                     type="text"
                     name="document_number"
                     value={formData.document_number}
-                    onChange={handleDocumentChange}
+                    onChange={handleChange}
+                    maxLength={formData.document_type === 'CNPJ' ? 18 : 14}
                     placeholder={formData.document_type === 'CNPJ' ? '00.000.000/0000-00' : '000.000.000-00'}
                     className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
@@ -595,7 +600,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                   type="tel"
                   name="whatsapp"
                   value={formData.whatsapp}
-                  onChange={handleWhatsAppChange}
+                  onChange={handleChange}
                   placeholder="(00) 0 0000-0000"
                   className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
