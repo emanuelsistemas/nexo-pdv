@@ -70,6 +70,14 @@ export default function Register() {
   const segmentDropdownRef = useRef<HTMLDivElement>(null);
   const regimeDropdownRef = useRef<HTMLDivElement>(null); // Ref para regime tributário
 
+  // Mapeamento de estados para códigos IBGE (UF)
+  const estadosCodigoIBGE: Record<string, string> = {
+    AC: '12', AL: '27', AP: '16', AM: '13', BA: '29', CE: '23', DF: '53', ES: '32',
+    GO: '52', MA: '21', MT: '51', MS: '50', MG: '31', PA: '15', PB: '25', PR: '41',
+    PE: '26', PI: '22', RJ: '33', RN: '24', RS: '43', RO: '11', RR: '14', SC: '42',
+    SP: '35', SE: '28', TO: '17'
+  };
+
   // Form data state
   const [formData, setFormData] = useState({
     // Step 1 - User data
@@ -500,6 +508,11 @@ const handleRegister = async () => {
         legal_name: formData.legalName,
         // Adicionando o campo reseller_id para garantir que o revendedor seja salvo
         reseller_id: resellerIdToUse, // Usar o revendedor selecionado ou o padrão (Sem Revenda)
+        // Preencher códigos fiscais obrigatórios para NF-e/NFC-e
+        address_state_code: estadosCodigoIBGE[formData.state] || '', // Código IBGE da UF
+        address_country_code: '1058', // Brasil (padrão BACEN)
+        // Nota: O campo address_city_code precisaria de uma API ou banco de dados de códigos IBGE
+        // Idealmente, implementaremos no futuro a busca automática pelo código do município
         status: 'active',
         created_by: authData.user.id // Agora temos essa coluna no banco de dados
       })
