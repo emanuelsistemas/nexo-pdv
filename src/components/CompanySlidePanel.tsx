@@ -125,9 +125,21 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
         }
 
         if (company) {
-          // Certificar-se de que os tipos estão corretos
+          // Formatar o número do documento ANTES de definir o estado
+          // Precisamos passar o tipo de documento da 'company' para formatDocument
+          // Adicionar verificação explícita de tipo para garantir que é string
+          let docNumToFormat = '';
+          if (typeof company.document_number === 'string') {
+            docNumToFormat = company.document_number;
+          }
+          // Adicionar asserção de tipo para company.document_type
+          const docType = company.document_type as 'CNPJ' | 'CPF'; 
+          const formattedDocumentNumber = formatDocument(docNumToFormat, docType); 
+          
+          // Certificar-se de que os tipos estão corretos e usar o número formatado
           setFormData({
             ...company,
+            document_number: formattedDocumentNumber, // Usar o valor formatado
             regime_tributario_id: company.regime_tributario_id || 1
           } as CompanyData);
           setIsEditing(true);
@@ -182,11 +194,13 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
     setFormData(prev => ({ ...prev, [name]: formattedValue }));
   };
 
-  const formatDocument = (value: string) => {
+  // Atualizar formatDocument para aceitar o tipo de documento como parâmetro opcional
+  const formatDocument = (value: string, docType?: 'CNPJ' | 'CPF') => {
     // Primeiro limpar todos os caracteres não numéricos para garantir consistencia
     const numbers = value.replace(/\D/g, '');
+    const type = docType || formData.document_type; // Usar o tipo passado ou o do estado
     
-    if (formData.document_type === 'CNPJ') {
+    if (type === 'CNPJ') { // Usar a variável 'type' aqui
       return numbers
         .replace(/^(\d{2})(\d)/, '$1.$2')
         .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
