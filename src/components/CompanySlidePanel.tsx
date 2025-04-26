@@ -472,6 +472,10 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                   required
                 >
                   <option value="">Selecione um segmento</option>
+                  {/* Adicionar o segmento atual como opção se não estiver na lista padrão */}
+                  {formData.segment && !SEGMENTS.includes(formData.segment) && (
+                    <option key={formData.segment} value={formData.segment}>{formData.segment}</option>
+                  )}
                   {SEGMENTS.map(segment => (
                     <option key={segment} value={segment}>{segment}</option>
                   ))}
