@@ -21,7 +21,6 @@ interface CompanyData {
   document_number: string;
   legal_name: string;
   trade_name: string;
-  email: string;
   whatsapp: string;
   state_registration: string;
   // Campo antigo mantido temporariamente para compatibilidade
@@ -49,7 +48,6 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
     document_number: '',
     legal_name: '',
     trade_name: '',
-    email: '',
     whatsapp: '',
     state_registration: '',
     regime_tributario_id: 1, // Simples Nacional como padrão
@@ -256,10 +254,6 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
       toast.error('Por favor, informe o Nome Fantasia.');
       return;
     }
-    if (!formData.email) {
-      toast.error('Por favor, informe o Email.');
-      return;
-    }
     if (!formData.whatsapp) {
       toast.error('Por favor, informe o WhatsApp.');
       return;
@@ -304,7 +298,6 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
             document_number: formData.document_number,
             legal_name: formData.legal_name,
             trade_name: formData.trade_name,
-            email: formData.email,
             whatsapp: formData.whatsapp,
             state_registration: formData.state_registration,
             regime_tributario_id: formData.regime_tributario_id
@@ -324,7 +317,6 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           document_number: formData.document_number,
           legal_name: formData.legal_name,
           trade_name: formData.trade_name,
-          email: formData.email,
           whatsapp: formData.whatsapp,
           state_registration: formData.state_registration,
           regime_tributario_id: formData.regime_tributario_id
@@ -592,19 +584,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                />
-              </div>
+
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
