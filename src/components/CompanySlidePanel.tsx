@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, Loader2 } from 'lucide-react';
+import { X, Search, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 
 interface CompanySlidePanelProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+interface RegimeTributarioItem {
+  id: number;
+  codigo: string;
+  descricao: string;
 }
 
 interface CompanyData {
@@ -18,7 +24,10 @@ interface CompanyData {
   email: string;
   whatsapp: string;
   state_registration: string;
-  tax_regime: 'Simples Nacional' | 'Normal';
+  // Campo antigo mantido temporariamente para compatibilidade
+  tax_regime?: string;
+  // Novo campo que usa o ID da tabela nfe_regime_tributario
+  regime_tributario_id: number;
 }
 
 const SEGMENTS = [
@@ -43,8 +52,12 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
     email: '',
     whatsapp: '',
     state_registration: '',
-    tax_regime: 'Simples Nacional',
+    regime_tributario_id: 1, // Simples Nacional como padrão
   });
+  
+  // Estado para o regime tributário
+  const [regimeOptions, setRegimeOptions] = useState<RegimeTributarioItem[]>([]);
+  const [showRegimeDropdown, setShowRegimeDropdown] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -53,8 +66,32 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
   useEffect(() => {
     if (isOpen) {
       loadCompanyData();
+      loadRegimes();
     }
   }, [isOpen]);
+  
+  // Função para carregar os regimes tributários do banco de dados
+  const loadRegimes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('nfe_regime_tributario')
+        .select('*')
+        .order('id');
+        
+      if (error) {
+        throw error;
+      }
+      
+      if (data) {
+        // Conversão segura do tipo para RegimeTributarioItem[]
+        const regimes = data as unknown as RegimeTributarioItem[];
+        setRegimeOptions(regimes);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar regimes tributários:', error);
+      toast.error('Erro ao carregar opções de regime tributário');
+    }
+  };
 
   const loadCompanyData = async () => {
     try {
@@ -88,7 +125,11 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
         }
 
         if (company) {
-          setFormData(company);
+          // Certificar-se de que os tipos estão corretos
+          setFormData({
+            ...company,
+            regime_tributario_id: company.regime_tributario_id || 1
+          } as CompanyData);
           setIsEditing(true);
         }
       } else {
@@ -101,7 +142,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           email: '',
           whatsapp: '',
           state_registration: '',
-          tax_regime: 'Simples Nacional',
+          regime_tributario_id: 1, // Simples Nacional como padrão
         });
         setIsEditing(false);
       }
@@ -238,7 +279,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
             email: formData.email,
             whatsapp: formData.whatsapp,
             state_registration: formData.state_registration,
-            tax_regime: formData.tax_regime
+            regime_tributario_id: formData.regime_tributario_id
           })
           .eq('id', formData.id);
 
@@ -248,9 +289,22 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
 
         toast.success('Empresa atualizada com sucesso!');
       } else {
+        // Criar objeto com tipagem correta para inserção no banco
+        const companyInsertData = {
+          segment: formData.segment,
+          document_type: formData.document_type,
+          document_number: formData.document_number,
+          legal_name: formData.legal_name,
+          trade_name: formData.trade_name,
+          email: formData.email,
+          whatsapp: formData.whatsapp,
+          state_registration: formData.state_registration,
+          regime_tributario_id: formData.regime_tributario_id
+        };
+        
         const { data: company, error: companyError } = await supabase
           .from('companies')
-          .insert(formData)
+          .insert(companyInsertData)
           .select('*')
           .single();
 
@@ -279,10 +333,12 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           console.error('Erro ao atualizar perfil:', profileError);
           
           // Tenta excluir a empresa se não conseguir vincular ao perfil
-          await supabase
-            .from('companies')
-            .delete()
-            .eq('id', company.id);
+          if (company && company.id) {
+            await supabase
+              .from('companies')
+              .delete()
+              .eq('id', company.id);
+          }
 
           throw new Error('Erro ao vincular empresa ao perfil: ' + profileError.message);
         }
@@ -560,16 +616,35 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                 <label className="block text-sm font-medium text-slate-300 mb-1">
                   Regime Tributário *
                 </label>
-                <select
-                  name="tax_regime"
-                  value={formData.tax_regime}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                >
-                  <option value="Simples Nacional">Simples Nacional</option>
-                  <option value="Normal">Normal</option>
-                </select>
+                <div className="relative">
+                  <div
+                    onClick={() => setShowRegimeDropdown(!showRegimeDropdown)}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent flex items-center justify-between cursor-pointer"
+                  >
+                    <span>
+                      {regimeOptions.find(r => r.id === formData.regime_tributario_id)?.descricao || 'Selecione...'}
+                    </span>
+                    {showRegimeDropdown ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </div>
+                  
+                  {showRegimeDropdown && (
+                    <div className="absolute z-10 mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {regimeOptions.map(regime => (
+                        <div
+                          key={regime.id}
+                          className={`px-4 py-2 cursor-pointer hover:bg-slate-700 ${formData.regime_tributario_id === regime.id ? 'bg-blue-500/20' : ''}`}
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, regime_tributario_id: regime.id }));
+                            setShowRegimeDropdown(false);
+                          }}
+                        >
+                          <div className="text-slate-200">{regime.descricao}</div>
+                          <div className="text-xs text-slate-400">Código: {regime.codigo}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </form>
           </div>
