@@ -547,6 +547,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     }
   };
   
+  // Remover esta função duplicada, já existe uma versão mais abaixo
+  
   const loadBrands = async () => {
     try {
       setLoading(true);
@@ -887,7 +889,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         // Buscar regime tributário da empresa
         const { data: company, error: companyError } = await supabase
           .from('companies')
-          .select('regime_tributario')
+          .select('regime_tributario_id')
           .eq('id', profile.company_id)
           .single();
         
@@ -895,7 +897,15 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
           throw companyError;
         }
         
-        setRegimeTributario(company?.regime_tributario || '1');
+        if (company?.regime_tributario_id) {
+          const regimeId = company.regime_tributario_id.toString();
+          setRegimeTributario(regimeId);
+          console.log('Regime Tributário carregado:', regimeId);
+        } else {
+          // Se não existir regime, usar o valor padrão (1 = Simples Nacional)
+          setRegimeTributario('1');
+          console.log('Regime Tributário não encontrado, usando padrão: 1');
+        }
       }
     } catch (error: any) {
       console.error('Erro ao carregar regime tributário:', error.message);
@@ -2042,11 +2052,11 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                 <div className="space-y-6">
                   {/* Indicador de Regime Tributário em div separada */}
                   {regimeTributario && (
-                    <div className="mb-4">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        regimeTributario === '1' ? 'bg-green-900 text-green-100' : 
-                        regimeTributario === '2' ? 'bg-yellow-700 text-yellow-100' : 
-                        'bg-blue-900 text-blue-100'
+                    <div className="mb-4 flex justify-center w-full">
+                      <span className={`px-4 py-2 rounded-full text-sm font-semibold shadow-lg ${
+                        regimeTributario === '1' ? 'bg-green-600 text-white border-2 border-green-300' : 
+                        regimeTributario === '2' ? 'bg-yellow-500 text-gray-900 border-2 border-yellow-300' : 
+                        'bg-blue-600 text-white border-2 border-blue-300'
                       }`}>
                         {regimeTributario === '1' ? 'Simples Nacional' : 
                          regimeTributario === '2' ? 'Simples Nacional - Excesso Sublimite' : 
