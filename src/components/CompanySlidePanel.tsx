@@ -156,7 +156,17 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Se estiver mudando o tipo de documento, limpar o campo document_number
+    if (name === 'document_type' && value !== formData.document_type) {
+      setFormData(prev => ({ 
+        ...prev, 
+        document_type: value as 'CNPJ' | 'CPF',
+        document_number: '' // Limpar o número do documento quando mudar o tipo
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const formatDocument = (value: string) => {
@@ -486,31 +496,21 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                 <label className="block text-sm font-medium text-slate-300 mb-1">
                   Tipo de Documento *
                 </label>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="document_type"
-                      value="CNPJ"
-                      checked={formData.document_type === 'CNPJ'}
-                      onChange={handleChange}
-                      className="text-blue-500 focus:ring-blue-500 h-4 w-4"
-                      required
-                    />
-                    <span className="text-slate-200">CNPJ</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="document_type"
-                      value="CPF"
-                      checked={formData.document_type === 'CPF'}
-                      onChange={handleChange}
-                      className="text-blue-500 focus:ring-blue-500 h-4 w-4"
-                      required
-                    />
-                    <span className="text-slate-200">CPF</span>
-                  </label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleChange({ target: { name: "document_type", value: "CNPJ" } } as React.ChangeEvent<HTMLInputElement>)}
+                    className={`flex-1 px-4 py-2 rounded-lg border border-slate-600 transition-colors ${formData.document_type === 'CNPJ' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+                  >
+                    CNPJ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleChange({ target: { name: "document_type", value: "CPF" } } as React.ChangeEvent<HTMLInputElement>)}
+                    className={`flex-1 px-4 py-2 rounded-lg border border-slate-600 transition-colors ${formData.document_type === 'CPF' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+                  >
+                    CPF
+                  </button>
                 </div>
               </div>
 
@@ -524,8 +524,8 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                     name="document_number"
                     value={formData.document_number}
                     onChange={handleDocumentChange}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder={formData.document_type === 'CNPJ' ? '00.000.000/0000-00' : '000.000.000-00'}
+                    className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
                   />
                   {formData.document_type === 'CNPJ' && (
