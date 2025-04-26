@@ -753,8 +753,9 @@ const submitRegistration = async () => {
     toast.success('Registro realizado com sucesso! Verifique seu e-mail para ativar a conta.');
     
     // Redirecionar para página de login após alguns segundos
+    // Incluir parâmetro de sucesso para acionar o efeito de confete
     setTimeout(() => {
-      navigate('/login');
+      navigate('/login?registroSucesso=true');
     }, 3000);
     
   } catch (error: any) {

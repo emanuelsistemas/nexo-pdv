@@ -6,6 +6,7 @@ import { Logo } from '../components/Logo';
 import { supabase } from '../lib/supabase';
 import { openKioskWindow } from '../utils/windowUtils';
 import { saveLoginState } from '../utils/authUtils';
+import confetti from 'canvas-confetti';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -21,6 +22,23 @@ export default function Login() {
   
   // Verifica se o usuário veio da página de registro
   useEffect(() => {
+    // Verifica parâmetro na URL para registro com sucesso
+    const urlParams = new URLSearchParams(location.search);
+    const registroSucesso = urlParams.get('registroSucesso') === 'true';
+    
+    if (registroSucesso) {
+      // Dispara o efeito de confete
+      console.log('Disparando efeito de confete!');
+      setTimeout(() => {
+        disparaConfete();
+      }, 500);
+      
+      // Remove o parâmetro da URL para não mostrar o confete novamente ao atualizar
+      const newUrl = `${window.location.pathname}${window.location.hash}`;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+    
+    // Lógica original
     if (location.state?.justRegistered) {
       setShowConfirmationAlert(true);
       if (location.state.email) {
@@ -111,6 +129,55 @@ export default function Login() {
     }
   };
 
+  // Função para disparar o efeito de confete
+  const disparaConfete = () => {
+    const duracaoAnimacao = 5 * 1000; // 5 segundos
+    const fim = Date.now() + duracaoAnimacao;
+    
+    // Estilo de confete deslumbrante em camadas
+    const criarConfetesCamada = () => {
+      // Primeira camada - Jorro inicial
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }, // Um pouco mais alto na tela
+        colors: ['#26ccff', '#a25afd', '#ff5e7e', '#88ff5a', '#fcff42', '#ffa62d', '#ff36ff'],
+      });
+      
+      // Segunda camada - Caída mais intensa
+      setTimeout(() => {
+        confetti({
+          particleCount: 80,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 },
+          colors: ['#ff0000', '#00ff00', '#0000ff'],
+        });
+        
+        confetti({
+          particleCount: 80,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 },
+          colors: ['#ffff00', '#ff00ff', '#00ffff'],
+        });
+      }, 250);
+    };
+
+    // Dispara o confete inicial
+    criarConfetesCamada();
+    
+    // Continua disparando até o tempo acabar
+    const intervaloConfete = setInterval(() => {
+      if (Date.now() > fim) {
+        clearInterval(intervaloConfete);
+        return;
+      }
+      
+      criarConfetesCamada();
+    }, 1500);
+  };
+  
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
