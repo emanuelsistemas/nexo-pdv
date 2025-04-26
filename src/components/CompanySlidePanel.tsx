@@ -35,7 +35,10 @@ interface CompanyData {
   address_complement?: string;
   address_district?: string;
   address_city?: string;
+  address_city_code?: string; // Código IBGE da cidade
   address_state?: string;
+  address_state_code?: string; // Código IBGE do estado
+  address_country_code?: string; // Código do país (1058 para Brasil)
 }
 
 const SEGMENTS = [
@@ -55,6 +58,37 @@ const STATES = [
   'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA',
   'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
 ];
+
+// Mapeamento de UF para código IBGE do estado
+const STATE_CODES: {[key: string]: string} = {
+  'AC': '12',
+  'AL': '27',
+  'AP': '16',
+  'AM': '13',
+  'BA': '29',
+  'CE': '23',
+  'DF': '53',
+  'ES': '32',
+  'GO': '52',
+  'MA': '21',
+  'MT': '51',
+  'MS': '50',
+  'MG': '31',
+  'PA': '15',
+  'PB': '25',
+  'PR': '41',
+  'PE': '26',
+  'PI': '22',
+  'RJ': '33',
+  'RN': '24',
+  'RS': '43',
+  'RO': '11',
+  'RR': '14',
+  'SC': '42',
+  'SP': '35',
+  'SE': '28',
+  'TO': '17'
+};
 
 export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
   // Estado para controlar qual aba está ativa
@@ -86,6 +120,14 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
     if (isOpen) {
       loadCompanyData();
       loadRegimes();
+      
+      // Definir valor padrão para o código do país se estiver vazio
+      if (!formData.address_country_code) {
+        setFormData(prev => ({
+          ...prev,
+          address_country_code: '1058' // Código padrão para Brasil
+        }));
+      }
     }
   }, [isOpen]);
   
@@ -223,6 +265,12 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
       case 'address_cep':
         formattedValue = formatCEP(value);
         break;
+      case 'address_city_code':
+        formattedValue = formatCityCode(value);
+        break;
+      case 'address_state_code':
+        formattedValue = formatStateCode(value);
+        break;
     }
     
     setFormData(prev => ({ ...prev, [name]: formattedValue }));
@@ -289,6 +337,23 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
       .replace(/^(\d{2})(\d)/, '$1.$2')
       .replace(/\.(\d{3})(\d)/, '.$1-$2')
       .slice(0, 10);
+  };
+  
+  // Formatação para código IBGE da cidade (apenas números, máximo 7 dígitos)
+  const formatCityCode = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    return numbers.slice(0, 7);
+  };
+  
+  // Formatação para código IBGE do estado (apenas números, máximo 2 dígitos)
+  const formatStateCode = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    return numbers.slice(0, 2);
+  };
+  
+  // Função para obter o código do estado a partir da UF
+  const getStateCode = (uf: string): string => {
+    return STATE_CODES[uf] || '';
   };
   
   // Função para buscar CEP via API
@@ -417,7 +482,10 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
             address_complement: formData.address_complement || null,
             address_district: formData.address_district || null,
             address_city: formData.address_city || null,
-            address_state: formData.address_state || null
+            address_city_code: formData.address_city_code || null,
+            address_state: formData.address_state || null,
+            address_state_code: formData.address_state_code || null,
+            address_country_code: formData.address_country_code || '1058'
           })
           .eq('id', formData.id);
 
@@ -445,7 +513,10 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           address_complement: formData.address_complement || null,
           address_district: formData.address_district || null,
           address_city: formData.address_city || null,
-          address_state: formData.address_state || null
+          address_city_code: formData.address_city_code || null,
+          address_state: formData.address_state || null,
+          address_state_code: formData.address_state_code || null,
+          address_country_code: formData.address_country_code || '1058'
         };
         
         const { data: company, error: companyError } = await supabase
@@ -949,6 +1020,33 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                       required
                     />
                   </div>
+                  
+                  {/* Código IBGE da Cidade */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Código IBGE da Cidade *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="address_city_code"
+                        value={formData.address_city_code || ''}
+                        onChange={handleChange}
+                        placeholder="Código IBGE (7 dígitos)"
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => window.open(`https://www.ibge.gov.br/explica/codigos-dos-municipios.php`, '_blank')}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300"
+                        title="Consultar códigos IBGE"
+                      >
+                        <Search size={20} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Obrigatório para emissão de NF-e/NFC-e (7 dígitos)</p>
+                  </div>
 
                   {/* Estado */}
                   <div>
@@ -958,7 +1056,15 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                     <select
                       name="address_state"
                       value={formData.address_state || ''}
-                      onChange={handleChange}
+                      onChange={(e) => {
+                        handleChange(e);
+                        // Ao selecionar o estado, preencher automaticamente o código do estado
+                        const stateUF = e.target.value;
+                        const stateCode = getStateCode(stateUF);
+                        if (stateCode) {
+                          setFormData(prev => ({ ...prev, address_state_code: stateCode }));
+                        }
+                      }}
                       className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     >
@@ -967,6 +1073,40 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                         <option key={state} value={state}>{state}</option>
                       ))}
                     </select>
+                  </div>
+                  
+                  {/* Código IBGE do Estado */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Código IBGE do Estado *
+                    </label>
+                    <input
+                      type="text"
+                      name="address_state_code"
+                      value={formData.address_state_code || ''}
+                      onChange={handleChange}
+                      placeholder="Código IBGE (2 dígitos)"
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Obrigatório para emissão de NF-e/NFC-e (2 dígitos)</p>
+                  </div>
+                  
+                  {/* Código do País */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Código do País *
+                    </label>
+                    <input
+                      type="text"
+                      name="address_country_code"
+                      value={formData.address_country_code || '1058'}
+                      onChange={handleChange}
+                      placeholder="Código do País (Brasil = 1058)"
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Código padrão para Brasil: 1058 (obrigatório para NF-e/NFC-e)</p>
                   </div>
                 </div>
               )}
