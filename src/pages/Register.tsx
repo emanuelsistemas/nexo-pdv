@@ -106,6 +106,7 @@ export default function Register() {
     complement: '',
     district: '',
     city: '',
+    cityCode: '', // Código IBGE da cidade
     state: ''
   });
   
@@ -195,6 +196,10 @@ export default function Register() {
         break;
       case 'cep':
         formattedValue = formatCEP(value);
+        break;
+      case 'cityCode':
+        // Permitir apenas números e limitar a 7 dígitos
+        formattedValue = value.replace(/\D/g, '').slice(0, 7);
         break;
     }
     
@@ -298,6 +303,29 @@ export default function Register() {
       // A API Brasil não retorna a Inscrição Estadual, apenas o CNAE
       const cnaeCode = data.cnae_fiscal || '';
       
+      // Buscar o código IBGE da cidade se tivermos o município e o estado
+      let cityIbgeCode = '';
+      if (data.municipio && data.uf) {
+        try {
+          // Tentativa de buscar o código IBGE da cidade via API
+          const ibgeResponse = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${data.uf}/municipios`);
+          if (ibgeResponse.ok) {
+            const municipios = await ibgeResponse.json();
+            const foundCity = municipios.find((city: any) => {
+              return city.nome.toLowerCase() === data.municipio.toLowerCase();
+            });
+            
+            if (foundCity && foundCity.id) {
+              cityIbgeCode = foundCity.id.toString();
+              console.log(`Código IBGE encontrado para ${data.municipio}: ${cityIbgeCode}`);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao buscar código IBGE:', error);
+          // Não exibir toast de erro para não atrapalhar a experiência
+        }
+      }
+      
       // Não vamos tentar deduzir a inscrição estadual - o usuário precisa informar
       
       // Atualizar o estado com os dados formatados
@@ -313,6 +341,7 @@ export default function Register() {
         complement: data.complemento || '',
         district: data.bairro || '',
         city: data.municipio || '',
+        cityCode: cityIbgeCode || '', // Código IBGE da cidade
         state: data.uf || ''
       }));
 
@@ -350,23 +379,46 @@ export default function Register() {
       // Mostra um toast informativo de que a busca está em andamento
       toast.info('Buscando endereço...', { autoClose: 2000 });
       
-      // Faz a requisição para a API ViaCEP
+      // Busca na API do ViaCEP
       const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
       const data = await response.json();
 
-      // Verifica se a API retornou erro
       if (data.erro) {
-        toast.error('CEP não encontrado na base de dados');
+        toast.error('CEP não encontrado.');
         return;
       }
+      
+      // Obter o código IBGE da cidade se tiver os dados
+      let cityIbgeCode = '';
+      if (data.localidade && data.uf) {
+        try {
+          // Buscar o código IBGE da cidade via API
+          const ibgeResponse = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${data.uf}/municipios`);
+          if (ibgeResponse.ok) {
+            const municipios = await ibgeResponse.json();
+            const foundCity = municipios.find((city: any) => {
+              return city.nome.toLowerCase() === data.localidade.toLowerCase();
+            });
+            
+            if (foundCity && foundCity.id) {
+              cityIbgeCode = foundCity.id.toString();
+              console.log(`Código IBGE encontrado para ${data.localidade}: ${cityIbgeCode}`);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao buscar código IBGE:', error);
+          // Não exibir toast de erro
+        }
+      }
 
-      // Atualiza os campos do formulário com os dados retornados
+      // Atualiza o estado com os dados do endereço
       setFormData(prev => ({
         ...prev,
         street: data.logradouro || prev.street,
         district: data.bairro || prev.district,
         city: data.localidade || prev.city,
         state: data.uf || prev.state,
+        cityCode: cityIbgeCode || prev.cityCode
       }));
       
       toast.success('Endereço encontrado com sucesso!');
@@ -375,7 +427,7 @@ export default function Register() {
       toast.error('Erro ao buscar endereço. Verifique sua conexão e tente novamente.');
     }
   };
-  
+
   const handleNextStep = () => {
     if (currentStep === 1) {
       // Validar step 1 - Dados do usuário
@@ -392,44 +444,78 @@ export default function Register() {
       setCurrentStep(2);
       return;
     } else if (currentStep === 2) {
-    // Validar step 2 - Dados da empresa
-    if (!formData.segment) {
-      toast.error("Selecione um segmento");
+      // Validar step 2 - Dados da empresa
+      if (!formData.segment) {
+        toast.error("Selecione um segmento");
+        return;
+      }
+      
+      if (!formData.documentType) {
+        toast.error("Selecione um tipo de documento");
+        return;
+      }
+      
+      if (!formData.documentNumber) {
+        toast.error("Digite o número do documento");
+        return;
+      }
+      
+      if (formData.documentType === 'CNPJ' && !formData.legalName) {
+        toast.error("Digite a razão social");
+        return;
+      }
+      
+      if (!formData.tradeName) {
+        toast.error("Digite o nome fantasia");
+        return;
+      }
+      
+      if (!formData.taxRegime) {
+        toast.error("Selecione um regime tributário");
+        return;
+      }
+      
+      setCurrentStep(3);
+      return;
+    } else if (currentStep === 3) {
+      // Validar campos de endereço
+      if (!formData.cep) {
+        toast.error("CEP é obrigatório");
+        return;
+      }
+      if (!formData.street) {
+        toast.error("Endereço é obrigatório");
+        return;
+      }
+      if (!formData.number) {
+        toast.error("Número é obrigatório");
+        return;
+      }
+      if (!formData.district) {
+        toast.error("Bairro é obrigatório");
+        return;
+      }
+      if (!formData.city) {
+        toast.error("Cidade é obrigatória");
+        return;
+      }
+      if (!formData.cityCode) {
+        toast.error("Código IBGE da cidade é obrigatório");
+        return;
+      }
+      if (!formData.state) {
+        toast.error("Estado é obrigatório");
+        return;
+      }
+      
+      // Procedimento final de registro
+      submitRegistration();
       return;
     }
-    
-    if (!formData.documentType) {
-      toast.error("Selecione um tipo de documento");
-      return;
-    }
-    
-    if (!formData.documentNumber) {
-      toast.error("Digite o número do documento");
-      return;
-    }
-    
-    if (formData.documentType === 'CNPJ' && !formData.legalName) {
-      toast.error("Digite a razão social");
-      return;
-    }
-    
-    if (!formData.tradeName) {
-      toast.error("Digite o nome fantasia");
-      return;
-    }
-    
-    if (!formData.taxRegime) {
-      toast.error("Selecione um regime tributário");
-      return;
-    }
-    
-    setCurrentStep(3);
-    return;
-  }
-};
+  };
 
-// Função para lidar com o registro final/submissão do formulário
-const handleRegister = async () => {
+  // Função para lidar com o registro final/submissão do formulário
+const submitRegistration = async () => {
   try {
     setLoading(true);
     
@@ -1033,6 +1119,33 @@ const renderStep = () => {
               />
             </div>
 
+            {/* Código IBGE da Cidade */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Código IBGE da Cidade
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  name="cityCode"
+                  value={formData.cityCode}
+                  onChange={handleChange}
+                  placeholder="Código IBGE (7 dígitos)"
+                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => window.open(`https://www.ibge.gov.br/explica/codigos-dos-municipios.php`, '_blank')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300"
+                  title="Consultar códigos IBGE"
+                >
+                  <Search size={20} />
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">Obrigatório para emissão de NF-e/NFC-e (7 dígitos)</p>
+            </div>
+
             {/* Estado */}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
@@ -1112,7 +1225,7 @@ const renderStep = () => {
           if (currentStep < 3) {
             handleNextStep();
           } else {
-            handleRegister();
+            submitRegistration();
           }
         }}>
           {renderStep()}
