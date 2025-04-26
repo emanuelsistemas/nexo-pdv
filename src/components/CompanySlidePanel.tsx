@@ -28,6 +28,14 @@ interface CompanyData {
   tax_regime?: string;
   // Novo campo que usa o ID da tabela nfe_regime_tributario
   regime_tributario_id: number;
+  // Campos de endereço
+  address_cep?: string;
+  address_street?: string;
+  address_number?: string;
+  address_complement?: string;
+  address_district?: string;
+  address_city?: string;
+  address_state?: string;
 }
 
 const SEGMENTS = [
@@ -42,7 +50,16 @@ const SEGMENTS = [
   'Distribuidora',
 ];
 
+// Array de estados para o dropdown de estado
+const STATES = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA',
+  'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+];
+
 export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
+  // Estado para controlar qual aba está ativa
+  const [activeTab, setActiveTab] = useState<'dados' | 'endereco'>('dados');
+  
   const [formData, setFormData] = useState<CompanyData>({
     segment: '',
     document_type: 'CNPJ',
@@ -63,6 +80,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
   const [searchLoading, setSearchLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isIeExempt, setIsIeExempt] = useState(false); // Estado para controlar se é isento de IE
+  const [cepLoading, setCepLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -202,6 +220,9 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
       case 'cnae':
         formattedValue = formatCNAE(value);
         break;
+      case 'address_cep':
+        formattedValue = formatCEP(value);
+        break;
     }
     
     setFormData(prev => ({ ...prev, [name]: formattedValue }));
@@ -258,6 +279,54 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
       return `${numbers.slice(0, 4)}-${numbers.slice(4, 5)}/${numbers.slice(5)}`;
     } else {
       return `${numbers.slice(0, 4)}-${numbers.slice(4, 5)}/${numbers.slice(5, 7)}`;
+    }
+  };
+  
+  // Formatação para CEP: 00.000-000
+  const formatCEP = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    return numbers
+      .replace(/^(\d{2})(\d)/, '$1.$2')
+      .replace(/\.(\d{3})(\d)/, '.$1-$2')
+      .slice(0, 10);
+  };
+  
+  // Função para buscar CEP via API
+  const searchCEP = async () => {
+    const cep = formData.address_cep?.replace(/\D/g, '') || '';
+    
+    if (cep.length !== 8) {
+      toast.error('CEP inválido. Informe os 8 dígitos do CEP.');
+      return;
+    }
+    
+    try {
+      setCepLoading(true);
+      
+      // Buscar CEP na API ViaCEP
+      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await response.json();
+      
+      if (data.erro) {
+        toast.error('CEP não encontrado. Verifique o número informado.');
+        return;
+      }
+      
+      // Atualizar os campos de endereço com os dados retornados
+      setFormData(prev => ({
+        ...prev,
+        address_street: data.logradouro || prev.address_street,
+        address_district: data.bairro || prev.address_district,
+        address_city: data.localidade || prev.address_city,
+        address_state: data.uf || prev.address_state
+      }));
+      
+      toast.success('Endereço carregado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao buscar CEP:', error);
+      toast.error('Erro ao buscar CEP. Tente novamente.');
+    } finally {
+      setCepLoading(false);
     }
   };
 
@@ -340,7 +409,15 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
             whatsapp: formData.whatsapp,
             state_registration: formData.state_registration,
             cnae: formData.cnae || null, // Campo opcional
-            regime_tributario_id: formData.regime_tributario_id
+            regime_tributario_id: formData.regime_tributario_id,
+            // Dados de endereço
+            address_cep: formData.address_cep || null,
+            address_street: formData.address_street || null,
+            address_number: formData.address_number || null,
+            address_complement: formData.address_complement || null,
+            address_district: formData.address_district || null,
+            address_city: formData.address_city || null,
+            address_state: formData.address_state || null
           })
           .eq('id', formData.id);
 
@@ -360,7 +437,15 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           whatsapp: formData.whatsapp,
           state_registration: formData.state_registration,
           cnae: formData.cnae || null, // Campo opcional
-          regime_tributario_id: formData.regime_tributario_id
+          regime_tributario_id: formData.regime_tributario_id,
+          // Dados de endereço
+          address_cep: formData.address_cep || null,
+          address_street: formData.address_street || null,
+          address_number: formData.address_number || null,
+          address_complement: formData.address_complement || null,
+          address_district: formData.address_district || null,
+          address_city: formData.address_city || null,
+          address_state: formData.address_state || null
         };
         
         const { data: company, error: companyError } = await supabase
@@ -518,9 +603,29 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
               <X size={24} />
             </button>
           </div>
+          
+          {/* Abas */}
+          <div className="flex border-b border-slate-700">
+            <button
+              type="button"
+              onClick={() => setActiveTab('dados')}
+              className={`flex-1 py-3 px-4 ${activeTab === 'dados' ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700/50 hover:text-slate-300'}`}
+            >
+              Dados da Empresa
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('endereco')}
+              className={`flex-1 py-3 px-4 ${activeTab === 'endereco' ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700/50 hover:text-slate-300'}`}
+            >
+              Endereço
+            </button>
+          </div>
 
           <div className="flex-1 overflow-y-auto p-6">
             <form id="companyForm" onSubmit={handleSubmit} className="space-y-6">
+              {activeTab === 'dados' && (
+              <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
                   Segmento *
@@ -738,6 +843,133 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                   )}
                 </div>
               </div>
+              </div>
+              )}
+
+              {/* Conteúdo da aba Endereço */}
+              {activeTab === 'endereco' && (
+                <div className="space-y-6">
+                  {/* CEP */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      CEP *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="address_cep"
+                        value={formData.address_cep || ''}
+                        onChange={handleChange}
+                        placeholder="00.000-000"
+                        maxLength={10}
+                        className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={searchCEP}
+                        disabled={cepLoading}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300 disabled:opacity-50"
+                      >
+                        {cepLoading ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Endereço */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Endereço *
+                    </label>
+                    <input
+                      type="text"
+                      name="address_street"
+                      value={formData.address_street || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+
+                  {/* Número */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Número *
+                    </label>
+                    <input
+                      type="text"
+                      name="address_number"
+                      value={formData.address_number || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+
+                  {/* Complemento */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Complemento
+                    </label>
+                    <input
+                      type="text"
+                      name="address_complement"
+                      value={formData.address_complement || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  {/* Bairro */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Bairro *
+                    </label>
+                    <input
+                      type="text"
+                      name="address_district"
+                      value={formData.address_district || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+
+                  {/* Cidade */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Cidade *
+                    </label>
+                    <input
+                      type="text"
+                      name="address_city"
+                      value={formData.address_city || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+
+                  {/* Estado */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                      Estado *
+                    </label>
+                    <select
+                      name="address_state"
+                      value={formData.address_state || ''}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Selecione um estado</option>
+                      {STATES.map(state => (
+                        <option key={state} value={state}>{state}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
             </form>
           </div>
 
