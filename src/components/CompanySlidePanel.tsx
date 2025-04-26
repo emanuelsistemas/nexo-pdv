@@ -397,11 +397,106 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
 
   const searchCompany = async () => {
     try {
+      // Verifica se o documento é CNPJ
+      if (formData.document_type !== 'CNPJ') {
+        toast.warning('A busca automática só está disponível para CNPJ.');
+        return;
+      }
+
+      // Remove caracteres não numéricos do CNPJ
+      const cnpj = formData.document_number.replace(/\D/g, '');
+      
+      // Valida o comprimento do CNPJ
+      if (cnpj.length !== 14) {
+        toast.warning('Digite um CNPJ válido com 14 dígitos');
+        return;
+      }
+
       setSearchLoading(true);
       toast.info('Buscando dados da empresa...');
-      // Simula um delay para demonstrar o loading
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      toast.info('Busca de CNPJ não implementada');
+      
+      // Realizar a consulta na API de CNPJ
+      const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          toast.error('CNPJ não encontrado na base de dados.');
+        } else {
+          toast.error(`Erro ao consultar CNPJ: ${response.statusText}`);
+        }
+        return;
+      }
+      
+      const data = await response.json();
+      
+      // Formata o CEP para usar na busca automática
+      let formattedCep = '';
+      if (data.cep) {
+        formattedCep = formatCEP(data.cep.replace(/\D/g, ''));
+      }
+      
+      // Extrair o código CNAE principal 
+      let cnaeCode = '';
+      if (data.cnae_fiscal) {
+        cnaeCode = formatCNAE(data.cnae_fiscal.toString());
+      }
+
+      // Atualizar os dados da empresa
+      setFormData(prev => ({
+        ...prev,
+        legal_name: data.razao_social || prev.legal_name,
+        trade_name: data.nome_fantasia || prev.trade_name,
+        cnae: cnaeCode || prev.cnae,
+        address_cep: formattedCep || prev.address_cep,
+        address_street: data.logradouro || prev.address_street,
+        address_number: data.numero || prev.address_number,
+        address_complement: data.complemento || prev.address_complement,
+        address_district: data.bairro || prev.address_district,
+        address_city: data.municipio || prev.address_city,
+        address_state: data.uf || prev.address_state
+      }));
+      
+      // Se temos o UF, definir o código do estado
+      if (data.uf) {
+        const stateCode = getStateCode(data.uf);
+        setFormData(prev => ({
+          ...prev,
+          address_state_code: stateCode
+        }));
+      }
+      
+      // Se temos o município, buscar o código IBGE
+      if (data.municipio && data.uf) {
+        try {
+          // Tentativa de buscar o código IBGE da cidade via API
+          const ibgeResponse = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${data.uf}/municipios`);
+          if (ibgeResponse.ok) {
+            const municipios = await ibgeResponse.json();
+            const foundCity = municipios.find((city: any) => {
+              return city.nome.toLowerCase() === data.municipio.toLowerCase();
+            });
+            
+            if (foundCity && foundCity.id) {
+              // Atualizar o código da cidade
+              setFormData(prev => ({
+                ...prev,
+                address_city_code: foundCity.id.toString()
+              }));
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao buscar código IBGE:', error);
+          // Não exibir toast de erro para não atrapalhar a experiência
+        }
+      }
+
+      // Mudar para a aba de endereço após carregar os dados
+      setActiveTab('endereco');
+      
+      toast.success('Dados da empresa carregados com sucesso!');
+    } catch (error) {
+      console.error('Erro ao consultar CNPJ:', error);
+      toast.error('Erro ao processar a consulta. Verifique sua conexão e tente novamente.');
     } finally {
       setSearchLoading(false);
     }
@@ -761,7 +856,8 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                       type="button"
                       onClick={searchCompany}
                       disabled={searchLoading}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-300"
+                      title="Buscar dados via CNPJ (incluindo endereço e códigos IBGE)"
                     >
                       {searchLoading ? (
                         <Loader2 size={20} className="animate-spin" />
