@@ -23,6 +23,7 @@ interface CompanyData {
   trade_name: string;
   whatsapp: string;
   state_registration: string;
+  cnae?: string; // CNAE - Classificação Nacional de Atividades Econômicas
   // Campo antigo mantido temporariamente para compatibilidade
   tax_regime?: string;
   // Novo campo que usa o ID da tabela nfe_regime_tributario
@@ -50,6 +51,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
     trade_name: '',
     whatsapp: '',
     state_registration: '',
+    cnae: '',
     regime_tributario_id: 1, // Simples Nacional como padrão
   });
   
@@ -300,6 +302,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
             trade_name: formData.trade_name,
             whatsapp: formData.whatsapp,
             state_registration: formData.state_registration,
+            cnae: formData.cnae || null, // Campo opcional
             regime_tributario_id: formData.regime_tributario_id
           })
           .eq('id', formData.id);
@@ -319,6 +322,7 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
           trade_name: formData.trade_name,
           whatsapp: formData.whatsapp,
           state_registration: formData.state_registration,
+          cnae: formData.cnae || null, // Campo opcional
           regime_tributario_id: formData.regime_tributario_id
         };
         
@@ -612,6 +616,20 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
                   onChange={handleChange}
                   className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  CNAE - Classificação Nacional de Atividades Econômicas
+                </label>
+                <input
+                  type="text"
+                  name="cnae"
+                  value={formData.cnae}
+                  onChange={handleChange}
+                  placeholder="Ex: 5611-2/01"
+                  className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
 
