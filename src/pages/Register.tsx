@@ -84,6 +84,8 @@ export default function Register() {
     legalName: '',
     tradeName: '',
     taxRegime: '1', // Armazenará o ID como string, default '1' (Simples Nacional ID)
+    stateRegistration: '', // IE (Inscrição Estadual)
+    cnae: '', // CNAE (Código Nacional de Atividade Econômica)
     whatsapp: '',
     
     // Step 3 - Address
@@ -271,7 +273,9 @@ export default function Register() {
         ? data.cep.replace(/[^\d]/g, '').replace(/^(\d{2})(\d{3})(\d{3})$/, '$1.$2-$3')
         : '';
 
-      // Removida a determinação automática do regime tributário para não sobrescrever a seleção do usuário
+      // Extrair a inscrição estadual e CNAE dos dados retornados pela API
+      const estadualReg = data.inscricao_estadual || '';
+      const cnaeCode = data.cnae_fiscal || '';
       
       // Atualizar o estado com os dados formatados
       setFormData(prev => ({
@@ -279,6 +283,8 @@ export default function Register() {
         legalName: data.razao_social || '',
         tradeName: data.nome_fantasia || '',
         // Não atualiza o regime tributário com os dados do CNPJ
+        stateRegistration: estadualReg,
+        cnae: cnaeCode, // Código numérico do CNAE
         cep: formattedCep,
         street: data.logradouro || '',
         number: data.numero || '',
@@ -464,6 +470,8 @@ const handleRegister = async () => {
         segment: formData.segment,
         // CORRIGIDO: Usa regime_tributario_id (novo campo) em vez de tax_regime (removido)
         regime_tributario_id: parseInt(formData.taxRegime),
+        state_registration: formData.stateRegistration,
+        cnae: formData.cnae,
         whatsapp: formData.whatsapp,
         address_cep: formData.cep.replace(/[^\d]/g, ''),
         address_street: formData.street,
@@ -851,6 +859,39 @@ const renderStep = () => {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* IE (Inscrição Estadual) */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Inscrição Estadual (IE)
+              </label>
+              <input
+                type="text"
+                name="stateRegistration"
+                value={formData.stateRegistration}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors bg-slate-800 cursor-not-allowed"
+                placeholder="Inscrição Estadual (preenchido automaticamente)"
+                readOnly
+                required
+              />
+            </div>
+
+            {/* CNAE */}
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                CNAE (Código Nacional de Atividade Econômica)
+              </label>
+              <input
+                type="text"
+                name="cnae"
+                value={formData.cnae}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                placeholder="00.00-0/00"
+                required
+              />
             </div>
 
             {/* WhatsApp */}
