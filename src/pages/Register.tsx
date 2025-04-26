@@ -675,8 +675,8 @@ const submitRegistration = async () => {
         // Preencher códigos fiscais obrigatórios para NF-e/NFC-e
         address_state_code: estadosCodigoIBGE[formData.state] || '', // Código IBGE da UF
         address_country_code: '1058', // Brasil (padrão BACEN)
-        // Nota: O campo address_city_code precisaria de uma API ou banco de dados de códigos IBGE
-        // Idealmente, implementaremos no futuro a busca automática pelo código do município
+        // Código IBGE da cidade - implementado conforme preenchimento automático
+        address_city_code: formData.cityCode || '',
         status: 'active',
         created_by: authData.user.id // Agora temos essa coluna no banco de dados
       })
