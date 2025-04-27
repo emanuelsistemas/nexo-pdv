@@ -307,17 +307,20 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         try {
           setLoading(true);
           
-          // Obter o regime tributário da empresa primeiro
+          // Obter o regime tributário da empresa primeiro e aguardar sua conclusão
+          // Este passo é crítico para que o CST/CSOSN seja definido corretamente
           await loadCompanyRegimeTributario();
+          console.log('Regime tributario carregado:', regimeTributario);
           
           // Carregar unidades, grupos, marcas, opções CFOP, IPI, PIS, COFINS em paralelo
-          // Nota: loadCSTOptions será chamado depois pois depende do regime tributário
           await Promise.all([loadUnits(), loadGroups(), loadBrands(), loadCFOPOptions(), loadIPIOptions(), loadPISOptions(), loadCOFINSOptions()]);  
           
-          // Agora carregamos o CST/CSOSN após conhecermos o regime tributário
+          // Carregar CST/CSOSN depois que o regime tributário já estiver definido
           await loadCSTOptions();
+          await loadCSOSNOptions(); // Garantir que ambos sejam carregados
 
           if (productToEdit) {
+            // Editar um produto existente
             setFormData({
               code: productToEdit.code,
               name: productToEdit.name,
@@ -354,10 +357,13 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
               const defaultCst = suggestCSTBasedOnCFOP('5405', regimeTributario);
               if (defaultCst) {
                 console.log(`💯 Aplicando CST/CSOSN padrão (${defaultCst}) para CFOP 5405 em novo produto`);
-                setFormData(prev => ({
-                  ...prev,
-                  cst: defaultCst
-                }));
+                // Usar setTimeout para garantir que o valor seja aplicado após a renderização inicial
+                setTimeout(() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    cst: defaultCst
+                  }));
+                }, 100);
               }
             }
           }
