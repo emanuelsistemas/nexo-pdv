@@ -543,8 +543,18 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       
       // Garantir o tipo correto dos dados
       const typedData = data as ProductUnit[];
-      setUnits(typedData);
-      console.log('Unidades carregadas:', typedData);
+      
+      // Ordenar unidades para que UN apareça primeiro, KG em segundo, e as demais em ordem alfabética
+      const sortedUnits = [...typedData].sort((a, b) => {
+        if (a.code === 'UN') return -1; // UN sempre primeiro
+        if (b.code === 'UN') return 1;
+        if (a.code === 'KG') return -1; // KG sempre segundo (depois de UN)
+        if (b.code === 'KG') return 1;
+        return a.name.localeCompare(b.name); // Demais em ordem alfabética
+      });
+      
+      setUnits(sortedUnits);
+      console.log('Unidades carregadas e ordenadas com UN primeiro:', sortedUnits);
       
       // Forçar a seleção da unidade UN assim que os dados são carregados
       // Isso garante que UN será selecionada mesmo se KG aparecer primeiro no array
