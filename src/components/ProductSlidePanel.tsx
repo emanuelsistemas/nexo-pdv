@@ -601,6 +601,20 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       const typedGroups = (groupsData || []) as ProductGroup[];
       setGroups(typedGroups);
       console.log('Grupos carregados:', typedGroups);
+      
+      // Forçar a seleção do grupo Diversos como padrão assim que os dados são carregados
+      if (!productToEdit) {
+        const groupDiversos = typedGroups.find(group => group.name === 'Diversos');
+        if (groupDiversos) {
+          console.log('Setando Diversos como grupo padrão:', groupDiversos);
+          setFormData(prev => ({
+            ...prev,
+            group_id: groupDiversos.id
+          }));
+        } else {
+          console.warn('Grupo Diversos não encontrado no banco. Verifique se ele existe.');
+        }
+      }
     } catch (error: any) {
       console.error('Erro ao carregar grupos:', error.message);
       toast.error(`Erro ao carregar grupos: ${error.message}`);
@@ -2113,7 +2127,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                           onChange={handleChange}
                           className="flex-grow px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
-                          <option value="">Selecione um grupo</option>
                           {groups.map(group => (
                             <option key={group.id} value={group.id}>
                               {group.name}
