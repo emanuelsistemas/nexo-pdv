@@ -2065,7 +2065,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                           className="flex-grow px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           required
                         >
-                          <option value="">Selecione uma unidade</option>
                           {units.map(unit => (
                             <option key={unit.id} value={unit.id}>
                               {unit.code} - {unit.name}
