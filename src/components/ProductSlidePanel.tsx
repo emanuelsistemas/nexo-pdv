@@ -2495,7 +2495,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                           <div className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis pr-2">
                             <>
                               <span className="font-medium">
-                                {regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN: ' : 'CST: '}
                                 {formData.cst}
                               </span>
                               {formData.cst && ' - '}
