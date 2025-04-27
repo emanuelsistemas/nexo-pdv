@@ -5,7 +5,6 @@ import { Copy } from 'lucide-react';
 import 'react-toastify/dist/ReactToastify.css';
 import { handleAuthRedirect, getSupabase } from './lib/supabase';
 import { isUserLoggedIn, clearLoginState } from './utils/authUtils';
-import { ProductDataProvider } from './contexts/ProductDataContext';
 
 // Implementando lazy loading para as páginas
 const Landing = lazy(() => import('./pages/Landing'));
@@ -355,52 +354,16 @@ function App() {
             <Route path="/admin/resellers" element={<Resellers />} />
             <Route path="/admin/reseller/:id" element={<ResellerEdit />} />
 
-            {/* Protected routes - Envolvidas pelo ProductDataProvider para disponibilizar dados de referência */}
-            <Route path="/dashboard" element={<ProtectedRoute>
-              <ProductDataProvider>
-                <Dashboard />
-              </ProductDataProvider>
-            </ProtectedRoute>} />
-            <Route path="/pdv" element={<ProtectedRoute>
-              <ProductDataProvider>
-                <PDV />
-              </ProductDataProvider>
-            </ProtectedRoute>} />
-            <Route path="/orcamento" element={<ProtectedRoute>
-              <ProductDataProvider>
-                <Orcamento />
-              </ProductDataProvider>
-            </ProtectedRoute>} />
-            <Route path="/produtos" element={<ProtectedRoute>
-              <ProductDataProvider>
-                <Produtos />
-              </ProductDataProvider>
-            </ProtectedRoute>} />
-            <Route path="/unidade" element={<ProtectedRoute>
-              <ProductDataProvider>
-                <Unidade />
-              </ProductDataProvider>
-            </ProtectedRoute>} />
-            <Route path="/grupo" element={<ProtectedRoute>
-              <ProductDataProvider>
-                <Grupo />
-              </ProductDataProvider>
-            </ProtectedRoute>} />
-            <Route path="/marca" element={<ProtectedRoute>
-              <ProductDataProvider>
-                <Marca />
-              </ProductDataProvider>
-            </ProtectedRoute>} />
-            <Route path="/clientes" element={<ProtectedRoute>
-              <ProductDataProvider>
-                <Clientes />
-              </ProductDataProvider>
-            </ProtectedRoute>} />
-            <Route path="/nfe" element={<ProtectedRoute>
-              <ProductDataProvider>
-                <NFE />
-              </ProductDataProvider>
-            </ProtectedRoute>} />
+            {/* Protected routes */}
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/pdv" element={<ProtectedRoute><PDV /></ProtectedRoute>} />
+            <Route path="/orcamento" element={<ProtectedRoute><Orcamento /></ProtectedRoute>} />
+            <Route path="/produtos" element={<ProtectedRoute><Produtos /></ProtectedRoute>} />
+            <Route path="/unidade" element={<ProtectedRoute><Unidade /></ProtectedRoute>} />
+            <Route path="/grupo" element={<ProtectedRoute><Grupo /></ProtectedRoute>} />
+            <Route path="/marca" element={<ProtectedRoute><Marca /></ProtectedRoute>} />
+            <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
+            <Route path="/nfe" element={<ProtectedRoute><NFE /></ProtectedRoute>} />
           </Routes>
           <AIChatWrapper />
         </Suspense>

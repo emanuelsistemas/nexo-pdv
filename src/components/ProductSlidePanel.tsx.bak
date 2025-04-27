@@ -307,20 +307,17 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         try {
           setLoading(true);
           
-          // Obter o regime tributário da empresa primeiro e aguardar sua conclusão
-          // Este passo é crítico para que o CST/CSOSN seja definido corretamente
+          // Obter o regime tributário da empresa primeiro
           await loadCompanyRegimeTributario();
-          console.log('Regime tributario carregado:', regimeTributario);
           
           // Carregar unidades, grupos, marcas, opções CFOP, IPI, PIS, COFINS em paralelo
+          // Nota: loadCSTOptions será chamado depois pois depende do regime tributário
           await Promise.all([loadUnits(), loadGroups(), loadBrands(), loadCFOPOptions(), loadIPIOptions(), loadPISOptions(), loadCOFINSOptions()]);  
           
-          // Carregar CST/CSOSN depois que o regime tributário já estiver definido
+          // Agora carregamos o CST/CSOSN após conhecermos o regime tributário
           await loadCSTOptions();
-          await loadCSOSNOptions(); // Garantir que ambos sejam carregados
 
           if (productToEdit) {
-            // Editar um produto existente
             setFormData({
               code: productToEdit.code,
               name: productToEdit.name,
@@ -357,13 +354,10 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
               const defaultCst = suggestCSTBasedOnCFOP('5405', regimeTributario);
               if (defaultCst) {
                 console.log(`💯 Aplicando CST/CSOSN padrão (${defaultCst}) para CFOP 5405 em novo produto`);
-                // Usar setTimeout para garantir que o valor seja aplicado após a renderização inicial
-                setTimeout(() => {
-                  setFormData(prev => ({
-                    ...prev,
-                    cst: defaultCst
-                  }));
-                }, 100);
+                setFormData(prev => ({
+                  ...prev,
+                  cst: defaultCst
+                }));
               }
             }
           }
@@ -549,33 +543,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       
       // Garantir o tipo correto dos dados
       const typedData = data as ProductUnit[];
-      
-      // Ordenar unidades para que UN apareça primeiro, KG em segundo, e as demais em ordem alfabética
-      const sortedUnits = [...typedData].sort((a, b) => {
-        if (a.code === 'UN') return -1; // UN sempre primeiro
-        if (b.code === 'UN') return 1;
-        if (a.code === 'KG') return -1; // KG sempre segundo (depois de UN)
-        if (b.code === 'KG') return 1;
-        return a.name.localeCompare(b.name); // Demais em ordem alfabética
-      });
-      
-      setUnits(sortedUnits);
-      console.log('Unidades carregadas e ordenadas com UN primeiro:', sortedUnits);
-      
-      // Forçar a seleção da unidade UN assim que os dados são carregados
-      // Isso garante que UN será selecionada mesmo se KG aparecer primeiro no array
-      if (!productToEdit) {
-        const unitUN = typedData.find(unit => unit.code === 'UN');
-        if (unitUN) {
-          console.log('Setando UN como unidade padrão:', unitUN);
-          setFormData(prev => ({
-            ...prev,
-            unit_id: unitUN.id
-          }));
-        } else {
-          console.warn('Unidade UN não encontrada no banco. Verifique se ela existe.');
-        }
-      }
+      setUnits(typedData);
+      console.log('Unidades carregadas:', typedData);
     } catch (error: any) {
       console.error('Erro ao carregar unidades:', error.message);
       toast.error(`Erro ao carregar unidades: ${error.message}`);
@@ -617,20 +586,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       const typedGroups = (groupsData || []) as ProductGroup[];
       setGroups(typedGroups);
       console.log('Grupos carregados:', typedGroups);
-      
-      // Forçar a seleção do grupo Diversos como padrão assim que os dados são carregados
-      if (!productToEdit) {
-        const groupDiversos = typedGroups.find(group => group.name === 'Diversos');
-        if (groupDiversos) {
-          console.log('Setando Diversos como grupo padrão:', groupDiversos);
-          setFormData(prev => ({
-            ...prev,
-            group_id: groupDiversos.id
-          }));
-        } else {
-          console.warn('Grupo Diversos não encontrado no banco. Verifique se ele existe.');
-        }
-      }
     } catch (error: any) {
       console.error('Erro ao carregar grupos:', error.message);
       toast.error(`Erro ao carregar grupos: ${error.message}`);
@@ -1133,28 +1088,6 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       console.log(`📋 ${cstData.length} CSTs válidos definidos para Regime Normal`);
       setCstOptions(cstData);
       
-      // Adicionar lógica para definir um CST padrão se não for editão de produto
-      if (!productToEdit && regimeTributario && !isSimplesTaxRegime() && !formData.cst) {
-        // Recomendação baseada no CFOP
-        const defaultCst = suggestCSTBasedOnCFOP('5405', regimeTributario);
-        if (defaultCst) {
-          console.log(`Aplicando CST padrão: ${defaultCst} para Regime Normal`);
-          setFormData(prev => ({
-            ...prev,
-            cst: defaultCst
-          }));
-        } else {
-          // Caso não exista recomendação, usar o primeiro da lista
-          const firstCst = cstData[0]?.codigo;
-          if (firstCst) {
-            console.log(`Aplicando primeiro CST disponível: ${firstCst}`);
-            setFormData(prev => ({
-              ...prev,
-              cst: firstCst
-            }));
-          }
-        }
-      }
     } catch (error: any) {
       console.error('Erro ao carregar opções de CST:', error.message);
       toast.error(`Erro ao carregar códigos CST: ${error.message}`);
@@ -1176,35 +1109,14 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         { id: 203, codigo: '203', descricao: 'Isenção do ICMS no Simples Nacional para faixa de receita bruta e com cobrança do ICMS por substituição tributária' },
         { id: 300, codigo: '300', descricao: 'Imune' },
         { id: 400, codigo: '400', descricao: 'Não tributada pelo Simples Nacional' },
-        { id: 500, codigo: '500', descricao: 'ICMS cobrado anteriormente por substituição tributária' },
+        { id: 500, codigo: '500', descricao: 'ICMS cobrado anteriormente por substituição tributária (substituído) ou por antecipação' },
         { id: 900, codigo: '900', descricao: 'Outros' },
       ];
       
       console.log(`📋 ${csosnData.length} CSOSNs válidos definidos para Simples Nacional`);
+      console.log('📝 CSOSNs disponíveis:', csosnData.map(item => item.codigo).join(', '));
       setCsosnOptions(csosnData);
-
-      // Adicionar lógica para definir um CSOSN padrão se não for editão de produto
-      if (!productToEdit && regimeTributario && isSimplesTaxRegime() && !formData.cst) {
-        // Recomendação baseada no CFOP
-        const defaultCsosn = suggestCSTBasedOnCFOP('5405', regimeTributario);
-        if (defaultCsosn) {
-          console.log(`Aplicando CSOSN padrão: ${defaultCsosn} para Simples Nacional`);
-          setFormData(prev => ({
-            ...prev,
-            cst: defaultCsosn
-          }));
-        } else {
-          // Caso não exista recomendação, usar o primeiro da lista (geralmente 102)
-          const firstCsosn = csosnData[0]?.codigo;
-          if (firstCsosn) {
-            console.log(`Aplicando primeiro CSOSN disponível: ${firstCsosn}`);
-            setFormData(prev => ({
-              ...prev,
-              cst: firstCsosn
-            }));
-          }
-        }
-      }
+      
     } catch (error: any) {
       console.error('Erro ao carregar opções de CSOSN:', error.message);
       toast.error(`Erro ao carregar códigos CSOSN: ${error.message}`);
@@ -2153,6 +2065,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                           className="flex-grow px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           required
                         >
+                          <option value="">Selecione uma unidade</option>
                           {units.map(unit => (
                             <option key={unit.id} value={unit.id}>
                               {unit.code} - {unit.name}
@@ -2186,6 +2099,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                           onChange={handleChange}
                           className="flex-grow px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         >
+                          <option value="">Selecione um grupo</option>
                           {groups.map(group => (
                             <option key={group.id} value={group.id}>
                               {group.name}
@@ -2499,19 +2413,22 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                         >
                           {/* Exibir o CST/CSOSN selecionado com código e descrição */}
                           <div className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis pr-2">
-                            <>
-                              <span className="font-medium">
-                                {formData.cst}
-                              </span>
-                              {formData.cst && ' - '}
-                              {
-                                // Buscar a descrição no array correto baseado no regime
-                                (regimeTributario === '1' || regimeTributario === '2' 
-                                  ? csosnOptions.find(c => c.codigo === formData.cst) 
-                                  : cstOptions.find(c => c.codigo === formData.cst)
-                                )?.descricao || ''
-                              }
-                            </>
+                            {formData.cst ? (
+                              <>
+                                <span className="font-medium">
+                                  {regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN: ' : 'CST: '}
+                                  {formData.cst}
+                                </span> - {
+                                  // Buscar a descrição no array correto baseado no regime
+                                  (regimeTributario === '1' || regimeTributario === '2' 
+                                    ? csosnOptions.find(c => c.codigo === formData.cst) 
+                                    : cstOptions.find(c => c.codigo === formData.cst)
+                                  )?.descricao || ''
+                                }
+                              </>
+                            ) : (
+                              `Selecione ${regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN' : 'CST'}...`
+                            )}
                           </div>
                           <div className="flex-shrink-0 text-xs text-slate-400">
                             {showCstDropdown ? '▲' : '▼'}
