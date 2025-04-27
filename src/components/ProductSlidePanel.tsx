@@ -1096,57 +1096,106 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
 
   // Função para validar a compatibilidade entre CFOP e CST/CSOSN com base no regime tributário
   const validateFiscalCompatibility = (cfop: string, cst: string, regime: string): { isValid: boolean; message: string; suggestedCst: string } => {
-    // Verificar combinações para Simples Nacional (regime 1 ou 2)
-    if (regime === '1' || regime === '2') {
-      // Regras para Simples Nacional
-      if (cfop === '5405' && cst !== '500') {
-        return {
-          isValid: false,
-          message: 'Para CFOP 5405 no Simples Nacional, o CSOSN deve ser 500',
-          suggestedCst: '500'
-        };
-      }
-      if (cfop === '5102' && cst !== '102') {
-        return {
-          isValid: false,
-          message: 'Para CFOP 5102 no Simples Nacional, o CSOSN deve ser 102',
-          suggestedCst: '102'
-        };
-      }
-    } else {
-      // Regras para Regime Normal
-      if (cfop === '5405' && cst !== '60') {
-        return {
-          isValid: false,
-          message: 'Para CFOP 5405 no Regime Normal, o CST deve ser 60',
-          suggestedCst: '60'
-        };
-      }
-      if (cfop === '5102' && cst !== '00') {
-        return {
-          isValid: false,
-          message: 'Para CFOP 5102 no Regime Normal, o CST deve ser 00',
-          suggestedCst: '00'
-        };
-      }
+    // Obter o CST/CSOSN recomendado para o CFOP e regime
+    const recommendedCst = suggestCSTBasedOnCFOP(cfop, regime);
+    
+    // Se não há recomendação para este CFOP, consideramos válido (não temos regra específica)
+    if (!recommendedCst) {
+      return { isValid: true, message: '', suggestedCst: cst };
     }
     
-    // Se não cair em nenhuma das regras acima, está válido
+    // Se o CST/CSOSN atual não corresponde ao recomendado, considera inválido
+    if (cst !== recommendedCst) {
+      const fiscalType = (regime === '1' || regime === '2') ? 'CSOSN' : 'CST';
+      const regimeLabel = (regime === '1' || regime === '2') ? 'Simples Nacional' : 'Regime Normal';
+      
+      return {
+        isValid: false,
+        message: `Para CFOP ${cfop} no ${regimeLabel}, o ${fiscalType} deve ser ${recommendedCst}`,
+        suggestedCst: recommendedCst
+      };
+    }
+    
+    // Caso o CST/CSOSN atual corresponda ao recomendado, considera válido
     return { isValid: true, message: '', suggestedCst: cst };
   };
 
   // Função para sugerir CST/CSOSN com base no CFOP selecionado
   const suggestCSTBasedOnCFOP = (cfop: string, regime: string): string => {
-    if (regime === '1' || regime === '2') {
-      // Simples Nacional
-      if (cfop === '5405') return '500';
-      if (cfop === '5102') return '102';
+    const isSimples = regime === '1' || regime === '2';
+    
+    // Mapeamento completo de CFOP para CST/CSOSN
+    if (isSimples) {
+      // Simples Nacional (CSOSN)
+      const simplesMapping: Record<string, string> = {
+        // Vendas dentro do estado
+        '5102': '102', // Venda de mercadoria
+        '5103': '102', // Venda em consignação
+        '5104': '102', // Venda por conta de terceiros
+        '5105': '102', // Venda de mercadoria adquirida ou recebida de terceiros
+        '5111': '102', // Venda de produção própria
+        '5401': '500', // Venda de produção com ST
+        '5402': '500', // Venda de mercadoria sujeita a ST
+        '5403': '500', // Venda de mercadoria em ST por substituição tributária
+        '5405': '500', // Venda de mercadoria adquirida com ST
+        '5910': '500', // Remessa em bonificação, doação ou brinde
+        '5911': '500', // Remessa de amostra grátis
+        '5912': '500', // Remessa de mercadoria para demonstração
+        '5922': '500', // Lançamento de devolução de mercadoria
+        
+        // Vendas para outros estados
+        '6102': '102', // Venda interestadual
+        '6103': '102', // Venda em consignação interestadual
+        '6104': '102', // Venda interestadual por conta de terceiros
+        '6105': '102', // Venda interestadual de mercadoria adquirida
+        '6111': '102', // Venda interestadual de produção própria
+        '6401': '500', // Venda interestadual de produção própria com ST
+        '6402': '500', // Venda interestadual de mercadoria com ST
+        '6403': '500', // Venda interestadual em ST por substituição tributária
+        '6404': '500', // Venda interestadual de mercadoria sujeita a ST
+        '6405': '500', // Venda interestadual de mercadoria adquirida com ST
+        '6910': '500', // Remessa interestadual em bonificação, doação ou brinde
+        '6911': '500', // Remessa interestadual de amostra grátis
+        '6912': '500', // Remessa interestadual para demonstração
+      };
+      
+      return simplesMapping[cfop] || '';
     } else {
-      // Regime Normal
-      if (cfop === '5405') return '60';
-      if (cfop === '5102') return '00';
+      // Regime Normal (CST)
+      const normalMapping: Record<string, string> = {
+        // Vendas dentro do estado
+        '5102': '00',  // Venda de mercadoria tributada integralmente
+        '5103': '00',  // Venda em consignação tributada integralmente
+        '5104': '00',  // Venda por conta de terceiros tributada integralmente
+        '5105': '00',  // Venda de mercadoria adquirida tributada integralmente
+        '5111': '00',  // Venda de produção própria tributada integralmente
+        '5401': '60',  // Venda de produção própria com ST
+        '5402': '60',  // Venda de mercadoria sujeita a ST
+        '5403': '60',  // Venda de mercadoria em ST por substituição tributária
+        '5405': '60',  // Venda de mercadoria adquirida com ST
+        '5910': '60',  // Remessa em bonificação, doação ou brinde com ST
+        '5911': '60',  // Remessa de amostra grátis com ST
+        '5912': '60',  // Remessa para demonstração com ST
+        '5922': '90',  // Lançamento de devolução de mercadoria
+        
+        // Vendas para outros estados
+        '6102': '00',  // Venda interestadual tributada integralmente
+        '6103': '00',  // Venda em consignação interestadual tributada integralmente
+        '6104': '00',  // Venda interestadual por conta de terceiros tributada integralmente
+        '6105': '00',  // Venda interestadual de mercadoria adquirida tributada integralmente
+        '6111': '00',  // Venda interestadual de produção própria tributada integralmente
+        '6401': '60',  // Venda interestadual de produção própria com ST
+        '6402': '60',  // Venda interestadual de mercadoria com ST
+        '6403': '60',  // Venda interestadual em ST por substituição tributária
+        '6404': '60',  // Venda interestadual de mercadoria sujeita a ST
+        '6405': '60',  // Venda interestadual de mercadoria adquirida com ST
+        '6910': '60',  // Remessa interestadual em bonificação, doação ou brinde com ST
+        '6911': '60',  // Remessa interestadual de amostra grátis com ST
+        '6912': '60',  // Remessa interestadual para demonstração com ST
+      };
+      
+      return normalMapping[cfop] || '';
     }
-    return ''; // Se não tiver uma regra específica, mantém vazio
   };
   
   const resetForm = () => {
