@@ -988,22 +988,42 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   // Carregar o regime tributário da empresa atual
   const loadCompanyRegimeTributario = async () => {
     try {
-      // Obter usuário atual
+      // Tentar obter o regime tributário do localStorage primeiro (forma mais rápida)
+      const savedRegimeId = localStorage.getItem('company_regime_tributario_id');
+      
+      if (savedRegimeId) {
+        // Usar o valor do localStorage se existir
+        setRegimeTributario(savedRegimeId);
+        console.log(`🔥 Regime Tributário carregado do localStorage: ${savedRegimeId}`);
+        return; // Retornar imediatamente, não é necessário consultar o banco
+      }
+      
+      // Fallback: Se não encontrar no localStorage, buscar no banco
+      console.log('Regime não encontrado no localStorage, buscando no banco...');
+      
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       
       if (userError || !user) {
         console.error('Usuário não autenticado');
+        // Se não conseguir obter o usuário, usar um valor padrão
+        setRegimeTributario('1'); // 1 = Simples Nacional (padrão)
         return;
       }
       
-      // Obter perfil do usuário para identificar a empresa
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('company_id')
         .eq('id', user.id)
         .single();
       
-      if (profile?.company_id) {
+      if (profileError || !profile?.company_id) {
+        console.error('Empresa não encontrada');
+        setRegimeTributario('1'); // Valor padrão
+        return;
+      }
+      
+      // Consultar o banco para pegar o regime tributário
+      if (profile.company_id) {
         // Buscar regime tributário da empresa
         const { data: company, error: companyError } = await supabase
           .from('companies')
@@ -1012,13 +1032,19 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
           .single();
         
         if (companyError) {
-          throw companyError;
+          console.error('Erro ao buscar empresa:', companyError.message);
+          setRegimeTributario('1'); // Valor padrão
+          return;
         }
         
         if (company?.regime_tributario_id) {
           const regimeId = company.regime_tributario_id.toString();
+          
+          // Salvar no localStorage para futuras consultas
+          localStorage.setItem('company_regime_tributario_id', regimeId);
+          
           setRegimeTributario(regimeId);
-          console.log('Regime Tributário carregado:', regimeId);
+          console.log('Regime Tributário carregado do banco:', regimeId);
         } else {
           // Se não existir regime, usar o valor padrão (1 = Simples Nacional)
           setRegimeTributario('1');
@@ -1027,6 +1053,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       }
     } catch (error: any) {
       console.error('Erro ao carregar regime tributário:', error.message);
+      // Em caso de erro, garantir que haja um valor padrão
+      setRegimeTributario('1');
     }
   };
 

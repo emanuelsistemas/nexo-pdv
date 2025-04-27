@@ -192,6 +192,11 @@ export function CompanySlidePanel({ isOpen, onClose }: CompanySlidePanelProps) {
         }
 
         if (company) {
+          // Salvar o regime tributário da empresa no localStorage para uso em outros componentes
+          const regimeTributarioId = company.regime_tributario_id || 1;
+          localStorage.setItem('company_regime_tributario_id', regimeTributarioId.toString());
+          console.log(`✅ Regime tributário (${regimeTributarioId}) salvo no localStorage`);
+          
           // Formatar o número do documento ANTES de definir o estado
           // Precisamos passar o tipo de documento da 'company' para formatDocument
           // Adicionar verificação explícita de tipo para garantir que é string
