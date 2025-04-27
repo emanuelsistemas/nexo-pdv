@@ -545,6 +545,21 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       const typedData = data as ProductUnit[];
       setUnits(typedData);
       console.log('Unidades carregadas:', typedData);
+      
+      // Forçar a seleção da unidade UN assim que os dados são carregados
+      // Isso garante que UN será selecionada mesmo se KG aparecer primeiro no array
+      if (!productToEdit) {
+        const unitUN = typedData.find(unit => unit.code === 'UN');
+        if (unitUN) {
+          console.log('Setando UN como unidade padrão:', unitUN);
+          setFormData(prev => ({
+            ...prev,
+            unit_id: unitUN.id
+          }));
+        } else {
+          console.warn('Unidade UN não encontrada no banco. Verifique se ela existe.');
+        }
+      }
     } catch (error: any) {
       console.error('Erro ao carregar unidades:', error.message);
       toast.error(`Erro ao carregar unidades: ${error.message}`);
