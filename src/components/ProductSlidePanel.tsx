@@ -190,17 +190,25 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     console.log('Grupo Diversos encontrado:', groupDiversos);
     
     // Atualizar o formulário com os valores padrão se encontrados
-    if (unitUN || groupDiversos) {
-      const newFormData = {
-        ...formData,
-        unit_id: unitUN?.id || '',
-        group_id: groupDiversos?.id || ''
-      };
-      
-      console.log('Novos valores do formulário:', newFormData);
-      setFormData(newFormData);
+    // Também aplicamos o CST/CSOSN padrão de acordo com o regime tributário
+    let defaultCstValue = '';
+    if (regimeTributario) {
+      defaultCstValue = suggestCSTBasedOnCFOP('5405', regimeTributario);
     }
     
+    // Cria um objeto com todos os valores padrão necessários
+    const newFormData = {
+      ...formData,
+      unit_id: unitUN?.id || '',
+      group_id: groupDiversos?.id || '',
+      cfop: '5405',
+      cst: defaultCstValue
+    };
+    
+    console.log('Novos valores do formulário:', newFormData);
+    setFormData(newFormData);
+    
+    // Log de avisos para debug
     if (!unitUN) {
       console.warn('Unidade UN não encontrada para definir como padrão.');
     }
@@ -394,14 +402,35 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     }
   }, [isOpen, productToEdit]);
 
-  // Efeito adicional para garantir que os valores padrão sejam aplicados quando as unidades e grupos estiverem carregados
+  // Efeito principal para garantir que os valores padrão sejam aplicados quando o painel for aberto
   useEffect(() => {
-    if (isOpen && !productToEdit && units.length > 0 && groups.length > 0 && !defaultsApplied) {
-      console.log('Aplicando valores padrão no useEffect secundário');
-      setDefaultValues();
-      setDefaultsApplied(true);
+    // Garantir que os valores padrão sejam aplicados mesmo quando o painel é aberto pela primeira vez
+    if (isOpen && !productToEdit) {
+      console.log('Verificando carregamento de valores padrão');
+      
+      // Se as unidades e grupos já estão carregados, aplicar valores imediatamente
+      if (units.length > 0 && groups.length > 0 && !defaultsApplied) {
+        console.log('Aplicando valores padrão - dados já disponíveis');
+        setDefaultValues();
+        setDefaultsApplied(true);
+      } else if (!defaultsApplied) {
+        // Se os dados ainda não estão disponíveis, garantir que o formulário tenha pelo menos os valores básicos
+        console.log('Aplicando valores padrão iniciais enquanto aguarda carregamento completo');
+        
+        // Definir CFOP e CST/CSOSN mesmo antes de carregar outros dados
+        let defaultCstValue = '';
+        if (regimeTributario) {
+          defaultCstValue = suggestCSTBasedOnCFOP('5405', regimeTributario);
+        }
+        
+        setFormData(prev => ({
+          ...prev,
+          cfop: '5405',
+          cst: defaultCstValue
+        }));
+      }
     }
-  }, [isOpen, productToEdit, units, groups, defaultsApplied]);
+  }, [isOpen, productToEdit, units, groups, defaultsApplied, regimeTributario]);
   
   // Função para reservar automaticamente o código do produto
   const reserveProductCode = async () => {
@@ -1220,12 +1249,25 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       status: 'active'
     };
     
-    // Em seguida, aplicamos o CST/CSOSN padrão de acordo com o regime tributário
+    // Aplicar o CST/CSOSN padrão de acordo com o regime tributário
     if (regimeTributario) {
       const suggestedCst = suggestCSTBasedOnCFOP('5405', regimeTributario);
       if (suggestedCst) {
         initialFormData.cst = suggestedCst;
       }
+    }
+    
+    // Aplicar unidade e grupo padrão, se estiverem disponíveis
+    // Encontrar a unidade UN
+    const unitUN = units.find(unit => unit.code === 'UN');
+    if (unitUN) {
+      initialFormData.unit_id = unitUN.id;
+    }
+    
+    // Encontrar o grupo Diversos
+    const groupDiversos = groups.find(group => group.name === 'Diversos');
+    if (groupDiversos) {
+      initialFormData.group_id = groupDiversos.id;
     }
     
     setFormData(initialFormData);
