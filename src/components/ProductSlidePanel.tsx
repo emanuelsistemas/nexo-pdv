@@ -1127,6 +1127,28 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
       console.log(`📋 ${cstData.length} CSTs válidos definidos para Regime Normal`);
       setCstOptions(cstData);
       
+      // Adicionar lógica para definir um CST padrão se não for editão de produto
+      if (!productToEdit && regimeTributario && !isSimplesTaxRegime() && !formData.cst) {
+        // Recomendação baseada no CFOP
+        const defaultCst = suggestCSTBasedOnCFOP('5405', regimeTributario);
+        if (defaultCst) {
+          console.log(`Aplicando CST padrão: ${defaultCst} para Regime Normal`);
+          setFormData(prev => ({
+            ...prev,
+            cst: defaultCst
+          }));
+        } else {
+          // Caso não exista recomendação, usar o primeiro da lista
+          const firstCst = cstData[0]?.codigo;
+          if (firstCst) {
+            console.log(`Aplicando primeiro CST disponível: ${firstCst}`);
+            setFormData(prev => ({
+              ...prev,
+              cst: firstCst
+            }));
+          }
+        }
+      }
     } catch (error: any) {
       console.error('Erro ao carregar opções de CST:', error.message);
       toast.error(`Erro ao carregar códigos CST: ${error.message}`);
@@ -1148,14 +1170,35 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
         { id: 203, codigo: '203', descricao: 'Isenção do ICMS no Simples Nacional para faixa de receita bruta e com cobrança do ICMS por substituição tributária' },
         { id: 300, codigo: '300', descricao: 'Imune' },
         { id: 400, codigo: '400', descricao: 'Não tributada pelo Simples Nacional' },
-        { id: 500, codigo: '500', descricao: 'ICMS cobrado anteriormente por substituição tributária (substituído) ou por antecipação' },
+        { id: 500, codigo: '500', descricao: 'ICMS cobrado anteriormente por substituição tributária' },
         { id: 900, codigo: '900', descricao: 'Outros' },
       ];
       
       console.log(`📋 ${csosnData.length} CSOSNs válidos definidos para Simples Nacional`);
-      console.log('📝 CSOSNs disponíveis:', csosnData.map(item => item.codigo).join(', '));
       setCsosnOptions(csosnData);
-      
+
+      // Adicionar lógica para definir um CSOSN padrão se não for editão de produto
+      if (!productToEdit && regimeTributario && isSimplesTaxRegime() && !formData.cst) {
+        // Recomendação baseada no CFOP
+        const defaultCsosn = suggestCSTBasedOnCFOP('5405', regimeTributario);
+        if (defaultCsosn) {
+          console.log(`Aplicando CSOSN padrão: ${defaultCsosn} para Simples Nacional`);
+          setFormData(prev => ({
+            ...prev,
+            cst: defaultCsosn
+          }));
+        } else {
+          // Caso não exista recomendação, usar o primeiro da lista (geralmente 102)
+          const firstCsosn = csosnData[0]?.codigo;
+          if (firstCsosn) {
+            console.log(`Aplicando primeiro CSOSN disponível: ${firstCsosn}`);
+            setFormData(prev => ({
+              ...prev,
+              cst: firstCsosn
+            }));
+          }
+        }
+      }
     } catch (error: any) {
       console.error('Erro ao carregar opções de CSOSN:', error.message);
       toast.error(`Erro ao carregar códigos CSOSN: ${error.message}`);
@@ -2450,22 +2493,20 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                         >
                           {/* Exibir o CST/CSOSN selecionado com código e descrição */}
                           <div className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis pr-2">
-                            {formData.cst ? (
-                              <>
-                                <span className="font-medium">
-                                  {regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN: ' : 'CST: '}
-                                  {formData.cst}
-                                </span> - {
-                                  // Buscar a descrição no array correto baseado no regime
-                                  (regimeTributario === '1' || regimeTributario === '2' 
-                                    ? csosnOptions.find(c => c.codigo === formData.cst) 
-                                    : cstOptions.find(c => c.codigo === formData.cst)
-                                  )?.descricao || ''
-                                }
-                              </>
-                            ) : (
-                              `Selecione ${regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN' : 'CST'}...`
-                            )}
+                            <>
+                              <span className="font-medium">
+                                {regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN: ' : 'CST: '}
+                                {formData.cst}
+                              </span>
+                              {formData.cst && ' - '}
+                              {
+                                // Buscar a descrição no array correto baseado no regime
+                                (regimeTributario === '1' || regimeTributario === '2' 
+                                  ? csosnOptions.find(c => c.codigo === formData.cst) 
+                                  : cstOptions.find(c => c.codigo === formData.cst)
+                                )?.descricao || ''
+                              }
+                            </>
                           </div>
                           <div className="flex-shrink-0 text-xs text-slate-400">
                             {showCstDropdown ? '▲' : '▼'}
