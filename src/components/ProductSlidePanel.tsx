@@ -288,20 +288,21 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
   };
 
   useEffect(() => {
+    // Carregar todos os dados necessários quando o painel abrir
     if (isOpen) {
-      // Primeiro limpamos reservas antigas e depois carregamos as unidades e grupos
       const loadInitialData = async () => {
-        setLoading(true);
-        setDefaultsApplied(false); // Resetar o estado de valores padrão aplicados
         try {
-          // Limpar reservas antigas do usuário atual
-          await cleanUserReservations();
+          setLoading(true);
           
-          // Buscar regime tributário da empresa
+          // Obter o regime tributário da empresa primeiro
           await loadCompanyRegimeTributario();
           
-          // Carregar unidades, grupos, marcas, opções CFOP, IPI, PIS, COFINS e CST em paralelo
-          await Promise.all([loadUnits(), loadGroups(), loadBrands(), loadCFOPOptions(), loadIPIOptions(), loadPISOptions(), loadCOFINSOptions(), loadCSTOptions()]);
+          // Carregar unidades, grupos, marcas, opções CFOP, IPI, PIS, COFINS em paralelo
+          // Nota: loadCSTOptions será chamado depois pois depende do regime tributário
+          await Promise.all([loadUnits(), loadGroups(), loadBrands(), loadCFOPOptions(), loadIPIOptions(), loadPISOptions(), loadCOFINSOptions()]);  
+          
+          // Agora carregamos o CST/CSOSN após conhecermos o regime tributário
+          await loadCSTOptions();
 
           if (productToEdit) {
             setFormData({
@@ -867,6 +868,31 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     };
   }, [showCfopDropdown, showIpiDropdown, showPisDropdown, showCofinsDropdown, showCstDropdown]);
   
+  // Efeito para reagir a mudanças no regime tributário
+  useEffect(() => {
+    if (regimeTributario) {
+      console.log('🛑 Regime tributário mudou para:', regimeTributario);
+      
+      // Limpar as opções atuais e o valor atual
+      setCstOptions([]);
+      setFormData(prev => ({ ...prev, cst: '' }));
+      
+      // Forçar um pequeno delay para garantir que a limpeza seja processada
+      setTimeout(() => {
+        // Carregar as opções corretas com base no regime tributário
+        if (regimeTributario === '1' || regimeTributario === '2') {
+          // Simples Nacional - carregar opções CSOSN
+          console.log('🔵 Carregando opções CSOSN para Simples Nacional');
+          loadCSOSNOptions();
+        } else {
+          // Regime Normal - carregar opções CST
+          console.log('🟢 Carregando opções CST para Regime Normal');
+          loadCSTOptions();
+        }
+      }, 100);
+    }
+  }, [regimeTributario]);
+  
   // Carregar o regime tributário da empresa atual
   const loadCompanyRegimeTributario = async () => {
     try {
@@ -992,26 +1018,141 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
     }
   };
 
+  // Função para carregar os códigos CST (Regime Normal)
   const loadCSTOptions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('nfe_cst')
-        .select('id, codigo, descricao')
-        .order('codigo', { ascending: true });
-        
-      if (error) {
-        throw error;
+      // Verificar explicitamente e garantir que estamos no regime correto
+      if (regimeTributario === '1' || regimeTributario === '2') {
+        console.error('Tentativa de carregar CST enquanto está no Simples Nacional');
+        return;
       }
+
+      console.log('✅ Carregando CSTs pré-definidos para Regime Normal');
       
-      // Garantir o tipo correto dos dados
-      const typedData = data as CSTItem[];
-      setCstOptions(typedData);
+      // Definir manualmente os valores válidos de CST para Regime Normal
+      // Isso garante que apenas os códigos corretos serão exibidos
+      const cstData: CSTItem[] = [
+        { id: 1, codigo: '00', descricao: 'Tributada integralmente' },
+        { id: 2, codigo: '10', descricao: 'Tributada e com cobrança do ICMS por substituição tributária' },
+        { id: 3, codigo: '20', descricao: 'Com redução de base de cálculo' },
+        { id: 4, codigo: '30', descricao: 'Isenta ou não tributada e com cobrança do ICMS por substituição tributária' },
+        { id: 5, codigo: '40', descricao: 'Isenta' },
+        { id: 6, codigo: '41', descricao: 'Não tributada' },
+        { id: 7, codigo: '50', descricao: 'Suspensão' },
+        { id: 8, codigo: '51', descricao: 'Diferimento' },
+        { id: 9, codigo: '60', descricao: 'ICMS cobrado anteriormente por substituição tributária' },
+        { id: 10, codigo: '70', descricao: 'Com redução de base de cálculo e cobrança do ICMS por substituição tributária' },
+        { id: 11, codigo: '90', descricao: 'Outros' }
+      ];
+      
+      // Limpar opções anteriores e definir as novas opções
+      setCstOptions([]);
+      setTimeout(() => {
+        console.log(`📋 ${cstData.length} CSTs válidos definidos para Regime Normal`);
+        setCstOptions(cstData);
+      }, 50);
+      
     } catch (error: any) {
-      console.error('Erro ao carregar códigos CST:', error.message);
+      console.error('Erro ao carregar opções de CST:', error.message);
       toast.error(`Erro ao carregar códigos CST: ${error.message}`);
     }
   };
 
+  // Função para carregar os códigos CSOSN (Simples Nacional)
+  const loadCSOSNOptions = async () => {
+    try {
+      // Verificar explicitamente e garantir que estamos no regime correto
+      if (regimeTributario !== '1' && regimeTributario !== '2') {
+        console.error('Tentativa de carregar CSOSN enquanto não está no Simples Nacional');
+        return;
+      }
+
+      console.log('✅ Carregando CSOSNs pré-definidos para Simples Nacional');
+      
+      // Definir manualmente os valores válidos de CSOSN para Simples Nacional
+      // Isso garante que apenas os códigos corretos serão exibidos
+      const csosnData: CSTItem[] = [
+        { id: 101, codigo: '101', descricao: 'Tributada pelo Simples Nacional com permissão de crédito' },
+        { id: 102, codigo: '102', descricao: 'Tributada pelo Simples Nacional sem permissão de crédito' },
+        { id: 103, codigo: '103', descricao: 'Isenção do ICMS no Simples Nacional para faixa de receita bruta' },
+        { id: 201, codigo: '201', descricao: 'Tributada pelo Simples Nacional com permissão de crédito e com cobrança do ICMS por substituição tributária' },
+        { id: 202, codigo: '202', descricao: 'Tributada pelo Simples Nacional sem permissão de crédito e com cobrança do ICMS por substituição tributária' },
+        { id: 203, codigo: '203', descricao: 'Isenção do ICMS no Simples Nacional para faixa de receita bruta e com cobrança do ICMS por substituição tributária' },
+        { id: 300, codigo: '300', descricao: 'Imune' },
+        { id: 400, codigo: '400', descricao: 'Não tributada pelo Simples Nacional' },
+        { id: 500, codigo: '500', descricao: 'ICMS cobrado anteriormente por substituição tributária (substituído) ou por antecipação' },
+        { id: 900, codigo: '900', descricao: 'Outros' },
+      ];
+      
+      // Limpar opções anteriores e definir as novas opções
+      setCstOptions([]);
+      setTimeout(() => {
+        console.log(`📋 ${csosnData.length} CSOSNs válidos definidos para Simples Nacional`);
+        console.log('📝 CSOSNs disponíveis:', csosnData.map(item => item.codigo).join(', '));
+        setCstOptions(csosnData);
+      }, 50);
+      
+    } catch (error: any) {
+      console.error('Erro ao carregar opções de CSOSN:', error.message);
+      toast.error(`Erro ao carregar códigos CSOSN: ${error.message}`);
+    }
+  };
+
+  // Função para validar a compatibilidade entre CFOP e CST/CSOSN com base no regime tributário
+  const validateFiscalCompatibility = (cfop: string, cst: string, regime: string): { isValid: boolean; message: string; suggestedCst: string } => {
+    // Verificar combinações para Simples Nacional (regime 1 ou 2)
+    if (regime === '1' || regime === '2') {
+      // Regras para Simples Nacional
+      if (cfop === '5405' && cst !== '500') {
+        return {
+          isValid: false,
+          message: 'Para CFOP 5405 no Simples Nacional, o CSOSN deve ser 500',
+          suggestedCst: '500'
+        };
+      }
+      if (cfop === '5102' && cst !== '102') {
+        return {
+          isValid: false,
+          message: 'Para CFOP 5102 no Simples Nacional, o CSOSN deve ser 102',
+          suggestedCst: '102'
+        };
+      }
+    } else {
+      // Regras para Regime Normal
+      if (cfop === '5405' && cst !== '60') {
+        return {
+          isValid: false,
+          message: 'Para CFOP 5405 no Regime Normal, o CST deve ser 60',
+          suggestedCst: '60'
+        };
+      }
+      if (cfop === '5102' && cst !== '00') {
+        return {
+          isValid: false,
+          message: 'Para CFOP 5102 no Regime Normal, o CST deve ser 00',
+          suggestedCst: '00'
+        };
+      }
+    }
+    
+    // Se não cair em nenhuma das regras acima, está válido
+    return { isValid: true, message: '', suggestedCst: cst };
+  };
+
+  // Função para sugerir CST/CSOSN com base no CFOP selecionado
+  const suggestCSTBasedOnCFOP = (cfop: string, regime: string): string => {
+    if (regime === '1' || regime === '2') {
+      // Simples Nacional
+      if (cfop === '5405') return '500';
+      if (cfop === '5102') return '102';
+    } else {
+      // Regime Normal
+      if (cfop === '5405') return '60';
+      if (cfop === '5102') return '00';
+    }
+    return ''; // Se não tiver uma regra específica, mantém vazio
+  };
+  
   const resetForm = () => {
     setFormData({
       code: '',
@@ -2119,7 +2260,33 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                                       className={`px-4 py-2 cursor-pointer hover:bg-slate-700 ${formData.cfop === cfop.codigo_cfop ? 'bg-blue-500/20' : ''}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setFormData(prev => ({ ...prev, cfop: cfop.codigo_cfop }));
+                                        // Atualizar o CFOP
+                                        setFormData(prev => {
+                                          // Checar se devemos auto-sugerir um CST/CSOSN com base no CFOP selecionado
+                                          const suggestedCst = suggestCSTBasedOnCFOP(cfop.codigo_cfop, regimeTributario || '3');
+                                          const newState = { ...prev, cfop: cfop.codigo_cfop };
+                                          
+                                          // Se temos uma sugestão e o campo está vazio ou o CST atual é incompatível, autossugerir o correto
+                                          if (suggestedCst && (!prev.cst || validateFiscalCompatibility(cfop.codigo_cfop, prev.cst, regimeTributario || '3').isValid === false)) {
+                                            newState.cst = suggestedCst;
+                                            // Exibir mensagem de ajuste automático
+                                            setTimeout(() => {
+                                              toast.info(`${regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN' : 'CST'} ajustado automaticamente para compatibilidade com o CFOP`);
+                                            }, 100);
+                                          } else if (prev.cst) {
+                                            // Verificar se a combinação atual é válida
+                                            const validation = validateFiscalCompatibility(cfop.codigo_cfop, prev.cst, regimeTributario || '3');
+                                            if (!validation.isValid) {
+                                              setTimeout(() => {
+                                                toast.warning(validation.message, {
+                                                  autoClose: 5000
+                                                });
+                                              }, 100);
+                                            }
+                                          }
+                                          
+                                          return newState;
+                                        });
                                         setShowCfopDropdown(false);
                                       }}
                                       title={`${cfop.codigo_cfop} - ${cfop.desc_cfop}`}
@@ -2137,7 +2304,8 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                     <div>
                       <div className="mb-1">
                         <label className="block text-sm font-medium text-slate-300">
-                          CST *
+                          {/* Mostrar CST ou CSOSN dependendo do regime tributário */}
+                          {regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN *' : 'CST *'}
                         </label>
                       </div>
                       <div className="relative" ref={cstDropdownRef}>
@@ -2145,10 +2313,18 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                           className="w-full h-10 px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent flex justify-between items-center cursor-pointer"
                           onClick={() => setShowCstDropdown(!showCstDropdown)}
                         >
-                          {/* Exibir o CST selecionado */}
+                          {/* Exibir o CST/CSOSN selecionado com código e descrição */}
                           <div className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis pr-2">
-                            {cstOptions.find(c => c.codigo === formData.cst)?.codigo || ''} - 
-                            {cstOptions.find(c => c.codigo === formData.cst)?.descricao || 'Selecione...'}
+                            {formData.cst ? (
+                              <>
+                                <span className="font-medium">
+                                  {regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN: ' : 'CST: '}
+                                  {cstOptions.find(c => c.codigo === formData.cst)?.codigo || ''}
+                                </span> - {cstOptions.find(c => c.codigo === formData.cst)?.descricao || ''}
+                              </>
+                            ) : (
+                              `Selecione ${regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN' : 'CST'}...`
+                            )}
                           </div>
                           <div className="flex-shrink-0 text-xs text-slate-400">
                             {showCstDropdown ? '▲' : '▼'}
@@ -2160,7 +2336,7 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                             <div className="p-2">
                               <input
                                 type="text"
-                                placeholder="Pesquisar CST..."
+                                placeholder={`Pesquisar ${regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN' : 'CST'}...`}
                                 value={cstSearchTerm}
                                 onChange={(e) => setCstSearchTerm(e.target.value)}
                                 className="w-full px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2186,12 +2362,49 @@ export function ProductSlidePanel({ isOpen, onClose, productToEdit, initialTab =
                                       className={`px-4 py-2 cursor-pointer hover:bg-slate-700 ${formData.cst === cst.codigo ? 'bg-blue-500/20' : ''}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setFormData(prev => ({ ...prev, cst: cst.codigo }));
+                                        setFormData(prev => {
+                                          const newState = { ...prev, cst: cst.codigo };
+                                          
+                                          // Verificar a compatibilidade entre o CFOP e o CST/CSOSN selecionado
+                                          if (prev.cfop) {
+                                            const validation = validateFiscalCompatibility(prev.cfop, cst.codigo, regimeTributario || '3');
+                                            if (!validation.isValid) {
+                                              setTimeout(() => {
+                                                toast.warning(
+                                                  <div>
+                                                    <p>{validation.message}</p>
+                                                    <button 
+                                                      className="mt-2 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+                                                      onClick={() => {
+                                                        setFormData(current => ({
+                                                          ...current,
+                                                          cst: validation.suggestedCst
+                                                        }));
+                                                        toast.success(`${regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN' : 'CST'} corrigido com sucesso!`);
+                                                      }}
+                                                    >
+                                                      Corrigir automaticamente
+                                                    </button>
+                                                  </div>,
+                                                  {
+                                                    autoClose: 10000,
+                                                    closeButton: true
+                                                  }
+                                                );
+                                              }, 100);
+                                            }
+                                          }
+                                          
+                                          return newState;
+                                        });
                                         setShowCstDropdown(false);
                                       }}
                                       title={`${cst.codigo} - ${cst.descricao}`}
                                     >
-                                      {cst.codigo} - {shortDesc}
+                                      <span className="font-medium">
+                                        {regimeTributario === '1' || regimeTributario === '2' ? 'CSOSN ' : 'CST '}
+                                        {cst.codigo}
+                                      </span> - {shortDesc}
                                     </div>
                                   );
                                 })}
