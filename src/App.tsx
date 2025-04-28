@@ -30,7 +30,6 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const CompanyEdit = lazy(() => import('./pages/CompanyEdit'));
 const Resellers = lazy(() => import('./pages/Resellers'));
 const ResellerEdit = lazy(() => import('./pages/ResellerEdit'));
-const AIChat = lazy(() => import('./components/AIChat').then(module => ({ default: module.AIChat })));
 
 // Criando context para o tema
 type Theme = 'dark' | 'light';
@@ -216,16 +215,7 @@ toast.error = (message, options = {}) => {
   return originalError(message, { ...toastErrorConfig, ...options });
 };
 
-function AIChatWrapper() {
-  const location = useLocation();
-  const publicRoutes = ['/', '/login', '/register', '/password-recovery', '/reset-password', '/resend-confirmation', '/manual-confirmation'];
-  
-  if (publicRoutes.includes(location.pathname)) {
-    return null;
-  }
 
-  return <AIChat />;
-}
 
 function AppToastContainer() {
   const { theme } = useTheme();
@@ -368,7 +358,6 @@ function App() {
             <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
             <Route path="/nfe" element={<ProtectedRoute><NFE /></ProtectedRoute>} />
           </Routes>
-          <AIChatWrapper />
         </Suspense>
         <AppToastContainer />
       </BrowserRouter>
