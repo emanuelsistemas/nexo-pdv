@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LogIn, Loader2, Database, UserPlus, X } from 'lucide-react';
+import { Eye, EyeOff, LogIn, Loader2, Database, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supabase } from '../lib/supabase';
 
@@ -21,7 +21,8 @@ export default function AdminLogin() {
     password: ''
   });
 
-  // Função para abrir o modal de verificação de desenvolvedor
+  // Função para abrir o modal de verificação de desenvolvedor - temporariamente desativada
+  /*
   const handleRegisterClick = async () => {
     try {
       // Verificar se há usuários na tabela
@@ -44,6 +45,7 @@ export default function AdminLogin() {
       toast.error('Erro ao verificar administradores');
     }
   };
+  */
   
   // Função para verificar se o usuário é um desenvolvedor
   const verifyDevCredentials = async () => {
@@ -160,7 +162,7 @@ export default function AdminLogin() {
         }));
       } else if (userType === 'admin_user' && userData) {
         // Buscar informações do admin vinculado para obter nome da empresa
-        const { data: adminInfo, error: adminInfoError } = await supabase
+        const { data: adminInfo } = await supabase
           .from('profile_admin')
           .select('nome_fantasia')
           .eq('id', userData.admin_id)
@@ -342,16 +344,18 @@ export default function AdminLogin() {
             )}
           </button>
           
+          {/* Opção de cadastro temporariamente desativada
           <div className="mt-4">
             <button
               type="button"
-              onClick={handleRegisterClick} // Apenas navega
+              onClick={handleRegisterClick}
               className="w-full flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2.5 px-4 rounded-lg transition-all duration-200 font-medium"
             >
               <UserPlus size={20} />
               <span>Cadastrar-se</span>
             </button>
           </div>
+          */}
         </form>
       </div>
     </div>
