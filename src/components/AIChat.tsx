@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { PlusCircle, Send, X, Settings } from 'lucide-react';
+import axios from 'axios';
 
 interface Message {
   id: string;
@@ -21,11 +22,16 @@ interface AiChatProps {
   userName: string;
 }
 
+// Tipo para a mensagem da API Groq
+interface GroqMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
 const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [inputMessage, setInputMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Load conversations from localStorage on component mount
@@ -73,7 +79,12 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
       createdAt: new Date()
     };
     
-    setConversations([newConversation, ...conversations]);
+    // Limitar o número de conversas salvas (manter apenas as 3 mais recentes)
+    // A nova conversa é adicionada e as mais antigas são removidas se exceder o limite
+    const maxConversations = 3;
+    const updatedConversations = [newConversation, ...conversations].slice(0, maxConversations);
+    
+    setConversations(updatedConversations);
     setCurrentConversationId(newConversation.id);
     setInputMessage('');
   };
@@ -82,23 +93,24 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
     return conversations.find(conv => conv.id === currentConversationId) || null;
   };
   
-  // Funções para editar títulos e excluir conversas serão implementadas em uma versão futura
-  // Exemplo de implementação para referência:
-  /*
-  function updateConversationTitle(id: string, newTitle: string) {
-    setConversations(conversations.map(conv => 
-      conv.id === id ? { ...conv, title: newTitle } : conv
-    ));
-  }
-  
-  function deleteConversation(id: string) {
+  // Excluir uma conversa
+  const deleteConversation = (id: string) => {
     setConversations(conversations.filter(conv => conv.id !== id));
+    
+    // Se a conversa atual foi excluída, selecione outra ou nenhuma
     if (currentConversationId === id) {
+      // Tenta selecionar a conversa mais recente disponível
       setCurrentConversationId(conversations.length > 1 ? 
         conversations.find(conv => conv.id !== id)?.id || null : null);
     }
-  }
-  */
+  };
+  
+  // Atualizar o título de uma conversa
+  const updateConversationTitle = (id: string, newTitle: string) => {
+    setConversations(conversations.map(conv => 
+      conv.id === id ? { ...conv, title: newTitle } : conv
+    ));
+  };
   
   const sendMessage = async () => {
     if (!inputMessage.trim() || !currentConversationId) return;
@@ -106,45 +118,57 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
     const currentConv = getCurrentConversation();
     if (!currentConv) return;
     
-    // Create user message
-    const userMessage: Message = {
-      id: `msg-${Date.now()}`,
+    // Criar mensagem do usuário
+    const newMessage: Message = {
+      id: Date.now().toString(),
       role: 'user',
-      content: inputMessage,
+      content: inputMessage.trim(),
       timestamp: new Date()
     };
     
-    // Update conversation with user message
-    const updatedConversation = {
-      ...currentConv,
-      messages: [...currentConv.messages, userMessage]
-    };
-    
-    // If this is the first message, update the conversation title
+    // Atualizar conversa com a nova mensagem do usuário
     const updatedConversations = conversations.map(conv => {
       if (conv.id === currentConversationId) {
-        // If first message, use it as the title (truncated)
-        if (conv.messages.length === 0) {
-          const title = inputMessage.length > 30 
-            ? `${inputMessage.substring(0, 30)}...` 
-            : inputMessage;
-          return { ...updatedConversation, title };
-        }
-        return updatedConversation;
+        return {
+          ...conv,
+          messages: [...conv.messages, newMessage],
+          // Atualizar o título da conversa com as primeiras palavras da primeira mensagem se for a primeira mensagem
+          title: conv.messages.length === 0 ? 
+            inputMessage.trim().slice(0, 20) + (inputMessage.trim().length > 20 ? '...' : '') : 
+            conv.title
+        };
       }
       return conv;
     });
     
     setConversations(updatedConversations);
     setInputMessage('');
-    setIsLoading(true);
     
-    // Simulate AI response
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: `msg-${Date.now()}`,
+    try {
+      // Obtém a conversa atualizada com a mensagem do usuário
+      const currentConv = updatedConversations.find(conv => conv.id === currentConversationId);
+      
+      if (!currentConv) return;
+      
+      // Transformar o histórico de mensagens para o formato da API Groq
+      const groqMessages: GroqMessage[] = [
+        // Mensagem de sistema para definir o contexto do assistente
+        {
+          role: 'system',
+          content: 'Você é um assistente virtual do Nexo PDV, um sistema de ponto de vendas. Seja prestativo, amigável e forneça respostas concisas.'
+        },
+        // Converter o histórico de mensagens para o formato da API Groq
+        ...currentConv.messages.map(msg => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content
+        }))
+      ];
+      
+      // Indicar que estamos esperando uma resposta
+      const loadingMessage: Message = {
+        id: 'loading-' + Date.now().toString(),
         role: 'assistant',
-        content: `Obrigado pela sua mensagem! Este é um assistente de demonstração. Em uma implementação real, eu me conectaria a um modelo de IA como GPT, Claude ou a um modelo personalizado para processar sua consulta: "${inputMessage}"`,
+        content: '...',
         timestamp: new Date()
       };
       
@@ -152,14 +176,84 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
         if (conv.id === currentConversationId) {
           return {
             ...conv,
-            messages: [...conv.messages, aiMessage]
+            messages: [...conv.messages, loadingMessage]
           };
         }
         return conv;
       }));
       
-      setIsLoading(false);
-    }, 1500);
+      // Chamada à API Groq
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: 'llama3-70b-8192',  // Usando o modelo LLaMA 3 70B
+          messages: groqMessages,
+          max_tokens: 1024,
+          temperature: 0.7,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      // Extrair a resposta da IA
+      const aiResponseContent = response.data.choices[0].message.content;
+      
+      // Criar mensagem de resposta da IA
+      const aiResponse: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: aiResponseContent,
+        timestamp: new Date()
+      };
+      
+      // Remove a mensagem de carregamento e adiciona a resposta real
+      setConversations(prev => prev.map(conv => {
+        if (conv.id === currentConversationId) {
+          return {
+            ...conv,
+            // Filtra a mensagem de carregamento e adiciona a resposta real
+            messages: [...conv.messages.filter(m => !m.id.startsWith('loading-')), aiResponse]
+          };
+        }
+        return conv;
+      }));
+      
+    } catch (error) {
+      console.error('Erro ao chamar a API Groq:', error);
+      
+      // Remover mensagem de carregamento
+      setConversations(prev => prev.map(conv => {
+        if (conv.id === currentConversationId) {
+          return {
+            ...conv,
+            messages: conv.messages.filter(m => !m.id.startsWith('loading-'))
+          };
+        }
+        return conv;
+      }));
+      
+      // Adiciona mensagem de erro
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: 'Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente mais tarde.',
+        timestamp: new Date()
+      };
+      
+      setConversations(prev => prev.map(conv => {
+        if (conv.id === currentConversationId) {
+          return {
+            ...conv,
+            messages: [...conv.messages, errorMessage]
+          };
+        }
+        return conv;
+      }));
+    }
   };
   
   if (!isOpen) return null;
@@ -214,18 +308,7 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
                     </div>
                   ))}
                   
-                  {/* Loading indicator */}
-                  {isLoading && (
-                    <div className="flex justify-start">
-                      <div className="bg-[#2A2A2A] p-3 rounded-lg text-white">
-                        <div className="flex space-x-2 items-center">
-                          <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse"></div>
-                          <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse delay-150"></div>
-                          <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse delay-300"></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  {/* Loading indicator removido - agora usamos mensagens com ID especial para indicar carregamento */}
                   
                   <div ref={messagesEndRef} />
                 </div>
@@ -243,9 +326,9 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
                     />
                     <button
                       onClick={sendMessage}
-                      disabled={!inputMessage.trim() || isLoading}
+                      disabled={!inputMessage.trim()}
                       className={`p-2 rounded-lg ${
-                        !inputMessage.trim() || isLoading 
+                        !inputMessage.trim()
                           ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
                           : 'bg-emerald-600 text-white hover:bg-emerald-700'
                       }`}
@@ -253,9 +336,7 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
                       <Send size={18} />
                     </button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1 text-center">
-                    Este assistente está em modo de demonstração
-                  </p>
+
                 </div>
               </>
             ) : (
