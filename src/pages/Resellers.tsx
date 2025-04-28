@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Store, Search, Plus, Trash2, X, ChevronLeft, ChevronRight, Settings as SettingsIcon } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Store, Search, Plus, Trash2, X, ChevronLeft, ChevronRight, Settings as SettingsIcon, PauseCircle, PlayCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -22,6 +22,7 @@ export default function Resellers() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [resellerToDelete, setResellerToDelete] = useState<Reseller | null>(null);
+  const [statusUpdateLoading, setStatusUpdateLoading] = useState(false);
   
   // Usar localStorage para manter o estado do menu entre navegações
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -134,6 +135,44 @@ export default function Resellers() {
     
     setResellerToDelete(reseller);
     setShowDeleteConfirm(true);
+  };
+  
+  const handleToggleStatus = async (reseller: Reseller) => {
+    // Verificar se é a revenda padrão "Sem Revenda"
+    if (reseller.code === '58105' || reseller.id === '83bd0d82-5e88-4ef4-bbd5-3822b3c62906') {
+      toast.error('A revenda "Sem Revenda" não pode ser alterada pois é vital para o sistema.');
+      return;
+    }
+    
+    try {
+      setStatusUpdateLoading(true);
+      
+      // Determinar o novo status (se for active, mudar para inactive e vice-versa)
+      const newStatus = reseller.status === 'active' ? 'inactive' : 'active';
+      
+      const { error } = await supabase
+        .from('resellers')
+        .update({ status: newStatus })
+        .eq('id', reseller.id);
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Atualizar a lista de revendas com o novo status
+      setResellers(prevResellers => 
+        prevResellers.map(r => 
+          r.id === reseller.id ? { ...r, status: newStatus } : r
+        )
+      );
+      
+      toast.success(`Revenda ${newStatus === 'active' ? 'ativada' : 'inativada'} com sucesso!`);
+    } catch (error: any) {
+      console.error('Erro ao atualizar status da revenda:', error);
+      toast.error('Erro ao atualizar status: ' + (error.message || 'Erro desconhecido'));
+    } finally {
+      setStatusUpdateLoading(false);
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -461,13 +500,23 @@ export default function Resellers() {
                               </svg>
                             </button>
                             {reseller.code !== '58105' && reseller.id !== '83bd0d82-5e88-4ef4-bbd5-3822b3c62906' && (
-                              <button
-                                onClick={() => handleDeleteClick(reseller)}
-                                className="p-1 text-red-400 hover:text-red-300 rounded-lg"
-                                title="Excluir"
-                              >
-                                <Trash2 size={18} />
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleToggleStatus(reseller)}
+                                  className={`p-1 ${reseller.status === 'active' ? 'text-yellow-400 hover:text-yellow-300' : 'text-green-400 hover:text-green-300'} rounded-lg`}
+                                  title={reseller.status === 'active' ? 'Inativar Revenda' : 'Ativar Revenda'}
+                                  disabled={statusUpdateLoading}
+                                >
+                                  {reseller.status === 'active' ? <PauseCircle size={18} /> : <PlayCircle size={18} />}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteClick(reseller)}
+                                  className="p-1 text-red-400 hover:text-red-300 rounded-lg"
+                                  title="Excluir"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
