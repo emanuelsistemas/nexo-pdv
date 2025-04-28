@@ -22,7 +22,6 @@ export default function Resellers() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [resellerToDelete, setResellerToDelete] = useState<Reseller | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   
   // Usar localStorage para manter o estado do menu entre navegações
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -125,12 +124,26 @@ export default function Resellers() {
   };
 
   const handleDeleteClick = (reseller: Reseller) => {
+    // Verificar se é a revenda padrão "Sem Revenda"
+    if (reseller.code === '58105' || reseller.id === '83bd0d82-5e88-4ef4-bbd5-3822b3c62906') {
+      toast.error('A revenda "Sem Revenda" não pode ser excluída pois é vital para o sistema.');
+      return;
+    }
+    
     setResellerToDelete(reseller);
     setShowDeleteConfirm(true);
   };
 
   const handleDeleteConfirm = async () => {
     if (!resellerToDelete) return;
+    
+    // Verificação adicional para garantir que a revenda padrão não seja excluída
+    if (resellerToDelete.code === '58105' || resellerToDelete.id === '83bd0d82-5e88-4ef4-bbd5-3822b3c62906') {
+      toast.error('A revenda "Sem Revenda" não pode ser excluída pois é vital para o sistema.');
+      setShowDeleteConfirm(false);
+      setResellerToDelete(null);
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -138,13 +151,16 @@ export default function Resellers() {
         .delete()
         .eq('id', resellerToDelete.id);
 
-      if (error) throw error;
-
-      toast.success('Revenda excluída com sucesso!');
-      loadResellers();
+      if (error) {
+        console.error('Erro ao excluir revenda:', error);
+        toast.error(`Erro ao excluir revenda: ${error.message}`);
+      } else {
+        toast.success('Revenda excluída com sucesso!');
+        loadResellers();
+      }
     } catch (error: any) {
       console.error('Erro ao excluir revenda:', error);
-      toast.error('Erro ao excluir revenda');
+      toast.error(`Erro ao excluir revenda: ${error.message || 'Erro desconhecido'}`);
     } finally {
       setShowDeleteConfirm(false);
       setResellerToDelete(null);
@@ -398,13 +414,15 @@ export default function Resellers() {
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                               </svg>
                             </button>
-                            <button
-                              onClick={() => handleDeleteClick(reseller)}
-                              className="p-1 text-red-400 hover:text-red-300 rounded-lg"
-                              title="Excluir"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            {reseller.code !== '58105' && reseller.id !== '83bd0d82-5e88-4ef4-bbd5-3822b3c62906' && (
+                              <button
+                                onClick={() => handleDeleteClick(reseller)}
+                                className="p-1 text-red-400 hover:text-red-300 rounded-lg"
+                                title="Excluir"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

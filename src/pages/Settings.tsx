@@ -16,9 +16,10 @@ interface WhatsAppConnection {
 // Interface para usuários
 interface Usuario {
   id: string;
+  admin_id: string;
   nome: string;
   email: string;
-  cargo: string;
+  tipo: string;
   status: 'active' | 'inactive' | 'blocked';
   created_at: string;
 }
@@ -82,7 +83,37 @@ export default function Settings() {
       email: session.email || '',
       companyName: session.companyName || 'Nexo Sistema'
     });
+    
+    // Carregar usuários vinculados ao administrador logado
+    loadUsers(session.id);
   }, [navigate]);
+  
+  // Função para carregar os usuários vinculados ao admin_id
+  const loadUsers = async (adminId: string) => {
+    try {
+      setLoading(true);
+      
+      const { data, error } = await supabase
+        .from('profile_admin_user')
+        .select('*')
+        .eq('admin_id', adminId)
+        .order('created_at', { ascending: false });
+        
+      if (error) {
+        throw error;
+      }
+      
+      if (data) {
+        setUsuarios(data);
+      }
+      
+    } catch (error: any) {
+      console.error('Erro ao carregar usuários:', error);
+      toast.error('Erro ao carregar usuários: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('admin_session');
@@ -180,28 +211,53 @@ export default function Settings() {
     return valid;
   };
   
-  const handleCreateUser = () => {
+  const handleCreateUser = async () => {
     if (!validateForm()) {
       return;
     }
     
-    // Aqui você implementaria a chamada para o backend para criar o usuário
-    // Por enquanto, apenas simular o sucesso
-    toast.success('Usuário criado com sucesso!');
-    closeAddUserModal();
-    
-    // Simular adição do usuário à lista (apenas para demonstração)
-    const newId = Date.now().toString();
-    const newUsuario: Usuario = {
-      id: newId,
-      nome: newUser.nome,
-      email: newUser.email,
-      cargo: newUser.tipo,
-      status: 'active',
-      created_at: new Date().toISOString()
-    };
-    
-    setUsuarios(prev => [newUsuario, ...prev]);
+    try {
+      // Obter o ID do administrador da sessão
+      const adminSession = localStorage.getItem('admin_session');
+      if (!adminSession) {
+        toast.error('Sessão expirada. Faça login novamente.');
+        navigate('/admin/login');
+        return;
+      }
+      
+      const session = JSON.parse(adminSession);
+      const adminId = session.id;
+      
+      // Criar o usuário no Supabase, vinculado ao admin_id
+      const { data, error } = await supabase
+        .from('profile_admin_user')
+        .insert([
+          {
+            admin_id: adminId,
+            nome: newUser.nome,
+            email: newUser.email,
+            senha: newUser.senha, // Em produção, esta senha deveria ser hashed
+            tipo: newUser.tipo,
+            status: 'active'
+          }
+        ])
+        .select();
+        
+      if (error) {
+        throw error;
+      }
+      
+      if (data && data.length > 0) {
+        toast.success('Usuário criado com sucesso!');
+        closeAddUserModal();
+        
+        // Adicionar o novo usuário à lista
+        setUsuarios(prev => [data[0], ...prev]);
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar usuário:', error);
+      toast.error('Erro ao criar usuário: ' + error.message);
+    }
   };
 
   return (
@@ -496,7 +552,7 @@ export default function Settings() {
                           <tr key={usuario.id} className="hover:bg-[#333]">
                             <td className="p-4 text-white">{usuario.nome}</td>
                             <td className="p-4 text-white">{usuario.email}</td>
-                            <td className="p-4 text-white">{usuario.cargo}</td>
+                            <td className="p-4 text-white">{usuario.tipo}</td>
                             <td className="p-4">
                               <span
                                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
