@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Box, ChevronLeft, ChevronRight, Trash2, X, Plus, Settings as SettingsIcon } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Trash2, X, Plus, Settings as SettingsIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -453,13 +453,13 @@ export default function Settings() {
                 to="/admin/dashboard"
                 className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
               >
-                <Box size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Empresas</span>}
+                <Store size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
+                {!isSidebarCollapsed && <span>Users nexo</span>}
                 
                 {/* Tooltip quando o menu está retraído */}
                 {isSidebarCollapsed && (
                   <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Empresas
+                    Users nexo
                   </div>
                 )}
               </Link>

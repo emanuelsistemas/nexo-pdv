@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Box, Search, ChevronLeft, ChevronRight, Trash2, X, Settings as SettingsIcon } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Store, Search, ChevronLeft, ChevronRight, Trash2, X, Settings as SettingsIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -235,13 +235,13 @@ export default function AdminDashboard() {
                 to="/admin/dashboard"
                 className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors bg-[#3A3A3A] bg-opacity-50 group relative`}
               >
-                <Box size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Empresas</span>}
+                <Store size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
+                {!isSidebarCollapsed && <span>Users nexo</span>}
                 
                 {/* Tooltip quando o menu está retraído */}
                 {isSidebarCollapsed && (
                   <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Empresas
+                    Users nexo
                   </div>
                 )}
               </Link>
@@ -358,8 +358,8 @@ export default function AdminDashboard() {
                     <tr>
                       <td colSpan={7} className="p-4 text-center text-gray-400">
                         <div className="flex items-center justify-center gap-2">
-                          <Box size={20} className="animate-spin" />
-                          <span>Carregando empresas...</span>
+                          <Store size={20} className="animate-spin" />
+                          <span>Carregando usuários nexo...</span>
                         </div>
                       </td>
                     </tr>
