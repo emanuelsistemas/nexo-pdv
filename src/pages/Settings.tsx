@@ -29,6 +29,22 @@ export default function Settings() {
   const [whatsappConnections, setWhatsappConnections] = useState<WhatsAppConnection[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(false);
+  
+  // Estados para o modal de adicionar usuário
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUser, setNewUser] = useState({
+    tipo: 'Administrativo',
+    nome: '',
+    email: '',
+    senha: '',
+    confirmarSenha: ''
+  });
+  const [errors, setErrors] = useState({
+    nome: '',
+    email: '',
+    senha: '',
+    confirmarSenha: ''
+  });
   // Usar localStorage para manter o estado do menu entre navegações
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     // Verificar se há uma preferência salva no localStorage
@@ -79,8 +95,113 @@ export default function Settings() {
   };
 
   const handleAddUsuario = () => {
-    // Implementar modal para adicionar novo usuário
-    toast.info('Funcionalidade em desenvolvimento');
+    // Limpar os dados do formulário e abrir o modal
+    setNewUser({
+      tipo: 'Administrativo',
+      nome: '',
+      email: '',
+      senha: '',
+      confirmarSenha: ''
+    });
+    setErrors({
+      nome: '',
+      email: '',
+      senha: '',
+      confirmarSenha: ''
+    });
+    setShowAddUserModal(true);
+  };
+  
+  const closeAddUserModal = () => {
+    setShowAddUserModal(false);
+  };
+  
+  const handleUserInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setNewUser(prev => ({ ...prev, [name]: value }));
+    
+    // Limpar erro ao digitar
+    if (errors[name as keyof typeof errors]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+    
+    // Validar senha em tempo real
+    if (name === 'senha' || name === 'confirmarSenha') {
+      const senha = name === 'senha' ? value : newUser.senha;
+      const confirmarSenha = name === 'confirmarSenha' ? value : newUser.confirmarSenha;
+      
+      if (senha && confirmarSenha && senha !== confirmarSenha) {
+        setErrors(prev => ({ ...prev, confirmarSenha: 'As senhas não coincidem' }));
+      } else {
+        setErrors(prev => ({ ...prev, confirmarSenha: '' }));
+      }
+    }
+  };
+  
+  const validateForm = () => {
+    let valid = true;
+    const newErrors = {
+      nome: '',
+      email: '',
+      senha: '',
+      confirmarSenha: ''
+    };
+    
+    if (!newUser.nome) {
+      newErrors.nome = 'Nome é obrigatório';
+      valid = false;
+    }
+    
+    if (!newUser.email) {
+      newErrors.email = 'Email é obrigatório';
+      valid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email)) {
+      newErrors.email = 'Email inválido';
+      valid = false;
+    }
+    
+    if (!newUser.senha) {
+      newErrors.senha = 'Senha é obrigatória';
+      valid = false;
+    } else if (newUser.senha.length < 6) {
+      newErrors.senha = 'Senha deve ter no mínimo 6 caracteres';
+      valid = false;
+    }
+    
+    if (!newUser.confirmarSenha) {
+      newErrors.confirmarSenha = 'Confirme sua senha';
+      valid = false;
+    } else if (newUser.senha !== newUser.confirmarSenha) {
+      newErrors.confirmarSenha = 'As senhas não coincidem';
+      valid = false;
+    }
+    
+    setErrors(newErrors);
+    return valid;
+  };
+  
+  const handleCreateUser = () => {
+    if (!validateForm()) {
+      return;
+    }
+    
+    // Aqui você implementaria a chamada para o backend para criar o usuário
+    // Por enquanto, apenas simular o sucesso
+    toast.success('Usuário criado com sucesso!');
+    closeAddUserModal();
+    
+    // Simular adição do usuário à lista (apenas para demonstração)
+    const newId = Date.now().toString();
+    const newUsuario: Usuario = {
+      id: newId,
+      nome: newUser.nome,
+      email: newUser.email,
+      cargo: newUser.tipo,
+      status: 'active',
+      created_at: new Date().toISOString()
+    };
+    
+    setUsuarios(prev => [newUsuario, ...prev]);
   };
 
   return (
@@ -426,6 +547,106 @@ export default function Settings() {
           )}
         </div>
       </div>
+      
+      {/* Modal para adicionar usuário */}
+      {showAddUserModal && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={closeAddUserModal} />
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div 
+              className="bg-[#2A2A2A] rounded-lg shadow-lg border border-gray-800 p-6 w-full max-w-md" 
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white">
+                  Adicionar Novo Usuário
+                </h3>
+                <button
+                  onClick={closeAddUserModal}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Tipo de Usuário</label>
+                  <select
+                    name="tipo"
+                    value={newUser.tipo}
+                    onChange={handleUserInputChange}
+                    className="w-full px-4 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  >
+                    <option value="Proprietario">Proprietário</option>
+                    <option value="Tecnico">Técnico</option>
+                    <option value="Administrativo">Administrativo</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Nome</label>
+                  <input
+                    type="text"
+                    name="nome"
+                    value={newUser.nome}
+                    onChange={handleUserInputChange}
+                    className={`w-full px-4 py-2 bg-[#1C1C1C] border ${errors.nome ? 'border-red-500' : 'border-gray-800'} rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent`}
+                    placeholder="Nome completo"
+                  />
+                  {errors.nome && <p className="mt-1 text-sm text-red-500">{errors.nome}</p>}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={newUser.email}
+                    onChange={handleUserInputChange}
+                    className={`w-full px-4 py-2 bg-[#1C1C1C] border ${errors.email ? 'border-red-500' : 'border-gray-800'} rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent`}
+                    placeholder="exemplo@email.com"
+                  />
+                  {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email}</p>}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Senha</label>
+                  <input
+                    type="password"
+                    name="senha"
+                    value={newUser.senha}
+                    onChange={handleUserInputChange}
+                    className={`w-full px-4 py-2 bg-[#1C1C1C] border ${errors.senha ? 'border-red-500' : 'border-gray-800'} rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent`}
+                    placeholder="••••••••"
+                  />
+                  {errors.senha && <p className="mt-1 text-sm text-red-500">{errors.senha}</p>}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Confirmar Senha</label>
+                  <input
+                    type="password"
+                    name="confirmarSenha"
+                    value={newUser.confirmarSenha}
+                    onChange={handleUserInputChange}
+                    className={`w-full px-4 py-2 bg-[#1C1C1C] border ${errors.confirmarSenha ? 'border-red-500' : 'border-gray-800'} rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent`}
+                    placeholder="••••••••"
+                  />
+                  {errors.confirmarSenha && <p className="mt-1 text-sm text-red-500">{errors.confirmarSenha}</p>}
+                </div>
+                
+                <button
+                  onClick={handleCreateUser}
+                  className="w-full mt-6 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+                >
+                  Criar Usuário
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
