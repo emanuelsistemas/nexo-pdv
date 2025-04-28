@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { PlusCircle, Send, X, Settings } from 'lucide-react';
+import { PlusCircle, Send, X, Settings, Trash2, Edit } from 'lucide-react';
 import axios from 'axios';
 
 interface Message {
@@ -100,8 +100,8 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
     // Se a conversa atual foi excluída, selecione outra ou nenhuma
     if (currentConversationId === id) {
       // Tenta selecionar a conversa mais recente disponível
-      setCurrentConversationId(conversations.length > 1 ? 
-        conversations.find(conv => conv.id !== id)?.id || null : null);
+      const remainingConversations = conversations.filter(conv => conv.id !== id);
+      setCurrentConversationId(remainingConversations.length > 0 ? remainingConversations[0].id : null);
     }
   };
   
@@ -286,6 +286,37 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
           <div className="flex-1 flex flex-col overflow-hidden">
             {currentConversationId && getCurrentConversation() ? (
               <>
+                {/* Conversation header with options */}
+                <div className="px-4 py-2 border-b border-gray-800 flex justify-between items-center">
+                  <h3 className="text-sm font-medium text-white truncate">
+                    {getCurrentConversation()?.title}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => {
+                        const newTitle = prompt('Renomear conversa:', getCurrentConversation()?.title);
+                        if (newTitle && newTitle.trim() && currentConversationId) {
+                          updateConversationTitle(currentConversationId, newTitle.trim());
+                        }
+                      }}
+                      className="text-gray-400 hover:text-white p-1"
+                      title="Renomear conversa"
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (window.confirm('Tem certeza que deseja excluir esta conversa?') && currentConversationId) {
+                          deleteConversation(currentConversationId);
+                        }
+                      }}
+                      className="text-gray-400 hover:text-red-500 p-1"
+                      title="Excluir conversa"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-6">
                   {getCurrentConversation()?.messages.map(message => (
@@ -307,8 +338,6 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
                       </div>
                     </div>
                   ))}
-                  
-                  {/* Loading indicator removido - agora usamos mensagens com ID especial para indicar carregamento */}
                   
                   <div ref={messagesEndRef} />
                 </div>
@@ -336,7 +365,6 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
                       <Send size={18} />
                     </button>
                   </div>
-
                 </div>
               </>
             ) : (
@@ -349,14 +377,14 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
                   <h3 className="text-lg font-medium text-white">
                     Assistente IA Nexo
                   </h3>
-                  <p className="text-gray-400 max-w-xs">
-                    Inicie uma nova conversa para obter ajuda com suas tarefas, responder perguntas ou resolver problemas.
+                  <p className="text-gray-400">
+                    Como posso ajudar você hoje, {userName}?
                   </p>
-                  <button
+                  <button 
                     onClick={createNewConversation}
-                    className="mt-2 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg"
+                    className="mt-4 py-2 px-4 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
                   >
-                    Iniciar conversa
+                    Iniciar nova conversa
                   </button>
                 </div>
               </div>
@@ -364,6 +392,55 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
           </div>
         </div>
       </div>
+      
+      {/* Lista de conversas salvas */}
+      {conversations.length > 0 && (
+        <div className="p-3 border-t border-gray-800">
+          <h3 className="text-sm font-medium text-white mb-2">Conversas recentes</h3>
+          <div className="space-y-2">
+            {conversations.map(conv => (
+              <button
+                key={conv.id}
+                onClick={() => setCurrentConversationId(conv.id)}
+                className={`w-full py-2 px-3 rounded-lg text-left truncate flex justify-between items-center ${
+                  currentConversationId === conv.id 
+                    ? 'bg-emerald-600 text-white' 
+                    : 'bg-[#2A2A2A] text-white hover:bg-[#333]'
+                }`}
+              >
+                <span className="truncate flex-1">{conv.title}</span>
+                {currentConversationId !== conv.id && (
+                  <div className="flex gap-1">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const newTitle = prompt('Renomear conversa:', conv.title);
+                        if (newTitle && newTitle.trim()) {
+                          updateConversationTitle(conv.id, newTitle.trim());
+                        }
+                      }}
+                      className="text-gray-400 hover:text-white p-1 text-xs"
+                    >
+                      <Edit size={14} />
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm('Tem certeza que deseja excluir esta conversa?')) {
+                          deleteConversation(conv.id);
+                        }
+                      }}
+                      className="text-gray-400 hover:text-red-500 p-1 text-xs"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       
       {/* User info footer */}
       <div className="p-3 border-t border-gray-800 flex items-center justify-between">
