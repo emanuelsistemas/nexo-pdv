@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Send, ChevronLeft, Loader2, Plus, Trash2, MoreVertical } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { PlusCircle, Send, X, Settings } from 'lucide-react';
 
 interface Message {
   id: string;
-  type: 'user' | 'assistant';
+  role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
 }
@@ -15,276 +15,289 @@ interface Conversation {
   createdAt: Date;
 }
 
-export function AIChat() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isHovering, setIsHovering] = useState(false);
-  const [message, setMessage] = useState('');
+interface AiChatProps {
+  isOpen: boolean;
+  onClose: () => void;
+  userName: string;
+}
+
+const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [currentConversation, setCurrentConversation] = useState<string | null>(null);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showConversations, setShowConversations] = useState(false);
-  const chatRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const hoverTimeout = useRef<NodeJS.Timeout>();
-
+  
+  // Load conversations from localStorage on component mount
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (e.clientX <= 50) {
-        clearTimeout(hoverTimeout.current);
-        setIsHovering(true);
-      } else if (!isOpen) {
-        hoverTimeout.current = setTimeout(() => {
-          setIsHovering(false);
-        }, 300);
+    const savedConversations = localStorage.getItem('ai_conversations');
+    if (savedConversations) {
+      try {
+        const parsed = JSON.parse(savedConversations);
+        setConversations(parsed.map((conv: any) => ({
+          ...conv,
+          createdAt: new Date(conv.createdAt),
+          messages: conv.messages.map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+        })));
+        
+        // Set the most recent conversation as current if it exists
+        if (parsed.length > 0) {
+          setCurrentConversationId(parsed[0].id);
+        }
+      } catch (e) {
+        console.error('Error parsing saved conversations:', e);
       }
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      clearTimeout(hoverTimeout.current);
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [conversations, currentConversation]);
-
-  const getCurrentMessages = () => {
-    if (!currentConversation) return [];
-    const conversation = conversations.find(c => c.id === currentConversation);
-    return conversation?.messages || [];
+  }, []);
+  
+  // Save conversations to localStorage whenever they change
+  useEffect(() => {
+    if (conversations.length > 0) {
+      localStorage.setItem('ai_conversations', JSON.stringify(conversations));
+    }
+  }, [conversations]);
+  
+  // Scroll to bottom of messages whenever messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentConversationId, conversations]);
+  
+  const createNewConversation = () => {
+    const newConversation: Conversation = {
+      id: `conv-${Date.now()}`,
+      title: 'Nova conversa',
+      messages: [],
+      createdAt: new Date()
+    };
+    
+    setConversations([newConversation, ...conversations]);
+    setCurrentConversationId(newConversation.id);
+    setInputMessage('');
   };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!message.trim() || isLoading) return;
-
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: message.trim(),
+  
+  const getCurrentConversation = () => {
+    return conversations.find(conv => conv.id === currentConversationId) || null;
+  };
+  
+  // Funções para editar títulos e excluir conversas serão implementadas em uma versão futura
+  // Exemplo de implementação para referência:
+  /*
+  function updateConversationTitle(id: string, newTitle: string) {
+    setConversations(conversations.map(conv => 
+      conv.id === id ? { ...conv, title: newTitle } : conv
+    ));
+  }
+  
+  function deleteConversation(id: string) {
+    setConversations(conversations.filter(conv => conv.id !== id));
+    if (currentConversationId === id) {
+      setCurrentConversationId(conversations.length > 1 ? 
+        conversations.find(conv => conv.id !== id)?.id || null : null);
+    }
+  }
+  */
+  
+  const sendMessage = async () => {
+    if (!inputMessage.trim() || !currentConversationId) return;
+    
+    const currentConv = getCurrentConversation();
+    if (!currentConv) return;
+    
+    // Create user message
+    const userMessage: Message = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: inputMessage,
       timestamp: new Date()
     };
-
-    if (!currentConversation) {
-      // Create new conversation
-      const newConversation: Conversation = {
-        id: Date.now().toString(),
-        title: message.trim().slice(0, 30) + (message.length > 30 ? '...' : ''),
-        messages: [newMessage],
-        createdAt: new Date()
-      };
-      setConversations(prev => [...prev, newConversation]);
-      setCurrentConversation(newConversation.id);
-    } else {
-      // Add to existing conversation
-      setConversations(prev => prev.map(conv => {
-        if (conv.id === currentConversation) {
-          return {
-            ...conv,
-            messages: [...conv.messages, newMessage]
-          };
+    
+    // Update conversation with user message
+    const updatedConversation = {
+      ...currentConv,
+      messages: [...currentConv.messages, userMessage]
+    };
+    
+    // If this is the first message, update the conversation title
+    const updatedConversations = conversations.map(conv => {
+      if (conv.id === currentConversationId) {
+        // If first message, use it as the title (truncated)
+        if (conv.messages.length === 0) {
+          const title = inputMessage.length > 30 
+            ? `${inputMessage.substring(0, 30)}...` 
+            : inputMessage;
+          return { ...updatedConversation, title };
         }
-        return conv;
-      }));
-    }
-
-    setMessage('');
+        return updatedConversation;
+      }
+      return conv;
+    });
+    
+    setConversations(updatedConversations);
+    setInputMessage('');
     setIsLoading(true);
-
-    // Simular resposta da IA após 1 segundo
+    
+    // Simulate AI response
     setTimeout(() => {
-      const response: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: 'Esta é uma resposta simulada do assistente de IA. Em uma implementação real, este seria o local para integrar com um serviço de IA como GPT ou similar.',
+      const aiMessage: Message = {
+        id: `msg-${Date.now()}`,
+        role: 'assistant',
+        content: `Obrigado pela sua mensagem! Este é um assistente de demonstração. Em uma implementação real, eu me conectaria a um modelo de IA como GPT, Claude ou a um modelo personalizado para processar sua consulta: "${inputMessage}"`,
         timestamp: new Date()
       };
-
+      
       setConversations(prev => prev.map(conv => {
-        if (conv.id === currentConversation) {
+        if (conv.id === currentConversationId) {
           return {
             ...conv,
-            messages: [...conv.messages, response]
+            messages: [...conv.messages, aiMessage]
           };
         }
         return conv;
       }));
       
       setIsLoading(false);
-    }, 1000);
+    }, 1500);
   };
-
-  const handleNewConversation = () => {
-    setCurrentConversation(null);
-    setMessage('');
-    setShowConversations(false);
-  };
-
-  const handleDeleteConversation = (id: string) => {
-    setConversations(prev => prev.filter(conv => conv.id !== id));
-    if (currentConversation === id) {
-      setCurrentConversation(null);
-    }
-  };
-
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
+  
+  if (!isOpen) return null;
+  
   return (
-    <>
-      {/* Trigger Area */}
-      <div
-        className={`fixed left-0 top-1/2 -translate-y-1/2 transition-transform duration-300 ${
-          isHovering || isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <div 
-          className={`flex items-center gap-2 px-4 py-3 bg-blue-500 text-white rounded-r-lg cursor-pointer ${
-            isOpen ? 'hidden' : ''
-          }`}
-          onClick={() => setIsOpen(true)}
-        >
-          <Bot size={20} />
-          <span className="text-sm font-medium">nexo pdv IA</span>
-        </div>
+    <div className="fixed right-0 top-0 h-full w-96 bg-[#1A1A1A] border-l border-gray-800 flex flex-col shadow-xl z-50">
+      {/* Header */}
+      <div className="flex justify-between items-center p-4 border-b border-gray-800">
+        <h2 className="text-lg font-semibold text-white">Assistente IA</h2>
+        <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <X size={20} />
+        </button>
       </div>
-
-      {/* Chat Panel */}
-      <div
-        ref={chatRef}
-        className={`fixed left-0 top-0 h-full w-full md:w-[400px] bg-slate-800 shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-slate-700 border-b border-slate-600">
-          <div className="flex items-center gap-2">
-            <Bot size={20} className="text-blue-400" />
-            <h2 className="brand-name text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-300 text-transparent bg-clip-text">
-              nexo pdv IA
-            </h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowConversations(!showConversations)}
-              className="p-1 hover:bg-slate-600 rounded-lg transition-colors"
+      
+      {/* Conversations sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="w-full flex flex-col">
+          {/* New chat button */}
+          <div className="p-3">
+            <button 
+              onClick={createNewConversation}
+              className="w-full py-2 px-3 bg-[#2A2A2A] hover:bg-[#333] text-white rounded-lg flex items-center gap-2 transition-colors"
             >
-              <MoreVertical size={20} className="text-slate-400" />
-            </button>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-1 hover:bg-slate-600 rounded-lg transition-colors"
-            >
-              <ChevronLeft size={20} className="text-slate-400" />
+              <PlusCircle size={16} />
+              <span>Nova conversa</span>
             </button>
           </div>
-        </div>
-
-        {showConversations ? (
-          // Conversations List
-          <div className="flex-1 overflow-y-auto p-4 h-[calc(100vh-120px)] space-y-2">
-            <button
-              onClick={handleNewConversation}
-              className="w-full flex items-center gap-2 px-4 py-3 bg-blue-500 hover:bg-blue-400 text-white rounded-lg transition-colors"
-            >
-              <Plus size={20} />
-              <span>Nova Conversa</span>
-            </button>
-            
-            {conversations.map(conv => (
-              <div
-                key={conv.id}
-                className="flex items-center justify-between p-4 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors cursor-pointer group"
-                onClick={() => {
-                  setCurrentConversation(conv.id);
-                  setShowConversations(false);
-                }}
-              >
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-slate-200 font-medium truncate">{conv.title}</h3>
-                  <p className="text-slate-400 text-sm">
-                    {formatTime(conv.createdAt)}
+          
+          {/* Conversation area */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {currentConversationId && getCurrentConversation() ? (
+              <>
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                  {getCurrentConversation()?.messages.map(message => (
+                    <div 
+                      key={message.id} 
+                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div 
+                        className={`max-w-[80%] p-3 rounded-lg ${
+                          message.role === 'user' 
+                            ? 'bg-emerald-600 text-white' 
+                            : 'bg-[#2A2A2A] text-white'
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+                        <p className="text-xs opacity-70 mt-1">
+                          {message.timestamp.toLocaleTimeString()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Loading indicator */}
+                  {isLoading && (
+                    <div className="flex justify-start">
+                      <div className="bg-[#2A2A2A] p-3 rounded-lg text-white">
+                        <div className="flex space-x-2 items-center">
+                          <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse"></div>
+                          <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse delay-150"></div>
+                          <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse delay-300"></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div ref={messagesEndRef} />
+                </div>
+                
+                {/* Input area */}
+                <div className="p-3 border-t border-gray-800">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                      placeholder="Digite sua mensagem..."
+                      className="flex-1 py-2 px-3 bg-[#2A2A2A] rounded-lg border border-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <button
+                      onClick={sendMessage}
+                      disabled={!inputMessage.trim() || isLoading}
+                      className={`p-2 rounded-lg ${
+                        !inputMessage.trim() || isLoading 
+                          ? 'bg-gray-700 text-gray-500 cursor-not-allowed' 
+                          : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      }`}
+                    >
+                      <Send size={18} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 text-center">
+                    Este assistente está em modo de demonstração
                   </p>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteConversation(conv.id);
-                  }}
-                  className="p-1 text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          // Messages
-          <div className="flex-1 overflow-y-auto p-4 h-[calc(100vh-120px)] space-y-4">
-            {getCurrentMessages().map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                    msg.type === 'user'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-slate-700 text-slate-200'
-                  }`}
-                >
-                  <p className="text-sm">{msg.content}</p>
-                  <span className="text-xs opacity-75 mt-1 block">
-                    {formatTime(msg.timestamp)}
-                  </span>
-                </div>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="bg-slate-700 rounded-lg px-4 py-2">
-                  <Loader2 size={20} className="animate-spin text-blue-400" />
+              </>
+            ) : (
+              // No conversation selected
+              <div className="flex-1 flex flex-col items-center justify-center p-4">
+                <div className="text-center space-y-3">
+                  <div className="bg-[#2A2A2A] p-3 rounded-full inline-block">
+                    <Settings size={24} className="text-emerald-500" />
+                  </div>
+                  <h3 className="text-lg font-medium text-white">
+                    Assistente IA Nexo
+                  </h3>
+                  <p className="text-gray-400 max-w-xs">
+                    Inicie uma nova conversa para obter ajuda com suas tarefas, responder perguntas ou resolver problemas.
+                  </p>
+                  <button
+                    onClick={createNewConversation}
+                    className="mt-2 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg"
+                  >
+                    Iniciar conversa
+                  </button>
                 </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
-        )}
-
-        {/* Input */}
-        {!showConversations && (
-          <form
-            onSubmit={handleSubmit}
-            className="absolute bottom-0 left-0 right-0 p-4 bg-slate-700 border-t border-slate-600"
-          >
-            <div className="relative">
-              <input
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Digite sua mensagem..."
-                className="w-full px-4 py-2 pr-10 bg-slate-800 text-slate-200 rounded-lg placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                type="submit"
-                disabled={!message.trim() || isLoading}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-blue-400 hover:text-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send size={20} />
-              </button>
-            </div>
-          </form>
-        )}
+        </div>
       </div>
-    </>
+      
+      {/* User info footer */}
+      <div className="p-3 border-t border-gray-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-semibold">
+            {userName.slice(0, 1).toUpperCase()}
+          </div>
+          <span className="text-white text-sm">{userName}</span>
+        </div>
+        <button className="text-gray-400 hover:text-white">
+          <Settings size={16} />
+        </button>
+      </div>
+    </div>
   );
-}
+};
+
+export default AiChat;

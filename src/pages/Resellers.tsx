@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Store, Search, Plus, Trash2, X, ChevronLeft, ChevronRight, Settings as SettingsIcon, PauseCircle, PlayCircle } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Store, Search, Plus, Trash2, X, ChevronLeft, ChevronRight, Settings as SettingsIcon, PauseCircle, PlayCircle, MessageCircle } from 'lucide-react';
+import AIChat from '../components/AIChat';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -32,11 +33,15 @@ export default function Resellers() {
     return savedState === null ? true : savedState === 'true';
   });
   
+  // Estado para controlar a visibilidade do chat de IA
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+  
   // Informações do usuário logado
   const [userInfo, setUserInfo] = useState({
     email: '',
     companyName: 'Nexo Sistema',
-    dev: 'N'  // Valor padrão 'N'
+    dev: 'N',  // Valor padrão 'N'
+    nome: '' // Adicionado para compatibilidade com o componente AIChat
   });
 
   useEffect(() => {
@@ -61,7 +66,8 @@ export default function Resellers() {
     setUserInfo({
       email: session.email || '',
       companyName: session.companyName || 'Nexo Sistema',
-      dev: session.dev || 'N'  // Obter o valor do campo dev da sessão
+      dev: session.dev || 'N',  // Obter o valor do campo dev da sessão
+      nome: session.nome || session.email || ''
     });
 
     loadResellers();
@@ -251,7 +257,7 @@ export default function Resellers() {
   return (
     <div className="min-h-screen bg-[#1C1C1C] flex">
       {/* Sidebar */}
-      <div className={`${isSidebarCollapsed ? 'w-14' : 'w-64'} bg-[#2A2A2A] border-r border-gray-800 transition-all duration-300 relative`}>
+      <div className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-[#2A2A2A] border-r border-gray-800 transition-all duration-300 relative`}>
         {/* Toggle button */}
         <button 
           onClick={() => {
@@ -278,7 +284,24 @@ export default function Resellers() {
         </div>
 
         <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'}`}>
-          <ul className="space-y-2">
+          <ul className="px-2 py-4 space-y-1">
+            {/* Botão Assistente IA */}
+            <li>
+              <button
+                onClick={() => setIsAiChatOpen(!isAiChatOpen)}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative w-full`}
+              >
+                <MessageCircle size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
+                {!isSidebarCollapsed && <span>Assistente IA</span>}
+                
+                {/* Tooltip quando o menu está retraído */}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
+                    Assistente IA
+                  </div>
+                )}
+              </button>
+            </li>
             <li>
               <Link
                 to="/admin/dashboard"
@@ -575,6 +598,13 @@ export default function Resellers() {
           </div>
         </>
       )}
+      
+      {/* Componente do Chat com IA */}
+      <AIChat 
+        isOpen={isAiChatOpen} 
+        onClose={() => setIsAiChatOpen(false)} 
+        userName={userInfo.nome || userInfo.email}
+      />
     </div>
   );
 }

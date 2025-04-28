@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Store, Search, ChevronLeft, ChevronRight, Trash2, X, Settings as SettingsIcon } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Store, Search, ChevronLeft, ChevronRight, Trash2, X, Settings as SettingsIcon, MessageCircle } from 'lucide-react';
+import AIChat from '../components/AIChat';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -36,6 +37,9 @@ export default function AdminDashboard() {
     // Se não houver preferência salva, começar retraído por padrão
     return savedState === null ? true : savedState === 'true';
   });
+  
+  // Estado para controlar a visibilidade do chat com IA
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   
   // Informações do usuário logado
   const [userInfo, setUserInfo] = useState({
@@ -219,9 +223,9 @@ export default function AdminDashboard() {
   });
 
   return (
-    <div className="min-h-screen bg-[#1C1C1C] flex">
+    <div className="flex h-screen">
       {/* Sidebar */}
-      <div className={`${isSidebarCollapsed ? 'w-14' : 'w-64'} bg-[#2A2A2A] border-r border-gray-800 transition-all duration-300 relative`}>
+      <div className={`bg-[#2A2A2A] transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-16' : 'w-64'} h-screen flex flex-col border-r border-gray-800 relative z-10`}>
         {/* Toggle button */}
         <button 
           onClick={() => {
@@ -248,7 +252,24 @@ export default function AdminDashboard() {
         </div>
 
         <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'}`}>
-          <ul className="space-y-2">
+          <ul className="px-2 py-4 space-y-1">
+            {/* Botão de Chat IA na barra lateral */}
+            <li>
+              <button
+                onClick={() => setIsAiChatOpen(!isAiChatOpen)}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative w-full`}
+              >
+                <MessageCircle size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
+                {!isSidebarCollapsed && <span>Assistente IA</span>}
+                
+                {/* Tooltip quando o menu está retraído */}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
+                    Assistente IA
+                  </div>
+                )}
+              </button>
+            </li>
             <li>
               <Link
                 to="/admin/dashboard"
@@ -331,27 +352,41 @@ export default function AdminDashboard() {
                       className={`flex items-center gap-2 p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors`}
                     >
                       <Users size={18} className="text-emerald-500" />
-                      <span>Revendas</span>
+                      Revendas
                     </Link>
                   </div>
                 )}
               </div>
             )}
             
-            {/* Versão recolhida */}
-            {isSidebarCollapsed && userInfo.dev === 'S' && (
-              <div className="border-t border-gray-800 pt-4 px-2 flex justify-center">
-                <Link
-                  to="/admin/resellers"
-                  className="p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative"
-                >
-                  <Users size={22} className="text-emerald-500" />
-                  
-                  {/* Tooltip quando o menu está retraído */}
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Revendas
+            {/* Versão retraída */}
+            {isSidebarCollapsed && (
+              <div className="border-t border-gray-800 pt-4 flex justify-center">
+                <div className="group relative">
+                  <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center text-white font-medium">
+                    {userInfo.email.substring(0, 1).toUpperCase()}
                   </div>
-                </Link>
+                  
+                  {/* Tooltip com o email */}
+                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
+                    {userInfo.email}
+                  </div>
+                  
+                  {/* Menu Revendas abaixo do email - versão retraída (apenas se dev='S') */}
+                  {userInfo.dev === 'S' && (
+                    <div className="mt-4">
+                      <Link
+                        to="/admin/resellers"
+                        className="group relative flex justify-center p-2 rounded-lg hover:bg-[#3A3A3A] transition-colors"
+                      >
+                        <Store size={18} className="text-emerald-500" />
+                        <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
+                          Revendas
+                        </div>
+                      </Link>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -359,7 +394,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1">
+      <div className="flex-1 bg-[#1C1C1C]">
         <header className="bg-[#2A2A2A] border-b border-gray-800 p-6">
           <h1 className="text-2xl font-bold text-white">Empresas</h1>
           <p className="text-gray-400">Gerencie as empresas cadastradas no sistema</p>
@@ -536,6 +571,15 @@ export default function AdminDashboard() {
           </div>
         </>
       )}
+      
+
+
+      {/* Componente do Chat com IA */}
+      <AIChat 
+        isOpen={isAiChatOpen} 
+        onClose={() => setIsAiChatOpen(false)} 
+        userName={userInfo.nome || userInfo.email}
+      />
     </div>
   );
 }

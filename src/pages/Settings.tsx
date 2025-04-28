@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Trash2, X, Plus, Settings as SettingsIcon } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Trash2, X, Plus, Settings as SettingsIcon, MessageCircle } from 'lucide-react';
+import AIChat from '../components/AIChat';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -54,7 +55,7 @@ interface Revenda {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('whatsapp');
+  const [activeTab, setActiveTab] = useState<'whatsapp' | 'usuarios' | 'revenda'>('whatsapp');
   const [whatsappConnections] = useState<WhatsAppConnection[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [revenda, setRevenda] = useState<Revenda | null>(null);
@@ -90,16 +91,20 @@ export default function Settings() {
     return savedState === null ? true : savedState === 'true';
   });
   
+  // Estado para o chat de IA
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+
   // Informações do usuário logado
   const [userInfo, setUserInfo] = useState({
     email: '',
-    companyName: 'Nexo Sistema',
+    companyName: '',
     id: '',
     reseller_id: null as string | null,
     userType: '',
-    dev: 'N' // Valor padrão 'N'
+    dev: 'N',
+    nome: '' // Adicionado o campo nome para compatibilidade com o chat IA
   });
-  
+
   useEffect(() => {
     // Check admin session
     const adminSession = localStorage.getItem('admin_session');
@@ -121,11 +126,12 @@ export default function Settings() {
     // Extrair informações do usuário da sessão
     setUserInfo({
       email: session.email || '',
-      companyName: session.companyName || 'Nexo Sistema',
+      companyName: session.companyName || '',
       id: session.id || '',
       reseller_id: session.reseller_id || null,
       userType: session.userType || '',
-      dev: session.dev || 'N' // Obter o valor do campo dev da sessão
+      dev: session.dev || 'N', // Obter o valor do campo dev da sessão
+      nome: session.nome || '' // Adicionado o campo nome para compatibilidade com o chat IA
     });
     
     // Carregar usuários vinculados ao administrador logado e/ou à revenda
@@ -721,7 +727,7 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-[#1C1C1C] flex">
       {/* Sidebar */}
-      <div className={`${isSidebarCollapsed ? 'w-14' : 'w-64'} bg-[#2A2A2A] border-r border-gray-800 transition-all duration-300 relative`}>
+      <div className={`bg-[#2A2A2A] transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-16' : 'w-64'} h-screen flex flex-col border-r border-gray-800 relative`}>
         {/* Toggle button */}
         <button 
           onClick={() => {
@@ -748,7 +754,24 @@ export default function Settings() {
         </div>
 
         <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'}`}>
-          <ul className="space-y-2">
+          <ul className="px-2 py-4 space-y-1">
+            {/* Botão Assistente IA */}
+            <li>
+              <button
+                onClick={() => setIsAiChatOpen(!isAiChatOpen)}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative w-full`}
+              >
+                <MessageCircle size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
+                {!isSidebarCollapsed && <span>Assistente IA</span>}
+                
+                {/* Tooltip quando o menu está retraído */}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
+                    Assistente IA
+                  </div>
+                )}
+              </button>
+            </li>
             <li>
               <Link
                 to="/admin/dashboard"
@@ -1555,6 +1578,13 @@ export default function Settings() {
           </div>
         </>
       )}
+      
+      {/* Componente do Chat com IA */}
+      <AIChat 
+        isOpen={isAiChatOpen} 
+        onClose={() => setIsAiChatOpen(false)} 
+        userName={userInfo.nome || userInfo.email}
+      />
     </div>
   );
 }
