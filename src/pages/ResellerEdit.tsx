@@ -608,8 +608,8 @@ export default function ResellerEdit() {
             toast.success('Dados de acesso atualizados com sucesso!');
           }
         } else {
-          // Criar novo usuário
-          const { error: insertError } = await supabase
+          // Criar novo usuário admin
+          const { data: newAdminUser, error: insertError } = await supabase
             .from('profile_admin')
             .insert({
               nome_usuario: reseller.user_name,
@@ -618,13 +618,35 @@ export default function ResellerEdit() {
               status: 'active',
               tipo_user: 'Admin',
               dev: 'N'
-            });
+            })
+            .select();
           
           if (insertError) {
             console.error('Erro ao criar usuário de acesso:', insertError);
             toast.error('Erro ao criar acesso ao sistema');
           } else {
             toast.success('Acesso ao sistema criado com sucesso!');
+            
+            // Criar entrada na tabela profile_admin_user associada à revenda
+            if (newAdminUser && newAdminUser.length > 0) {
+              const adminId = newAdminUser[0].id;
+              
+              const { error: userError } = await supabase
+                .from('profile_admin_user')
+                .insert({
+                  admin_id: adminId,
+                  nome: reseller.user_name,
+                  email: reseller.user_email,
+                  senha: reseller.user_password,
+                  tipo: 'revenda',
+                  status: 'active',
+                  reseller_id: resellerId
+                });
+                
+              if (userError) {
+                console.error('Erro ao vincular usuário à revenda:', userError);
+              }
+            }
           }
         }
       }

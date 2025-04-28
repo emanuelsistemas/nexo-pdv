@@ -163,16 +163,32 @@ export default function AdminLogin() {
           timestamp: Date.now()
         }));
       } else if (userType === 'admin_user' && userData) {
-        // Buscar informações do admin vinculado para obter nome de usuário (agora usado como nome da empresa)
-        const { data: adminInfo } = await supabase
-          .from('profile_admin')
-          .select('nome_usuario')
-          .eq('id', userData.admin_id)
-          .maybeSingle();
-          
-        // Defina um nome de empresa padrão se não conseguir encontrar
-        const companyName = (adminInfo && adminInfo.nome_usuario) ? 
-          adminInfo.nome_usuario : 'Nexo Sistema';
+        // Se o usuário estiver vinculado a uma revenda, buscar o nome fantasia (trade_name) dessa revenda
+        let companyName = 'Nexo Sistema';
+        
+        if (userData.reseller_id) {
+          // Buscar informações da revenda vinculada
+          const { data: resellerInfo } = await supabase
+            .from('resellers')
+            .select('trade_name')
+            .eq('id', userData.reseller_id)
+            .maybeSingle();
+            
+          if (resellerInfo && typeof resellerInfo === 'object' && 'trade_name' in resellerInfo && resellerInfo.trade_name) {
+            companyName = String(resellerInfo.trade_name);
+          }
+        } else {
+          // Buscar informações do admin vinculado se não tiver revenda vinculada diretamente
+          const { data: adminInfo } = await supabase
+            .from('profile_admin')
+            .select('nome_usuario')
+            .eq('id', userData.admin_id)
+            .maybeSingle();
+            
+          if (adminInfo && typeof adminInfo === 'object' && 'nome_usuario' in adminInfo && adminInfo.nome_usuario) {
+            companyName = String(adminInfo.nome_usuario);
+          }
+        }
           
         localStorage.setItem('admin_session', JSON.stringify({
           isAdmin: true,
