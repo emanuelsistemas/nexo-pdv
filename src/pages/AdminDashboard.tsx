@@ -40,7 +40,8 @@ export default function AdminDashboard() {
   // Informações do usuário logado
   const [userInfo, setUserInfo] = useState({
     email: '',
-    companyName: 'Nexo Sistema'
+    companyName: 'Nexo Sistema',
+    nome: ''
   });
 
   useEffect(() => {
@@ -64,7 +65,8 @@ export default function AdminDashboard() {
     // Extrair informações do usuário da sessão
     setUserInfo({
       email: session.email || '',
-      companyName: session.companyName || 'Nexo Sistema'
+      companyName: session.companyName || 'Nexo Sistema',
+      nome: session.nome || ''
     });
 
     fetchCompanies();
@@ -299,7 +301,7 @@ export default function AdminDashboard() {
           {/* Footer com informações do usuário */}
           <div className={`mt-auto pt-4 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
             <div className="border-t border-gray-800 pt-4 px-2">
-              <div className="text-sm font-medium text-white truncate">{userInfo.companyName}</div>
+              <div className="text-sm font-medium text-white truncate">{userInfo.nome}</div>
               <div className="text-xs text-gray-400 truncate">{userInfo.email}</div>
             </div>
           </div>
