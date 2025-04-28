@@ -682,22 +682,14 @@ export default function ResellerEdit() {
           } else {
             toast.success('Acesso ao sistema criado com sucesso!');
             
-            // Criar entrada na tabela profile_admin_user associada à revenda
+            // Não criar mais entrada duplicada na tabela profile_admin_user
             if (newAdminUser && newAdminUser.length > 0) {
-              const adminId = newAdminUser[0].id;
+              // Removida a criação do registro duplicado em profile_admin_user
+              // O usuário admin da revenda deve estar apenas na tabela profile_admin
               
-              const { error: userError } = await supabase
-                .from('profile_admin_user')
-                .insert({
-                  admin_id: adminId,
-                  nome: reseller.user_name,
-                  email: reseller.user_email,
-                  senha: reseller.user_password,
-                  tipo: 'revenda',
-                  status: 'active',
-                  reseller_id: resellerId
-                });
-                
+              // Simulando um erro para manter a estrutura do código existente
+              const userError = null;
+              
               if (userError) {
                 console.error('Erro ao vincular usuário à revenda:', userError);
               }
