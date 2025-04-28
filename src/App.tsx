@@ -1,5 +1,6 @@
 import React, { useState, useEffect, createContext, useContext, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import ProtectedDevRoute from './components/ProtectedDevRoute';
 import { ToastContainer, toast } from 'react-toastify';
 import { Copy } from 'lucide-react';
 import 'react-toastify/dist/ReactToastify.css';
@@ -24,6 +25,7 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const ResendConfirmation = lazy(() => import('./pages/ResendConfirmation'));
 const ManualConfirmation = lazy(() => import('./pages/ManualConfirmation'));
 const AdminLogin = lazy(() => import('./pages/AdminLogin'));
+const AdminRegister = lazy(() => import('./pages/AdminRegister'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const CompanyEdit = lazy(() => import('./pages/CompanyEdit'));
 const Resellers = lazy(() => import('./pages/Resellers'));
@@ -348,6 +350,7 @@ function App() {
 
             {/* Admin routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/register" element={<ProtectedDevRoute><AdminRegister /></ProtectedDevRoute>} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/company/:id" element={<CompanyEdit />} />
