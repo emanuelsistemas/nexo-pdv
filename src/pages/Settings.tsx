@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Box, Search, ChevronLeft, ChevronRight, Trash2, X, Plus, Settings as SettingsIcon } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Box, ChevronLeft, ChevronRight, Trash2, X, Plus, Settings as SettingsIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -27,12 +27,14 @@ interface Usuario {
 export default function Settings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('whatsapp');
-  const [whatsappConnections, setWhatsappConnections] = useState<WhatsAppConnection[]>([]);
+  const [whatsappConnections] = useState<WhatsAppConnection[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(false);
   
-  // Estados para o modal de adicionar usuário
+  // Estados para o modal de adicionar/editar usuário
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [newUser, setNewUser] = useState({
     tipo: 'Administrativo',
     nome: '',
@@ -46,6 +48,10 @@ export default function Settings() {
     senha: '',
     confirmarSenha: ''
   });
+  
+  // Estado para confirmação de exclusão
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<Usuario | null>(null);
   // Usar localStorage para manter o estado do menu entre navegações
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     // Verificar se há uma preferência salva no localStorage
@@ -104,7 +110,17 @@ export default function Settings() {
       }
       
       if (data) {
-        setUsuarios(data);
+        // Converter explicitamente cada objeto para o tipo Usuario
+        const typedData: Usuario[] = data.map((item: any) => ({
+          id: item.id as string,
+          admin_id: item.admin_id as string,
+          nome: item.nome as string,
+          email: item.email as string,
+          tipo: item.tipo as string,
+          status: item.status as 'active' | 'inactive' | 'blocked',
+          created_at: item.created_at as string
+        }));
+        setUsuarios(typedData);
       }
       
     } catch (error: any) {
@@ -119,6 +135,59 @@ export default function Settings() {
     localStorage.removeItem('admin_session');
     navigate('/admin/login');
   };
+  
+  // Função para abrir o modal de edição de usuário
+  const handleEditUser = (usuario: Usuario) => {
+    setIsEditMode(true);
+    setEditingUserId(usuario.id);
+    setNewUser({
+      tipo: usuario.tipo,
+      nome: usuario.nome,
+      email: usuario.email,
+      senha: '',
+      confirmarSenha: ''
+    });
+    setErrors({
+      nome: '',
+      email: '',
+      senha: '',
+      confirmarSenha: ''
+    });
+    setShowAddUserModal(true);
+  };
+  
+  // Função para abrir o modal de confirmação de exclusão
+  const handleDeleteClick = (usuario: Usuario) => {
+    setUserToDelete(usuario);
+    setShowDeleteConfirm(true);
+  };
+  
+  // Função para confirmar a exclusão do usuário
+  const handleDeleteConfirm = async () => {
+    if (!userToDelete) return;
+    
+    try {
+      const { error } = await supabase
+        .from('profile_admin_user')
+        .delete()
+        .eq('id', userToDelete.id);
+        
+      if (error) {
+        throw error;
+      }
+      
+      toast.success('Usuário excluído com sucesso!');
+      
+      // Atualizar a lista de usuários
+      setUsuarios(prev => prev.filter(u => u.id !== userToDelete.id));
+    } catch (error: any) {
+      console.error('Erro ao excluir usuário:', error);
+      toast.error('Erro ao excluir usuário: ' + error.message);
+    } finally {
+      setShowDeleteConfirm(false);
+      setUserToDelete(null);
+    }
+  };
 
   const handleAddWhatsAppConnection = () => {
     // Implementar modal para adicionar nova conexão WhatsApp
@@ -126,7 +195,9 @@ export default function Settings() {
   };
 
   const handleAddUsuario = () => {
-    // Limpar os dados do formulário e abrir o modal
+    // Limpar os dados do formulário e abrir o modal para adicionar novo usuário
+    setIsEditMode(false);
+    setEditingUserId(null);
     setNewUser({
       tipo: 'Administrativo',
       nome: '',
@@ -145,6 +216,8 @@ export default function Settings() {
   
   const closeAddUserModal = () => {
     setShowAddUserModal(false);
+    setIsEditMode(false);
+    setEditingUserId(null);
   };
   
   const handleUserInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -178,33 +251,51 @@ export default function Settings() {
       confirmarSenha: ''
     };
     
-    if (!newUser.nome) {
+    // Verificar nome
+    if (!newUser.nome.trim()) {
       newErrors.nome = 'Nome é obrigatório';
       valid = false;
     }
     
-    if (!newUser.email) {
+    // Verificar email
+    if (!newUser.email.trim()) {
       newErrors.email = 'Email é obrigatório';
       valid = false;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email)) {
+    } else if (!/\S+@\S+\.\S+/.test(newUser.email)) {
       newErrors.email = 'Email inválido';
       valid = false;
     }
     
-    if (!newUser.senha) {
-      newErrors.senha = 'Senha é obrigatória';
-      valid = false;
-    } else if (newUser.senha.length < 6) {
-      newErrors.senha = 'Senha deve ter no mínimo 6 caracteres';
-      valid = false;
-    }
-    
-    if (!newUser.confirmarSenha) {
-      newErrors.confirmarSenha = 'Confirme sua senha';
-      valid = false;
-    } else if (newUser.senha !== newUser.confirmarSenha) {
-      newErrors.confirmarSenha = 'As senhas não coincidem';
-      valid = false;
+    // No modo de edição, a senha é opcional
+    if (!isEditMode) {
+      // Verificar senha apenas para novo usuário
+      if (!newUser.senha) {
+        newErrors.senha = 'Senha é obrigatória';
+        valid = false;
+      } else if (newUser.senha.length < 6) {
+        newErrors.senha = 'Senha deve ter no mínimo 6 caracteres';
+        valid = false;
+      }
+      
+      // Verificar confirmação de senha
+      if (!newUser.confirmarSenha) {
+        newErrors.confirmarSenha = 'Confirme sua senha';
+        valid = false;
+      } else if (newUser.senha !== newUser.confirmarSenha) {
+        newErrors.confirmarSenha = 'As senhas não coincidem';
+        valid = false;
+      }
+    } else if (newUser.senha || newUser.confirmarSenha) {
+      // Se estiver editando e forneceu senha, precisa validar
+      if (newUser.senha.length > 0 && newUser.senha.length < 6) {
+        newErrors.senha = 'Senha deve ter no mínimo 6 caracteres';
+        valid = false;
+      }
+      
+      if (newUser.senha !== newUser.confirmarSenha) {
+        newErrors.confirmarSenha = 'As senhas não coincidem';
+        valid = false;
+      }
     }
     
     setErrors(newErrors);
@@ -228,35 +319,85 @@ export default function Settings() {
       const session = JSON.parse(adminSession);
       const adminId = session.id;
       
-      // Criar o usuário no Supabase, vinculado ao admin_id
-      const { data, error } = await supabase
-        .from('profile_admin_user')
-        .insert([
-          {
-            admin_id: adminId,
-            nome: newUser.nome,
-            email: newUser.email,
-            senha: newUser.senha, // Em produção, esta senha deveria ser hashed
-            tipo: newUser.tipo,
-            status: 'active'
-          }
-        ])
-        .select();
+      if (isEditMode && editingUserId) {
+        // Atualizar usuário existente
+        const updateData: any = {
+          nome: newUser.nome,
+          email: newUser.email,
+          tipo: newUser.tipo
+        };
         
-      if (error) {
-        throw error;
-      }
-      
-      if (data && data.length > 0) {
-        toast.success('Usuário criado com sucesso!');
-        closeAddUserModal();
+        // Só atualiza a senha se foi fornecida
+        if (newUser.senha) {
+          updateData.senha = newUser.senha; // Em produção, esta senha deveria ser hashed
+        }
         
-        // Adicionar o novo usuário à lista
-        setUsuarios(prev => [data[0], ...prev]);
+        const { data, error } = await supabase
+          .from('profile_admin_user')
+          .update(updateData)
+          .eq('id', editingUserId)
+          .select();
+          
+        if (error) {
+          throw error;
+        }
+        
+        if (data && data.length > 0) {
+          toast.success('Usuário atualizado com sucesso!');
+          closeAddUserModal();
+          
+          // Converter o objeto retornado para o tipo Usuario e atualizar a lista
+          const updatedUser: Usuario = {
+            id: data[0].id as string,
+            admin_id: data[0].admin_id as string,
+            nome: data[0].nome as string,
+            email: data[0].email as string,
+            tipo: data[0].tipo as string,
+            status: data[0].status as 'active' | 'inactive' | 'blocked',
+            created_at: data[0].created_at as string
+          };
+          setUsuarios(prev => prev.map(u => u.id === editingUserId ? updatedUser : u));
+        }
+      } else {
+        // Criar novo usuário
+        const { data, error } = await supabase
+          .from('profile_admin_user')
+          .insert([
+            {
+              admin_id: adminId,
+              nome: newUser.nome,
+              email: newUser.email,
+              senha: newUser.senha, // Em produção, esta senha deveria ser hashed
+              tipo: newUser.tipo,
+              status: 'active'
+            }
+          ])
+          .select();
+          
+        if (error) {
+          throw error;
+        }
+        
+        if (data && data.length > 0) {
+          toast.success('Usuário criado com sucesso!');
+          closeAddUserModal();
+          
+          // Converter o objeto retornado para o tipo Usuario e adicionar à lista
+          const newUsuario: Usuario = {
+            id: data[0].id as string,
+            admin_id: data[0].admin_id as string,
+            nome: data[0].nome as string,
+            email: data[0].email as string,
+            tipo: data[0].tipo as string,
+            status: data[0].status as 'active' | 'inactive' | 'blocked',
+            created_at: data[0].created_at as string
+          };
+          setUsuarios(prev => [newUsuario, ...prev]);
+        }
       }
     } catch (error: any) {
-      console.error('Erro ao criar usuário:', error);
-      toast.error('Erro ao criar usuário: ' + error.message);
+      console.error(`Erro ao ${isEditMode ? 'atualizar' : 'criar'} usuário:`, error);
+      toast.error(`Erro ao ${isEditMode ? 'atualizar' : 'criar'} usuário: ` + error.message);
     }
   };
 
@@ -578,6 +719,7 @@ export default function Settings() {
                                 <button
                                   className="p-1 text-blue-400 hover:text-blue-300 rounded-lg"
                                   title="Editar"
+                                  onClick={() => handleEditUser(usuario)}
                                 >
                                   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -587,6 +729,7 @@ export default function Settings() {
                                 <button
                                   className="p-1 text-red-400 hover:text-red-300 rounded-lg"
                                   title="Excluir"
+                                  onClick={() => handleDeleteClick(usuario)}
                                 >
                                   <Trash2 size={18} />
                                 </button>
@@ -615,7 +758,7 @@ export default function Settings() {
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-white">
-                  Adicionar Novo Usuário
+                  {isEditMode ? 'Editar Usuário' : 'Adicionar Novo Usuário'}
                 </h3>
                 <button
                   onClick={closeAddUserModal}
@@ -696,7 +839,7 @@ export default function Settings() {
                   onClick={handleCreateUser}
                   className="w-full mt-6 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
                 >
-                  Criar Usuário
+                  {isEditMode ? 'Atualizar Usuário' : 'Criar Usuário'}
                 </button>
               </div>
             </div>
