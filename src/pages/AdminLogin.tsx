@@ -58,7 +58,7 @@ export default function AdminLogin() {
       // Verificar se o usuário existe e tem dev='S'
       const { data: adminData, error } = await supabase
         .from('profile_admin')
-        .select('id, dev, senha')
+        .select('id, dev, senha, nome_fantasia, nome_usuario')
         .eq('email', devEmail)
         .single();
         
@@ -81,7 +81,10 @@ export default function AdminLogin() {
       localStorage.setItem('admin_session', JSON.stringify({
         id: adminData.id,
         email: devEmail,
-        isAdmin: true
+        isAdmin: true,
+        nome: adminData.nome_usuario,
+        companyName: adminData.nome_fantasia || 'Nexo Sistema',
+        timestamp: Date.now()
       }));
       
       toast.success('Permissão verificada! Redirecionando...');
@@ -125,6 +128,7 @@ export default function AdminLogin() {
         id: admin.id,
         email: admin.email,
         nome: admin.nome_usuario,
+        companyName: admin.nome_fantasia || 'Nexo Sistema',
         timestamp: Date.now()
       }));
 

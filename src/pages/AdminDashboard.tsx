@@ -36,6 +36,12 @@ export default function AdminDashboard() {
     // Se não houver preferência salva, começar retraído por padrão
     return savedState === null ? true : savedState === 'true';
   });
+  
+  // Informações do usuário logado
+  const [userInfo, setUserInfo] = useState({
+    email: '',
+    companyName: 'Nexo Sistema'
+  });
 
   useEffect(() => {
     // Check admin session
@@ -54,6 +60,12 @@ export default function AdminDashboard() {
       navigate('/admin/login');
       return;
     }
+    
+    // Extrair informações do usuário da sessão
+    setUserInfo({
+      email: session.email || '',
+      companyName: session.companyName || 'Nexo Sistema'
+    });
 
     fetchCompanies();
   }, [navigate]);
@@ -283,6 +295,14 @@ export default function AdminDashboard() {
               </button>
             </li>
           </ul>
+          
+          {/* Footer com informações do usuário */}
+          <div className={`mt-auto pt-4 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
+            <div className="border-t border-gray-800 pt-4 px-2">
+              <div className="text-sm font-medium text-white truncate">{userInfo.companyName}</div>
+              <div className="text-xs text-gray-400 truncate">{userInfo.email}</div>
+            </div>
+          </div>
         </div>
       </div>
 
