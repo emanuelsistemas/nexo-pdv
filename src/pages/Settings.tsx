@@ -27,12 +27,39 @@ interface Usuario {
   dev?: string; // Campo para indicar se o usuário é desenvolvedor (S/N)
 }
 
+// Interface para revendas
+interface Revenda {
+  id: string;
+  trade_name: string;
+  legal_name: string;
+  document_number: string;
+  address_cep: string;
+  address_street: string;
+  address_number: string;
+  address_complement?: string;
+  address_district: string;
+  address_city: string;
+  address_state: string;
+  created_at: string;
+  status: string;
+  code?: string;
+  website?: string;
+  additional_info?: string;
+  // Campos do usuário admin
+  admin_id?: string;
+  admin_nome?: string;
+  admin_email?: string;
+  admin_senha?: string;
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('whatsapp');
   const [whatsappConnections] = useState<WhatsAppConnection[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [revenda, setRevenda] = useState<Revenda | null>(null);
   const [loading, setLoading] = useState(false);
+  const [revendaLoading, setRevendaLoading] = useState(false);
   
   // Estados para o modal de adicionar/editar usuário
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -103,7 +130,80 @@ export default function Settings() {
     
     // Carregar usuários vinculados ao administrador logado e/ou à revenda
     loadUsers(session.id, session.reseller_id, session.userType);
+
+    // Se for um usuário admin (profile_admin) e tiver uma revenda associada, carregar dados da revenda
+    if (session.userType === 'admin' && session.reseller_id) {
+      loadRevendaData(session.reseller_id);
+    }
   }, [navigate]);
+
+  // Função para carregar os dados da revenda
+  const loadRevendaData = async (resellerId: string) => {
+    try {
+      setRevendaLoading(true);
+      
+      // Buscar os dados da revenda
+      const { data: resellerData, error: resellerError } = await supabase
+        .from('resellers')
+        .select('*')
+        .eq('id', resellerId)
+        .single();
+      
+      if (resellerError) {
+        console.error('Erro ao buscar dados da revenda:', resellerError);
+        toast.error('Erro ao carregar dados da revenda');
+        return;
+      }
+      
+      if (resellerData) {
+        // Buscar o usuário admin associado a esta revenda
+        const { data: adminData, error: adminError } = await supabase
+          .from('profile_admin')
+          .select('id, nome_usuario, email')
+          .eq('reseller_id', resellerId)
+          .maybeSingle();
+
+        if (adminError) {
+          console.error('Erro ao buscar dados do admin da revenda:', adminError);
+        }
+
+        // Usar type assertion para corrigir problemas de tipagem
+        const revendaCompleta: Revenda = {
+          id: String(resellerData.id),
+          trade_name: String(resellerData.trade_name),
+          legal_name: String(resellerData.legal_name),
+          document_number: String(resellerData.document_number),
+          address_cep: String(resellerData.address_cep),
+          address_street: String(resellerData.address_street),
+          address_number: String(resellerData.address_number),
+          address_complement: resellerData.address_complement ? String(resellerData.address_complement) : undefined,
+          address_district: String(resellerData.address_district),
+          address_city: String(resellerData.address_city),
+          address_state: String(resellerData.address_state),
+          created_at: String(resellerData.created_at),
+          status: String(resellerData.status),
+          code: resellerData.code ? String(resellerData.code) : undefined,
+          website: resellerData.website ? String(resellerData.website) : undefined,
+          additional_info: resellerData.additional_info ? String(resellerData.additional_info) : undefined,
+          admin_id: adminData?.id ? String(adminData.id) : undefined,
+          admin_nome: adminData?.nome_usuario ? String(adminData.nome_usuario) : undefined,
+          admin_email: adminData?.email ? String(adminData.email) : undefined
+        };
+
+        setRevenda(revendaCompleta);
+        console.log('Dados da revenda carregados com sucesso:', revendaCompleta);
+      } else {
+        console.error('Nenhum dado de revenda encontrado para o ID:', resellerId);
+        toast.error('Dados da revenda não encontrados');
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar dados da revenda:', error);
+      toast.error('Erro ao carregar dados da revenda: ' + (error.message || 'Erro desconhecido'));
+    } finally {
+      setRevendaLoading(false);
+    }
+  };
+
   
   // Função para carregar os usuários vinculados ao admin_id e/ou revenda
   const loadUsers = async (adminId: string, resellerId: string | null, userType: string) => {
@@ -788,9 +888,273 @@ export default function Settings() {
             >
               Usuários
             </button>
+            {/* Aba Revenda - exibida apenas para usuários admin (profile_admin) */}
+            {userInfo.userType === 'admin' && userInfo.reseller_id && (
+              <button
+                className={`px-4 py-2 font-medium ${
+                  activeTab === 'revenda'
+                    ? 'text-emerald-500 border-b-2 border-emerald-500'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                onClick={() => setActiveTab('revenda')}
+              >
+                Revenda
+              </button>
+            )}
           </div>
 
           {/* Tab Content */}
+          {activeTab === 'revenda' && (
+            <div>
+              {revendaLoading ? (
+                <div className="flex items-center justify-center p-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+                  <span className="ml-2 text-gray-300">Carregando dados da revenda...</span>
+                </div>
+              ) : !revenda ? (
+                <div className="bg-[#2A2A2A] p-6 rounded-lg border border-gray-800">
+                  <p className="text-gray-300">Nenhuma revenda encontrada associada ao seu usuário.</p>
+                </div>
+              ) : (
+                <form 
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    try {
+                      setRevendaLoading(true);
+                      
+                      // Atualizar dados básicos da revenda
+                      const { error: resellerError } = await supabase
+                        .from('resellers')
+                        .update({
+                          trade_name: revenda.trade_name,
+                          legal_name: revenda.legal_name,
+                          document_number: revenda.document_number,
+                          address_cep: revenda.address_cep,
+                          address_street: revenda.address_street,
+                          address_number: revenda.address_number,
+                          address_complement: revenda.address_complement,
+                          address_district: revenda.address_district,
+                          address_city: revenda.address_city,
+                          address_state: revenda.address_state,
+                          website: revenda.website,
+                          additional_info: revenda.additional_info
+                        })
+                        .eq('id', revenda.id);
+                        
+                      if (resellerError) {
+                        throw resellerError;
+                      }
+                      
+                      // Atualizar dados do admin da revenda, se existir admin_id
+                      if (revenda.admin_id) {
+                        const { error: adminError } = await supabase
+                          .from('profile_admin')
+                          .update({
+                            nome_usuario: revenda.admin_nome,
+                            email: revenda.admin_email
+                          })
+                          .eq('id', revenda.admin_id);
+                          
+                        if (adminError) {
+                          throw adminError;
+                        }
+                      }
+                      
+                      toast.success('Dados da revenda atualizados com sucesso!');
+                      loadRevendaData(revenda.id);
+                      
+                    } catch (error: any) {
+                      console.error('Erro ao atualizar revenda:', error);
+                      toast.error('Erro ao atualizar dados: ' + (error.message || 'Erro desconhecido'));
+                    } finally {
+                      setRevendaLoading(false);
+                    }
+                  }}
+                  className="space-y-6"
+                >
+                  <div className="bg-[#2A2A2A] p-6 rounded-lg border border-gray-800">
+                    <h3 className="text-lg font-semibold text-white mb-4">Dados da Revenda</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Nome Fantasia</label>
+                        <input
+                          type="text"
+                          value={revenda.trade_name}
+                          onChange={(e) => setRevenda({...revenda, trade_name: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Razão Social</label>
+                        <input
+                          type="text"
+                          value={revenda.legal_name}
+                          onChange={(e) => setRevenda({...revenda, legal_name: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">CNPJ</label>
+                        <input
+                          type="text"
+                          value={revenda.document_number}
+                          onChange={(e) => setRevenda({...revenda, document_number: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Status</label>
+                        <div className="px-3 py-2 bg-gray-700 text-white rounded-lg">
+                          {revenda.status === 'active' ? 'Ativo' : 
+                           revenda.status === 'inactive' ? 'Inativo' : 
+                           revenda.status === 'blocked' ? 'Bloqueado' : 
+                           revenda.status === 'canceled' ? 'Cancelado' : revenda.status}
+                        </div>
+                        <p className="text-xs text-gray-400">O status da revenda só pode ser alterado na tela de Revendas</p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Código</label>
+                        <div className="px-3 py-2 bg-gray-700 text-white rounded-lg">
+                          {revenda.code || 'Não definido'}
+                        </div>
+                        <p className="text-xs text-gray-400">O código da revenda é gerado automaticamente</p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Website</label>
+                        <input
+                          type="text"
+                          value={revenda.website || ''}
+                          onChange={(e) => setRevenda({...revenda, website: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          placeholder="https://"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-[#2A2A2A] p-6 rounded-lg border border-gray-800">
+                    <h3 className="text-lg font-semibold text-white mb-4">Endereço</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">CEP</label>
+                        <input
+                          type="text"
+                          value={revenda.address_cep}
+                          onChange={(e) => setRevenda({...revenda, address_cep: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Rua</label>
+                        <input
+                          type="text"
+                          value={revenda.address_street}
+                          onChange={(e) => setRevenda({...revenda, address_street: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Número</label>
+                        <input
+                          type="text"
+                          value={revenda.address_number}
+                          onChange={(e) => setRevenda({...revenda, address_number: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Complemento</label>
+                        <input
+                          type="text"
+                          value={revenda.address_complement || ''}
+                          onChange={(e) => setRevenda({...revenda, address_complement: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Bairro</label>
+                        <input
+                          type="text"
+                          value={revenda.address_district}
+                          onChange={(e) => setRevenda({...revenda, address_district: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Cidade</label>
+                        <input
+                          type="text"
+                          value={revenda.address_city}
+                          onChange={(e) => setRevenda({...revenda, address_city: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Estado</label>
+                        <input
+                          type="text"
+                          value={revenda.address_state}
+                          onChange={(e) => setRevenda({...revenda, address_state: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-[#2A2A2A] p-6 rounded-lg border border-gray-800">
+                    <h3 className="text-lg font-semibold text-white mb-4">Dados do Usuário Admin</h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Nome</label>
+                        <input
+                          type="text"
+                          value={revenda.admin_nome || ''}
+                          onChange={(e) => setRevenda({...revenda, admin_nome: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">Email</label>
+                        <input
+                          type="email"
+                          value={revenda.admin_email || ''}
+                          onChange={(e) => setRevenda({...revenda, admin_email: e.target.value})}
+                          className="w-full py-2 px-3 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-gray-400">Para alterar a senha do usuário admin, entre em contato com o suporte.</p>
+                  </div>
+                  
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={revendaLoading}
+                    >
+                      {revendaLoading ? 'Salvando...' : 'Salvar Alterações'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+          
           {activeTab === 'whatsapp' && (
             <div>
               <div className="flex justify-between items-center mb-4">
