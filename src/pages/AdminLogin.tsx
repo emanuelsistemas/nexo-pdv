@@ -103,40 +103,98 @@ export default function AdminLogin() {
     
     try {
       setLoading(true);
+      let userType = '';
+      let userData = null;
 
-      // Buscar administrador pelo email
-      const { data: admin, error: queryError } = await supabase
+      // Primeiro tenta buscar na tabela profile_admin (admins originais)
+      const { data: admin } = await supabase
         .from('profile_admin')
         .select('*')
         .eq('email', formData.email)
-        .single();
+        .maybeSingle();
 
-      if (queryError || !admin) {
+      if (admin) {
+        // Encontrou na tabela profile_admin
+        if (admin.senha !== formData.password) {
+          throw new Error('Credenciais inválidas');
+        }
+        userType = 'admin';
+        userData = admin;
+      } else {
+        // Se não encontrou, busca na tabela profile_admin_user
+        const { data: userAdmin } = await supabase
+          .from('profile_admin_user')
+          .select('*')
+          .eq('email', formData.email)
+          .eq('status', 'active') // Apenas usuários ativos podem fazer login
+          .maybeSingle();
+
+        if (!userAdmin) {
+          throw new Error('Credenciais inválidas');
+        }
+
+        // Validar senha do usuário admin
+        if (userAdmin.senha !== formData.password) {
+          throw new Error('Credenciais inválidas');
+        }
+        
+        userType = 'admin_user';
+        userData = userAdmin;
+      }
+      
+      // Não encontrou em nenhuma tabela ou senha inválida
+      if (!userData) {
         throw new Error('Credenciais inválidas');
       }
 
-      // Validar senha
-      // Nota: Em produção, você deve usar uma função de hash segura como bcrypt
-      // aqui estamos fazendo uma comparação simples apenas para demonstração
-      if (admin.senha !== formData.password) {
-        throw new Error('Credenciais inválidas');
+      // Salvar sessão baseada no tipo de usuário
+      if (userType === 'admin' && userData) {
+        localStorage.setItem('admin_session', JSON.stringify({
+          isAdmin: true,
+          id: userData.id,
+          email: userData.email,
+          nome: userData.nome_usuario,
+          companyName: userData.nome_fantasia || 'Nexo Sistema',
+          userType: 'admin',
+          timestamp: Date.now()
+        }));
+      } else if (userType === 'admin_user' && userData) {
+        // Buscar informações do admin vinculado para obter nome da empresa
+        const { data: adminInfo, error: adminInfoError } = await supabase
+          .from('profile_admin')
+          .select('nome_fantasia')
+          .eq('id', userData.admin_id)
+          .maybeSingle();
+          
+        // Defina um nome de empresa padrão se não conseguir encontrar
+        const companyName = (adminInfo && adminInfo.nome_fantasia) ? 
+          adminInfo.nome_fantasia : 'Nexo Sistema';
+          
+        localStorage.setItem('admin_session', JSON.stringify({
+          isAdmin: true,
+          id: userData.id,
+          admin_id: userData.admin_id,
+          email: userData.email,
+          nome: userData.nome,
+          tipo: userData.tipo,
+          companyName: companyName,
+          userType: 'admin_user',
+          timestamp: Date.now()
+        }));
       }
-
-      // Salvar sessão do administrador
-      localStorage.setItem('admin_session', JSON.stringify({
-        isAdmin: true,
-        id: admin.id,
-        email: admin.email,
-        nome: admin.nome_usuario,
-        companyName: admin.nome_fantasia || 'Nexo Sistema',
-        timestamp: Date.now()
-      }));
 
       toast.success('Login realizado com sucesso!');
       navigate('/admin/dashboard');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao fazer login:', error);
-      toast.error(error.message || 'Erro ao fazer login');
+      
+      // Tratamento seguro do erro para exibição
+      let errorMessage = 'Erro ao fazer login';
+      if (error instanceof Error) {
+        errorMessage = error.message || errorMessage;
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }

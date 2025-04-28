@@ -156,6 +156,44 @@ export default function Settings() {
     setShowAddUserModal(true);
   };
   
+  // Função para alternar o status do usuário (ativar/inativar)
+  const handleToggleStatus = async (usuario: Usuario) => {
+    try {
+      const newStatus = usuario.status === 'active' ? 'inactive' : 'active';
+      
+      const { data, error } = await supabase
+        .from('profile_admin_user')
+        .update({ status: newStatus })
+        .eq('id', usuario.id)
+        .select();
+        
+      if (error) {
+        throw error;
+      }
+      
+      if (data && data.length > 0) {
+        // Converter o objeto retornado para o tipo Usuario
+        const updatedUser: Usuario = {
+          id: data[0].id as string,
+          admin_id: data[0].admin_id as string,
+          nome: data[0].nome as string,
+          email: data[0].email as string,
+          tipo: data[0].tipo as string,
+          status: data[0].status as 'active' | 'inactive' | 'blocked',
+          created_at: data[0].created_at as string
+        };
+        
+        // Atualizar o usuário na lista
+        setUsuarios(prev => prev.map(u => u.id === usuario.id ? updatedUser : u));
+        
+        toast.success(`Usuário ${newStatus === 'active' ? 'ativado' : 'inativado'} com sucesso!`);
+      }
+    } catch (error: any) {
+      console.error('Erro ao atualizar status do usuário:', error);
+      toast.error('Erro ao atualizar status: ' + error.message);
+    }
+  };
+  
   // Função para abrir o modal de confirmação de exclusão
   const handleDeleteClick = (usuario: Usuario) => {
     setUserToDelete(usuario);
@@ -727,6 +765,22 @@ export default function Settings() {
                                   </svg>
                                 </button>
                                 <button
+                                  className={`p-1 ${usuario.status === 'active' ? 'text-yellow-400 hover:text-yellow-300' : 'text-green-400 hover:text-green-300'} rounded-lg`}
+                                  title={usuario.status === 'active' ? 'Inativar' : 'Ativar'}
+                                  onClick={() => handleToggleStatus(usuario)}
+                                >
+                                  {usuario.status === 'active' ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                  ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                  )}
+                                </button>
+                                <button
                                   className="p-1 text-red-400 hover:text-red-300 rounded-lg"
                                   title="Excluir"
                                   onClick={() => handleDeleteClick(usuario)}
@@ -747,7 +801,7 @@ export default function Settings() {
         </div>
       </div>
       
-      {/* Modal para adicionar usuário */}
+      {/* Modal para adicionar/editar usuário */}
       {showAddUserModal && (
         <>
           <div className="fixed inset-0 bg-black/50 z-50" onClick={closeAddUserModal} />
@@ -840,6 +894,54 @@ export default function Settings() {
                   className="w-full mt-6 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
                 >
                   {isEditMode ? 'Atualizar Usuário' : 'Criar Usuário'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    
+      {/* Modal de Confirmação de Exclusão */}
+      {showDeleteConfirm && userToDelete && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#2A2A2A] rounded-lg shadow-lg border border-gray-800 p-6 w-full max-w-[400px]">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <Trash2 size={22} className="text-red-500" />
+                  Confirmar Exclusão
+                </h3>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
+                <p className="text-gray-300 text-sm">
+                  <span className="font-semibold">Atenção:</span> Esta ação não poderá ser desfeita. O usuário será removido permanentemente do sistema.
+                </p>
+              </div>
+              {userToDelete && (
+                <p className="text-gray-300 mb-6">
+                  Tem certeza que deseja excluir o usuário <span className="font-semibold text-white">{userToDelete.nome}</span> ({userToDelete.email})?
+                </p>
+              )}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white hover:bg-[#353535] rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  className="px-4 py-2 text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Trash2 size={16} />
+                  Excluir Definitivamente
                 </button>
               </div>
             </div>
