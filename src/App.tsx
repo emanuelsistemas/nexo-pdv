@@ -30,6 +30,7 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const CompanyEdit = lazy(() => import('./pages/CompanyEdit'));
 const Resellers = lazy(() => import('./pages/Resellers'));
 const ResellerEdit = lazy(() => import('./pages/ResellerEdit'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 // Criando context para o tema
 type Theme = 'dark' | 'light';
@@ -346,6 +347,7 @@ function App() {
             <Route path="/admin/company/:id" element={<CompanyEdit />} />
             <Route path="/admin/resellers" element={<Resellers />} />
             <Route path="/admin/reseller/:id" element={<ResellerEdit />} />
+            <Route path="/admin/settings" element={<Settings />} />
 
             {/* Protected routes */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

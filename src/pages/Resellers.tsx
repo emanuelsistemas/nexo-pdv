@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Box, Search, Plus, Trash2, X } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Box, Search, Plus, Trash2, X, ChevronLeft, ChevronRight, Settings as SettingsIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
 
@@ -155,7 +155,7 @@ export default function Resellers() {
   return (
     <div className="min-h-screen bg-[#1C1C1C] flex">
       {/* Sidebar */}
-      <div className={`${isSidebarCollapsed ? 'w-16' : 'w-64'} bg-[#2A2A2A] border-r border-gray-800 transition-all duration-300 relative`}>
+      <div className={`${isSidebarCollapsed ? 'w-14' : 'w-64'} bg-[#2A2A2A] border-r border-gray-800 transition-all duration-300 relative`}>
         {/* Toggle button */}
         <button 
           onClick={() => {
@@ -164,7 +164,7 @@ export default function Resellers() {
             // Salvar preferência no localStorage
             localStorage.setItem('sidebar_collapsed', String(newState));
           }}
-          className="absolute -right-3 top-20 bg-emerald-500 text-white rounded-full p-1 shadow-md hover:bg-emerald-600 transition-colors z-10"
+          className="absolute -right-3 top-[4.5rem] bg-emerald-500 text-white rounded-full p-1 shadow-md hover:bg-emerald-600 transition-colors z-10"
         >
           {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
@@ -181,14 +181,14 @@ export default function Resellers() {
           </div>
         </div>
 
-        <div className="p-4">
+        <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'}`}>
           <ul className="space-y-2">
             <li>
               <Link
                 to="/admin/dashboard"
                 className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
               >
-                <BarChart2 size={18} className="text-emerald-500" />
+                <BarChart2 size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
                 {!isSidebarCollapsed && <span>Dashboard</span>}
                 
                 {/* Tooltip quando o menu está retraído */}
@@ -204,7 +204,7 @@ export default function Resellers() {
                 to="/admin/dashboard"
                 className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
               >
-                <Box size={18} className="text-emerald-500" />
+                <Box size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
                 {!isSidebarCollapsed && <span>Empresas</span>}
                 
                 {/* Tooltip quando o menu está retraído */}
@@ -220,7 +220,7 @@ export default function Resellers() {
                 to="/admin/resellers"
                 className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors bg-[#3A3A3A] bg-opacity-50 group relative`}
               >
-                <Users size={18} className="text-emerald-500" />
+                <Users size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
                 {!isSidebarCollapsed && <span>Revendedores</span>}
                 
                 {/* Tooltip quando o menu está retraído */}
@@ -232,11 +232,27 @@ export default function Resellers() {
               </Link>
             </li>
             <li>
+              <Link
+                to="/admin/settings"
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
+              >
+                <SettingsIcon size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
+                {!isSidebarCollapsed && <span>Configurações</span>}
+                
+                {/* Tooltip quando o menu está retraído */}
+                {isSidebarCollapsed && (
+                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
+                    Configurações
+                  </div>
+                )}
+              </Link>
+            </li>
+            <li>
               <button
                 onClick={handleLogout}
                 className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-red-400 hover:bg-red-400 hover:text-white hover:bg-opacity-20 transition-colors w-full text-left group relative`}
               >
-                <LogOut size={18} />
+                <LogOut size={isSidebarCollapsed ? 22 : 18} />
                 {!isSidebarCollapsed && <span>Sair</span>}
                 
                 {/* Tooltip quando o menu está retraído */}
