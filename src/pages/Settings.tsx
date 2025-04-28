@@ -13,10 +13,21 @@ interface WhatsAppConnection {
   created_at: string;
 }
 
+// Interface para usuários
+interface Usuario {
+  id: string;
+  nome: string;
+  email: string;
+  cargo: string;
+  status: 'active' | 'inactive' | 'blocked';
+  created_at: string;
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('whatsapp');
   const [whatsappConnections, setWhatsappConnections] = useState<WhatsAppConnection[]>([]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(false);
   // Usar localStorage para manter o estado do menu entre navegações
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -64,6 +75,11 @@ export default function Settings() {
 
   const handleAddWhatsAppConnection = () => {
     // Implementar modal para adicionar nova conexão WhatsApp
+    toast.info('Funcionalidade em desenvolvimento');
+  };
+
+  const handleAddUsuario = () => {
+    // Implementar modal para adicionar novo usuário
     toast.info('Funcionalidade em desenvolvimento');
   };
 
@@ -212,13 +228,13 @@ export default function Settings() {
             </button>
             <button
               className={`px-4 py-2 font-medium ${
-                activeTab === 'permissions'
+                activeTab === 'usuarios'
                   ? 'text-emerald-500 border-b-2 border-emerald-500'
                   : 'text-gray-400 hover:text-white'
               }`}
-              onClick={() => setActiveTab('permissions')}
+              onClick={() => setActiveTab('usuarios')}
             >
-              Permissões de Acesso
+              Usuários
             </button>
           </div>
 
@@ -315,20 +331,95 @@ export default function Settings() {
             </div>
           )}
 
-          {activeTab === 'permissions' && (
+          {activeTab === 'usuarios' && (
             <div>
-              <h2 className="text-xl font-semibold text-white mb-4">Permissões de Acesso</h2>
-              <div className="bg-[#2A2A2A] rounded-lg border border-gray-800 p-6">
-                <p className="text-gray-300 mb-4">
-                  Configure as permissões de acesso para os usuários do sistema.
-                </p>
-                <div className="grid gap-6">
-                  <div className="p-4 bg-[#353535] rounded-lg border border-gray-700">
-                    <h3 className="text-lg font-medium text-white mb-3">Configurações em desenvolvimento</h3>
-                    <p className="text-gray-400">
-                      Esta seção está em desenvolvimento. Em breve você poderá configurar permissões detalhadas para cada tipo de usuário do sistema.
-                    </p>
-                  </div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-white">Usuários do Sistema</h2>
+                <button
+                  onClick={handleAddUsuario}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-2 transition-colors"
+                >
+                  <Plus size={16} />
+                  <span>Adicionar Usuário</span>
+                </button>
+              </div>
+
+              <div className="bg-[#2A2A2A] rounded-lg border border-gray-800 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-[#353535] text-left">
+                        <th className="p-4 text-gray-300 font-medium">Nome</th>
+                        <th className="p-4 text-gray-300 font-medium">Email</th>
+                        <th className="p-4 text-gray-300 font-medium">Cargo</th>
+                        <th className="p-4 text-gray-300 font-medium">Status</th>
+                        <th className="p-4 text-gray-300 font-medium">Criado em</th>
+                        <th className="p-4 text-gray-300 font-medium">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={6} className="p-4 text-center text-gray-400">
+                            Carregando usuários...
+                          </td>
+                        </tr>
+                      ) : usuarios.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-4 text-center text-gray-400">
+                            Nenhum usuário cadastrado. Clique em "Adicionar Usuário" para começar.
+                          </td>
+                        </tr>
+                      ) : (
+                        usuarios.map((usuario) => (
+                          <tr key={usuario.id} className="hover:bg-[#333]">
+                            <td className="p-4 text-white">{usuario.nome}</td>
+                            <td className="p-4 text-white">{usuario.email}</td>
+                            <td className="p-4 text-white">{usuario.cargo}</td>
+                            <td className="p-4">
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  usuario.status === 'active'
+                                    ? 'bg-green-100 text-green-800'
+                                    : usuario.status === 'inactive'
+                                    ? 'bg-gray-100 text-gray-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}
+                              >
+                                {usuario.status === 'active'
+                                  ? 'Ativo'
+                                  : usuario.status === 'inactive'
+                                  ? 'Inativo'
+                                  : 'Bloqueado'}
+                              </span>
+                            </td>
+                            <td className="p-4 text-gray-300">
+                              {new Date(usuario.created_at).toLocaleDateString()}
+                            </td>
+                            <td className="p-4">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  className="p-1 text-blue-400 hover:text-blue-300 rounded-lg"
+                                  title="Editar"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                  </svg>
+                                </button>
+                                <button
+                                  className="p-1 text-red-400 hover:text-red-300 rounded-lg"
+                                  title="Excluir"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
