@@ -151,26 +151,28 @@ export default function AdminLogin() {
 
       // Salvar sessão baseada no tipo de usuário
       if (userType === 'admin' && userData) {
+        // Para admin, usamos o nome de usuário também como nome da empresa
+        // já que removemos o campo nome_fantasia
         localStorage.setItem('admin_session', JSON.stringify({
           isAdmin: true,
           id: userData.id,
           email: userData.email,
           nome: userData.nome_usuario,
-          companyName: userData.nome_fantasia || 'Nexo Sistema',
+          companyName: userData.nome_usuario || 'Nexo Sistema',
           userType: 'admin',
           timestamp: Date.now()
         }));
       } else if (userType === 'admin_user' && userData) {
-        // Buscar informações do admin vinculado para obter nome da empresa
+        // Buscar informações do admin vinculado para obter nome de usuário (agora usado como nome da empresa)
         const { data: adminInfo } = await supabase
           .from('profile_admin')
-          .select('nome_fantasia')
+          .select('nome_usuario')
           .eq('id', userData.admin_id)
           .maybeSingle();
           
         // Defina um nome de empresa padrão se não conseguir encontrar
-        const companyName = (adminInfo && adminInfo.nome_fantasia) ? 
-          adminInfo.nome_fantasia : 'Nexo Sistema';
+        const companyName = (adminInfo && adminInfo.nome_usuario) ? 
+          adminInfo.nome_usuario : 'Nexo Sistema';
           
         localStorage.setItem('admin_session', JSON.stringify({
           isAdmin: true,
