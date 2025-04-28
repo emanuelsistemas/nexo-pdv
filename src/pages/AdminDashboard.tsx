@@ -63,10 +63,23 @@ export default function AdminDashboard() {
     }
     
     // Extrair informações do usuário da sessão
+    console.log('Session data:', session); // Para debug
+    
+    // Obter o nome do usuário dependendo do tipo de usuário
+    let userNome = '';
+    
+    if (session.userType === 'admin') {
+      // Para usuários da tabela profile_admin, o campo é nome_usuario
+      userNome = session.nome || '';
+    } else if (session.userType === 'admin_user') {
+      // Para usuários da tabela profile_admin_user, o campo é nome
+      userNome = session.nome || '';
+    }
+    
     setUserInfo({
       email: session.email || '',
       companyName: session.companyName || 'Nexo Sistema',
-      nome: session.nome || ''
+      nome: userNome
     });
 
     fetchCompanies();
@@ -301,8 +314,7 @@ export default function AdminDashboard() {
           {/* Footer com informações do usuário */}
           <div className={`mt-auto pt-4 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
             <div className="border-t border-gray-800 pt-4 px-2">
-              <div className="text-sm font-medium text-white truncate">{userInfo.nome}</div>
-              <div className="text-xs text-gray-400 truncate">{userInfo.email}</div>
+              <div className="text-sm font-medium text-white truncate">{userInfo.email}</div>
             </div>
           </div>
         </div>

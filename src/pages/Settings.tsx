@@ -22,6 +22,9 @@ interface Usuario {
   tipo: string;
   status: 'active' | 'inactive' | 'blocked';
   created_at: string;
+  reseller_id?: string;
+  source: 'profile_admin' | 'profile_admin_user'; // Identifica a tabela de origem do usuário
+  dev?: string; // Campo para indicar se o usuário é desenvolvedor (S/N)
 }
 
 export default function Settings() {
@@ -63,7 +66,10 @@ export default function Settings() {
   // Informações do usuário logado
   const [userInfo, setUserInfo] = useState({
     email: '',
-    companyName: 'Nexo Sistema'
+    companyName: 'Nexo Sistema',
+    id: '',
+    reseller_id: null as string | null,
+    userType: ''
   });
   
   useEffect(() => {
@@ -87,41 +93,105 @@ export default function Settings() {
     // Extrair informações do usuário da sessão
     setUserInfo({
       email: session.email || '',
-      companyName: session.companyName || 'Nexo Sistema'
+      companyName: session.companyName || 'Nexo Sistema',
+      id: session.id,
+      reseller_id: session.reseller_id || null,
+      userType: session.userType || ''
     });
     
-    // Carregar usuários vinculados ao administrador logado
-    loadUsers(session.id);
+    // Carregar usuários vinculados ao administrador logado e/ou à revenda
+    loadUsers(session.id, session.reseller_id, session.userType);
   }, [navigate]);
   
-  // Função para carregar os usuários vinculados ao admin_id
-  const loadUsers = async (adminId: string) => {
+  // Função para carregar os usuários vinculados ao admin_id e/ou revenda
+  const loadUsers = async (adminId: string, resellerId: string | null, userType: string) => {
     try {
       setLoading(true);
       
-      const { data, error } = await supabase
+      // Array para armazenar todos os usuários das duas tabelas
+      let allUsers: Usuario[] = [];
+      
+      // 1. Primeiro, carregar os usuários da tabela profile_admin_user
+      let queryAdminUsers = supabase
         .from('profile_admin_user')
         .select('*')
-        .eq('admin_id', adminId)
         .order('created_at', { ascending: false });
-        
-      if (error) {
-        throw error;
+      
+      // Filtrar os usuários com base no tipo de usuário logado e revenda
+      if (userType === 'admin' && resellerId) {
+        // Para admin com revenda vinculada, mostrar apenas usuários da mesma revenda
+        queryAdminUsers = queryAdminUsers.eq('reseller_id', resellerId);
+      } else if (userType === 'admin_user' && resellerId) {
+        // Para admin_user com revenda vinculada, mostrar apenas usuários da mesma revenda
+        queryAdminUsers = queryAdminUsers.eq('reseller_id', resellerId);
+      } else {
+        // Para admin sem revenda vinculada, mostrar seus usuários criados
+        queryAdminUsers = queryAdminUsers.eq('admin_id', adminId);
       }
       
-      if (data) {
-        // Converter explicitamente cada objeto para o tipo Usuario
-        const typedData: Usuario[] = data.map((item: any) => ({
+      const { data: adminUserData, error: adminUserError } = await queryAdminUsers;
+      
+      if (adminUserError) {
+        throw adminUserError;
+      }
+      
+      if (adminUserData) {
+        // Converter explicitamente cada objeto da tabela profile_admin_user para o tipo Usuario
+        const typedAdminUserData: Usuario[] = adminUserData.map((item: any) => ({
           id: item.id as string,
           admin_id: item.admin_id as string,
           nome: item.nome as string,
           email: item.email as string,
           tipo: item.tipo as string,
           status: item.status as 'active' | 'inactive' | 'blocked',
-          created_at: item.created_at as string
+          created_at: item.created_at as string,
+          reseller_id: item.reseller_id as string | undefined,
+          source: 'profile_admin_user', // Marcar a origem como profile_admin_user
+          dev: item.dev as string // Incluir o campo dev
         }));
-        setUsuarios(typedData);
+        allUsers = [...typedAdminUserData];
       }
+      
+      // 2. Agora, carregar os usuários da tabela profile_admin
+      let queryAdmins = supabase
+        .from('profile_admin')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      // Aplicar o mesmo filtro por reseller_id, se aplicável
+      if (resellerId) {
+        queryAdmins = queryAdmins.eq('reseller_id', resellerId);
+      }
+      
+      const { data: adminData, error: adminError } = await queryAdmins;
+      
+      if (adminError) {
+        throw adminError;
+      }
+      
+      if (adminData) {
+        // Converter explicitamente cada objeto da tabela profile_admin para o tipo Usuario
+        const typedAdminData: Usuario[] = adminData.map((item: any) => ({
+          id: item.id as string,
+          admin_id: '', // admin não tem admin_id pois é o próprio admin
+          nome: item.nome_usuario as string,
+          email: item.email as string,
+          tipo: 'Administrador', // Definir um tipo para admins
+          status: item.status as 'active' | 'inactive' | 'blocked',
+          created_at: item.created_at as string,
+          reseller_id: item.reseller_id as string | undefined,
+          source: 'profile_admin', // Marcar a origem como profile_admin
+          dev: item.dev as string // Incluir o campo dev
+        }));
+        allUsers = [...allUsers, ...typedAdminData];
+      }
+      
+      // Ordenar todos os usuários por data de criação (mais recentes primeiro)
+      allUsers.sort((a, b) => {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+      
+      setUsuarios(allUsers);
       
     } catch (error: any) {
       console.error('Erro ao carregar usuários:', error);
@@ -138,6 +208,12 @@ export default function Settings() {
   
   // Função para abrir o modal de edição de usuário
   const handleEditUser = (usuario: Usuario) => {
+    // Não permitir editar usuários da tabela profile_admin
+    if (usuario.source === 'profile_admin') {
+      toast.error('Não é possível editar usuários administradores.');
+      return;
+    }
+    
     setIsEditMode(true);
     setEditingUserId(usuario.id);
     setNewUser({
@@ -158,7 +234,20 @@ export default function Settings() {
   
   // Função para alternar o status do usuário (ativar/inativar)
   const handleToggleStatus = async (usuario: Usuario) => {
+    // Não permitir alterar status de usuários da tabela profile_admin
+    if (usuario.source === 'profile_admin') {
+      toast.error('Não é possível alterar o status de usuários administradores.');
+      return;
+    }
+    
+    // Impedir que o usuário logado desative seu próprio usuário
+    if (usuario.id === userInfo.id) {
+      toast.error('Não é possível alterar o status do seu próprio usuário.');
+      return;
+    }
+    
     try {
+      // Determinar o novo status (se está ativo, inativar; se está inativo, ativar)
       const newStatus = usuario.status === 'active' ? 'inactive' : 'active';
       
       const { data, error } = await supabase
@@ -180,7 +269,9 @@ export default function Settings() {
           email: data[0].email as string,
           tipo: data[0].tipo as string,
           status: data[0].status as 'active' | 'inactive' | 'blocked',
-          created_at: data[0].created_at as string
+          created_at: data[0].created_at as string,
+          reseller_id: data[0].reseller_id as string | undefined,
+          source: 'profile_admin_user' // Usuários editados sempre são da tabela profile_admin_user
         };
         
         // Atualizar o usuário na lista
@@ -196,13 +287,33 @@ export default function Settings() {
   
   // Função para abrir o modal de confirmação de exclusão
   const handleDeleteClick = (usuario: Usuario) => {
+    // Não permitir excluir usuários da tabela profile_admin
+    if (usuario.source === 'profile_admin') {
+      toast.error('Não é possível excluir usuários administradores.');
+      return;
+    }
+    
+    // Impedir que o usuário logado exclua seu próprio usuário
+    if (usuario.id === userInfo.id) {
+      toast.error('Não é possível excluir seu próprio usuário.');
+      return;
+    }
+    
     setUserToDelete(usuario);
     setShowDeleteConfirm(true);
   };
   
-  // Função para confirmar a exclusão do usuário
+  // Função para criar novo modal de confirmação de exclusão
   const handleDeleteConfirm = async () => {
     if (!userToDelete) return;
+    
+    // Verificação adicional de segurança
+    if (userToDelete.source === 'profile_admin') {
+      toast.error('Não é possível excluir usuários administradores.');
+      setShowDeleteConfirm(false);
+      setUserToDelete(null);
+      return;
+    }
     
     try {
       const { error } = await supabase
@@ -346,7 +457,7 @@ export default function Settings() {
     }
     
     try {
-      // Obter o ID do administrador da sessão
+      // Obter o ID do administrador e revenda da sessão
       const adminSession = localStorage.getItem('admin_session');
       if (!adminSession) {
         toast.error('Sessão expirada. Faça login novamente.');
@@ -356,8 +467,58 @@ export default function Settings() {
       
       const session = JSON.parse(adminSession);
       const adminId = session.id;
+      const resellerId = session.reseller_id || null; // Pegar o ID da revenda se existir
+      
+      // Verificar se o email já existe em alguma das tabelas
+      async function checkEmailExists(email: string, excludeId?: string) {
+        // 1. Verificar na tabela profile_admin
+        const { data: adminData, error: adminError } = await supabase
+          .from('profile_admin')
+          .select('id, email')
+          .eq('email', email)
+          .maybeSingle();
+          
+        if (adminError) {
+          console.error('Erro ao verificar email na tabela profile_admin:', adminError);
+          throw adminError;
+        }
+        
+        // 2. Verificar na tabela profile_admin_user
+        const queryBuilder = supabase
+          .from('profile_admin_user')
+          .select('id, email')
+          .eq('email', email);
+          
+        // Se estiver editando, excluir o próprio ID da busca
+        if (excludeId) {
+          queryBuilder.neq('id', excludeId);
+        }
+        
+        const { data: adminUserData, error: adminUserError } = await queryBuilder.maybeSingle();
+        
+        if (adminUserError) {
+          console.error('Erro ao verificar email na tabela profile_admin_user:', adminUserError);
+          throw adminUserError;
+        }
+        
+        // Se existir em alguma das tabelas, retorna true
+        return !!adminData || !!adminUserData;
+      }
       
       if (isEditMode && editingUserId) {
+        // Verificar duplicação de email apenas se o email foi alterado
+        const usuario = usuarios.find(u => u.id === editingUserId);
+        
+        // Se o email for diferente do atual, verificar se já existe
+        if (usuario && usuario.email !== newUser.email) {
+          const emailExists = await checkEmailExists(newUser.email, editingUserId);
+          
+          if (emailExists) {
+            toast.error(`O email ${newUser.email} já está em uso por outro usuário do sistema.`);
+            return;
+          }
+        }
+        
         // Atualizar usuário existente
         const updateData: any = {
           nome: newUser.nome,
@@ -392,11 +553,22 @@ export default function Settings() {
             email: data[0].email as string,
             tipo: data[0].tipo as string,
             status: data[0].status as 'active' | 'inactive' | 'blocked',
-            created_at: data[0].created_at as string
+            created_at: data[0].created_at as string,
+            reseller_id: data[0].reseller_id as string | undefined,
+            source: 'profile_admin_user', // Usuários editados sempre são da tabela profile_admin_user
+            dev: data[0].dev as string // Incluir o campo dev
           };
           setUsuarios(prev => prev.map(u => u.id === editingUserId ? updatedUser : u));
         }
       } else {
+        // Verificar se o email já existe antes de criar um novo usuário
+        const emailExists = await checkEmailExists(newUser.email);
+        
+        if (emailExists) {
+          toast.error(`O email ${newUser.email} já está em uso por outro usuário do sistema.`);
+          return;
+        }
+        
         // Criar novo usuário
         const { data, error } = await supabase
           .from('profile_admin_user')
@@ -407,7 +579,9 @@ export default function Settings() {
               email: newUser.email,
               senha: newUser.senha, // Em produção, esta senha deveria ser hashed
               tipo: newUser.tipo,
-              status: 'active'
+              status: 'active',
+              reseller_id: resellerId, // Associar à mesma revenda do usuário logado
+              dev: 'N' // Definir campo dev como 'N' por padrão
             }
           ])
           .select();
@@ -428,7 +602,10 @@ export default function Settings() {
             email: data[0].email as string,
             tipo: data[0].tipo as string,
             status: data[0].status as 'active' | 'inactive' | 'blocked',
-            created_at: data[0].created_at as string
+            created_at: data[0].created_at as string,
+            reseller_id: data[0].reseller_id as string | undefined,
+            source: 'profile_admin_user', // Novos usuários sempre são da tabela profile_admin_user
+            dev: data[0].dev as string // Incluir o valor do campo dev
           };
           setUsuarios(prev => [newUsuario, ...prev]);
         }
@@ -728,8 +905,20 @@ export default function Settings() {
                         </tr>
                       ) : (
                         usuarios.map((usuario) => (
-                          <tr key={usuario.id} className="hover:bg-[#333]">
-                            <td className="p-4 text-white">{usuario.nome}</td>
+                          <tr key={usuario.id} className={`hover:bg-[#333] ${usuario.source === 'profile_admin' ? 'bg-[#2D2D35]' : ''} ${usuario.id === userInfo.id ? 'bg-[#323D2D]' : ''}`}>
+                            <td className="p-4 text-white">
+                              {usuario.nome}
+                              {usuario.source === 'profile_admin' && (
+                                <span className="ml-2 px-1.5 py-0.5 text-xs bg-blue-900/50 text-blue-200 rounded">
+                                  Admin
+                                </span>
+                              )}
+                              {usuario.id === userInfo.id && (
+                                <span className="ml-2 px-1.5 py-0.5 text-xs bg-green-900/50 text-green-200 rounded">
+                                  Você
+                                </span>
+                              )}
+                            </td>
                             <td className="p-4 text-white">{usuario.email}</td>
                             <td className="p-4 text-white">{usuario.tipo}</td>
                             <td className="p-4">
@@ -754,39 +943,74 @@ export default function Settings() {
                             </td>
                             <td className="p-4">
                               <div className="flex items-center gap-2">
-                                <button
-                                  className="p-1 text-blue-400 hover:text-blue-300 rounded-lg"
-                                  title="Editar"
-                                  onClick={() => handleEditUser(usuario)}
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                  </svg>
-                                </button>
-                                <button
-                                  className={`p-1 ${usuario.status === 'active' ? 'text-yellow-400 hover:text-yellow-300' : 'text-green-400 hover:text-green-300'} rounded-lg`}
-                                  title={usuario.status === 'active' ? 'Inativar' : 'Ativar'}
-                                  onClick={() => handleToggleStatus(usuario)}
-                                >
-                                  {usuario.status === 'active' ? (
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                  ) : (
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                      <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                  )}
-                                </button>
-                                <button
-                                  className="p-1 text-red-400 hover:text-red-300 rounded-lg"
-                                  title="Excluir"
-                                  onClick={() => handleDeleteClick(usuario)}
-                                >
-                                  <Trash2 size={18} />
-                                </button>
+                                {/* Exibir botões de ação apenas para usuários da tabela profile_admin_user */}
+                                {usuario.source === 'profile_admin_user' ? (
+                                  <>
+                                    {/* Sempre permitir o botão de edição */}
+                                    <button
+                                      className="p-1 text-blue-400 hover:text-blue-300 rounded-lg"
+                                      title="Editar"
+                                      onClick={() => handleEditUser(usuario)}
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                      </svg>
+                                    </button>
+                                    
+                                    {/* Botão de ativação/desativação - desabilitado para o próprio usuário */}
+                                    {usuario.id === userInfo.id ? (
+                                      <button
+                                        className="p-1 text-gray-500 cursor-not-allowed rounded-lg"
+                                        title="Não é possível alterar o status do seu próprio usuário"
+                                        disabled
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                                        </svg>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        className={`p-1 ${usuario.status === 'active' ? 'text-yellow-400 hover:text-yellow-300' : 'text-green-400 hover:text-green-300'} rounded-lg`}
+                                        title={usuario.status === 'active' ? 'Inativar' : 'Ativar'}
+                                        onClick={() => handleToggleStatus(usuario)}
+                                      >
+                                        {usuario.status === 'active' ? (
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                          </svg>
+                                        ) : (
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                          </svg>
+                                        )}
+                                      </button>
+                                    )}
+                                    
+                                    {/* Botão de exclusão - desabilitado para o próprio usuário */}
+                                    {usuario.id === userInfo.id ? (
+                                      <button
+                                        className="p-1 text-gray-500 cursor-not-allowed rounded-lg"
+                                        title="Não é possível excluir seu próprio usuário"
+                                        disabled
+                                      >
+                                        <Trash2 size={18} />
+                                      </button>
+                                    ) : (
+                                      <button
+                                        className="p-1 text-red-400 hover:text-red-300 rounded-lg"
+                                        title="Excluir"
+                                        onClick={() => handleDeleteClick(usuario)}
+                                      >
+                                        <Trash2 size={18} />
+                                      </button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-gray-500 text-xs italic">Usuário administrador (não editável)</span>
+                                )}
                               </div>
                             </td>
                           </tr>

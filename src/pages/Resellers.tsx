@@ -146,6 +146,32 @@ export default function Resellers() {
     }
 
     try {
+      // Notificar o usuário do início do processo
+      toast.info('Excluindo usuários relacionados...');
+      
+      // Passo 1: Excluir usuários na tabela profile_admin_user associados à revenda
+      const { error: errorAdminUsers } = await supabase
+        .from('profile_admin_user')
+        .delete()
+        .eq('reseller_id', resellerToDelete.id);
+      
+      if (errorAdminUsers) {
+        console.error('Erro ao excluir usuários admin_user:', errorAdminUsers);
+        throw new Error(`Erro ao excluir usuários relacionados: ${errorAdminUsers.message}`);
+      }
+      
+      // Passo 2: Excluir usuários na tabela profile_admin associados à revenda
+      const { error: errorAdmins } = await supabase
+        .from('profile_admin')
+        .delete()
+        .eq('reseller_id', resellerToDelete.id);
+      
+      if (errorAdmins) {
+        console.error('Erro ao excluir administradores:', errorAdmins);
+        throw new Error(`Erro ao excluir administradores relacionados: ${errorAdmins.message}`);
+      }
+      
+      // Passo 3: Agora que os usuários foram removidos, podemos excluir a revenda
       const { error } = await supabase
         .from('resellers')
         .delete()
@@ -153,14 +179,15 @@ export default function Resellers() {
 
       if (error) {
         console.error('Erro ao excluir revenda:', error);
-        toast.error(`Erro ao excluir revenda: ${error.message}`);
-      } else {
-        toast.success('Revenda excluída com sucesso!');
-        loadResellers();
+        throw new Error(`Erro ao excluir revenda: ${error.message}`);
       }
+      
+      // Sucesso!
+      toast.success('Revenda e todos os usuários relacionados foram excluídos com sucesso!');
+      loadResellers();
     } catch (error: any) {
-      console.error('Erro ao excluir revenda:', error);
-      toast.error(`Erro ao excluir revenda: ${error.message || 'Erro desconhecido'}`);
+      console.error('Erro no processo de exclusão:', error);
+      toast.error(error.message || 'Erro desconhecido ao excluir revenda');
     } finally {
       setShowDeleteConfirm(false);
       setResellerToDelete(null);
@@ -433,12 +460,10 @@ export default function Resellers() {
             </div>
 
             {/* Pagination can be added later if needed */}
-            <div className="p-4 border-t border-gray-800">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-400">
-                  Mostrando {filteredResellers.length} revenda(s)
-                </span>
-              </div>
+            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
+              <p className="text-gray-300 text-sm">
+                <span className="font-bold">Atenção:</span> Esta ação não pode ser desfeita. A revenda e todos os usuários relacionados a ela serão permanentemente excluídos do sistema.
+              </p>
             </div>
           </div>
         </div>

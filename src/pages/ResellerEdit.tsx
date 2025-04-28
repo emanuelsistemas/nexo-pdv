@@ -545,7 +545,7 @@ export default function ResellerEdit() {
       
       if (isNew) {
         // Criar nova revenda - o código é gerado automaticamente pela função do banco
-        const { data, error } = await supabase
+        const { error } = await supabase
           .rpc('insert_reseller_with_code', {
             p_trade_name: reseller.trade_name,
             p_legal_name: reseller.legal_name,
@@ -562,12 +562,32 @@ export default function ResellerEdit() {
 
         if (error) throw error;
         
-        // Se a função retornou o ID da revenda criada, vamos usá-lo
-        if (data && data[0] && data[0].id) {
-          resellerId = data[0].id;
+        // Como a função RPC retorna void, precisamos buscar o ID da revenda criada
+        // Buscar pelo document_number para obter o ID
+        const { data: resellerData, error: fetchError } = await supabase
+          .from('resellers')
+          .select('id')
+          .eq('document_number', reseller.document_number)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+          
+        console.log('Dados da revenda após criação:', resellerData);
+        
+        if (fetchError) {
+          console.error('Erro ao buscar ID da revenda criada:', fetchError);
+          throw fetchError;
         }
         
-        toast.success('Revenda criada com sucesso!');
+        if (resellerData && resellerData.id) {
+          resellerId = resellerData.id;
+          console.log('ID da revenda obtido:', resellerId);
+        } else {
+          console.error('Não foi possível obter o ID da revenda criada');
+          throw new Error('Não foi possível obter o ID da revenda criada');
+        }
+        
+        toast.success(`Revenda criada com sucesso! ID: ${resellerId}`);
       } else {
         // Atualizar revenda existente
         result = await supabase
@@ -582,14 +602,38 @@ export default function ResellerEdit() {
       
       // Salvar dados de acesso na tabela profile_admin se fornecidos
       if (reseller.user_name && reseller.user_email && reseller.user_password) {
-        // Verificar se já existe um usuário com este email
-        const { data: existingUser } = await supabase
+        // ETAPA 1: Verificar se o email já existe na tabela profile_admin
+        const { data: existingAdminUser, error: adminCheckError } = await supabase
           .from('profile_admin')
           .select('id, email')
           .eq('email', reseller.user_email)
           .maybeSingle();
         
-        if (existingUser) {
+        if (adminCheckError) {
+          console.error('Erro ao verificar email existente em profile_admin:', adminCheckError);
+          throw adminCheckError;
+        }
+        
+        // ETAPA 2: Verificar se o email já existe na tabela profile_admin_user
+        const { data: existingAdminUserUser, error: adminUserCheckError } = await supabase
+          .from('profile_admin_user')
+          .select('id, email')
+          .eq('email', reseller.user_email)
+          .maybeSingle();
+          
+        if (adminUserCheckError) {
+          console.error('Erro ao verificar email existente em profile_admin_user:', adminUserCheckError);
+          throw adminUserCheckError;
+        }
+        
+        // Se o email existir em profile_admin_user mas não em profile_admin (tabela que estamos manipulando)
+        if (existingAdminUserUser && !existingAdminUser) {
+          toast.error(`O email ${reseller.user_email} já está em uso por outro usuário do sistema. Por favor, use um email diferente.`);
+          throw new Error(`Email já utilizado em profile_admin_user: ${reseller.user_email}`);
+        }
+        
+        // Se o email existir e for de outro usuário admin
+        if (existingAdminUser) {
           // Atualizar usuário existente
           const { error: updateError } = await supabase
             .from('profile_admin')
@@ -597,9 +641,10 @@ export default function ResellerEdit() {
               nome_usuario: reseller.user_name,
               senha: reseller.user_password,
               updated_at: new Date().toISOString(),
-              tipo_user: 'Admin'
+              tipo_user: 'Admin',
+              reseller_id: resellerId // Associação com a revenda
             })
-            .eq('id', existingUser.id);
+            .eq('id', existingAdminUser.id);
           
           if (updateError) {
             console.error('Erro ao atualizar usuário de acesso:', updateError);
@@ -608,6 +653,15 @@ export default function ResellerEdit() {
             toast.success('Dados de acesso atualizados com sucesso!');
           }
         } else {
+          // Log para debug antes de criar o usuário
+          console.log('Criando usuário admin com reseller_id:', resellerId);
+          
+          // Verificar se o resellerId é válido antes de prosseguir
+          if (!resellerId) {
+            console.error('resellerId inválido ao criar usuário admin');
+            throw new Error('ID da revenda inválido');
+          }
+
           // Criar novo usuário admin
           const { data: newAdminUser, error: insertError } = await supabase
             .from('profile_admin')
@@ -617,7 +671,8 @@ export default function ResellerEdit() {
               senha: reseller.user_password,
               status: 'active',
               tipo_user: 'Admin',
-              dev: 'N'
+              dev: 'N',
+              reseller_id: resellerId // Associação com a revenda
             })
             .select();
           

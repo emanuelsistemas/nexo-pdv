@@ -60,7 +60,7 @@ export default function AdminLogin() {
       // Verificar se o usuário existe e tem dev='S'
       const { data: adminData, error } = await supabase
         .from('profile_admin')
-        .select('id, dev, senha, nome_fantasia, nome_usuario')
+        .select('id, dev, senha, nome_usuario')
         .eq('email', devEmail)
         .single();
         
@@ -85,7 +85,7 @@ export default function AdminLogin() {
         email: devEmail,
         isAdmin: true,
         nome: adminData.nome_usuario,
-        companyName: adminData.nome_fantasia || 'Nexo Sistema',
+        companyName: 'Nexo Sistema',
         timestamp: Date.now()
       }));
       
@@ -106,12 +106,12 @@ export default function AdminLogin() {
     try {
       setLoading(true);
       let userType = '';
-      let userData = null;
+      let userData: any = null;
 
       // Primeiro tenta buscar na tabela profile_admin (admins originais)
       const { data: admin } = await supabase
         .from('profile_admin')
-        .select('*')
+        .select('*, resellers:reseller_id(trade_name)')
         .eq('email', formData.email)
         .maybeSingle();
 
@@ -132,10 +132,10 @@ export default function AdminLogin() {
           .maybeSingle();
 
         if (!userAdmin) {
-          throw new Error('Credenciais inválidas');
+          throw new Error('Usuário não encontrado');
         }
 
-        // Validar senha do usuário admin
+        // Verifica a senha
         if (userAdmin.senha !== formData.password) {
           throw new Error('Credenciais inválidas');
         }
@@ -143,23 +143,33 @@ export default function AdminLogin() {
         userType = 'admin_user';
         userData = userAdmin;
       }
-      
-      // Não encontrou em nenhuma tabela ou senha inválida
-      if (!userData) {
-        throw new Error('Credenciais inválidas');
+
+      // Validação geral de status
+      if (userType === 'admin' && userData && userData.status !== 'active') {
+        throw new Error('Este usuário está inativo. Entre em contato com o administrador.');
       }
 
       // Salvar sessão baseada no tipo de usuário
       if (userType === 'admin' && userData) {
-        // Para admin, usamos o nome de usuário também como nome da empresa
-        // já que removemos o campo nome_fantasia
+        // Para admin, verificamos se tem reseller_id associado
+        let companyName = 'Nexo Sistema';
+        
+        // Verificar se tem revenda associada diretamente no campo reseller_id
+        if (userData.reseller_id && userData.resellers && 
+            typeof userData.resellers === 'object' && 
+            'trade_name' in userData.resellers && 
+            userData.resellers.trade_name) {
+          companyName = String(userData.resellers.trade_name);
+        }
+        
         localStorage.setItem('admin_session', JSON.stringify({
           isAdmin: true,
           id: userData.id,
           email: userData.email,
           nome: userData.nome_usuario,
-          companyName: userData.nome_usuario || 'Nexo Sistema',
+          companyName: companyName,
           userType: 'admin',
+          reseller_id: userData.reseller_id,
           timestamp: Date.now()
         }));
       } else if (userType === 'admin_user' && userData) {
@@ -174,19 +184,32 @@ export default function AdminLogin() {
             .eq('id', userData.reseller_id)
             .maybeSingle();
             
-          if (resellerInfo && typeof resellerInfo === 'object' && 'trade_name' in resellerInfo && resellerInfo.trade_name) {
+          if (resellerInfo && 
+              typeof resellerInfo === 'object' && 
+              'trade_name' in resellerInfo && 
+              resellerInfo.trade_name) {
             companyName = String(resellerInfo.trade_name);
           }
         } else {
           // Buscar informações do admin vinculado se não tiver revenda vinculada diretamente
           const { data: adminInfo } = await supabase
             .from('profile_admin')
-            .select('nome_usuario')
+            .select('nome_usuario, resellers:reseller_id(trade_name)')
             .eq('id', userData.admin_id)
             .maybeSingle();
             
-          if (adminInfo && typeof adminInfo === 'object' && 'nome_usuario' in adminInfo && adminInfo.nome_usuario) {
-            companyName = String(adminInfo.nome_usuario);
+          if (adminInfo) {
+            // Primeiro tentar obter o nome da revenda vinculada ao admin
+            if (adminInfo.resellers && 
+                typeof adminInfo.resellers === 'object' && 
+                'trade_name' in adminInfo.resellers && 
+                adminInfo.resellers.trade_name) {
+              companyName = String(adminInfo.resellers.trade_name);
+            } 
+            // Fallback para o nome do usuário se não houver revenda
+            else if ('nome_usuario' in adminInfo && adminInfo.nome_usuario) {
+              companyName = String(adminInfo.nome_usuario);
+            }
           }
         }
           
@@ -298,12 +321,14 @@ export default function AdminLogin() {
       )}
       
       <div className="w-full max-w-md space-y-8 bg-[#2A2A2A] p-8 rounded-xl border border-gray-800">
-        <div className="text-center">
-          <div className="flex items-center justify-center gap-3 mb-2">
-            <Database className="w-10 h-10 text-emerald-500" />
-            <h1 className="text-3xl font-bold text-white">Admin</h1>
+        <div className="flex flex-col items-center justify-center mb-4">
+          <div className="flex items-center gap-3 mb-2">
+            <Database className="w-8 h-8 text-emerald-500 flex-shrink-0" />
+            <div>
+              <h1 className="text-lg font-bold text-white font-['MuseoModerno']">nexo</h1>
+              <p className="text-sm text-gray-400">Painel de Controle</p>
+            </div>
           </div>
-          <p className="text-gray-400">Área administrativa do sistema</p>
         </div>
         
         <form className="space-y-6" onSubmit={handleSubmit}>
