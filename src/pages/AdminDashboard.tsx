@@ -41,7 +41,8 @@ export default function AdminDashboard() {
   const [userInfo, setUserInfo] = useState({
     email: '',
     companyName: 'Nexo Sistema',
-    nome: ''
+    nome: '',
+    dev: 'N'  // Valor padrão 'N'
   });
 
   useEffect(() => {
@@ -79,7 +80,8 @@ export default function AdminDashboard() {
     setUserInfo({
       email: session.email || '',
       companyName: session.companyName || 'Nexo Sistema',
-      nome: userNome
+      nome: userNome,
+      dev: session.dev || 'N'  // Obter o valor do campo dev da sessão
     });
 
     fetchCompanies();
@@ -89,11 +91,29 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       
-      // Carregar as empresas
-      const { data, error } = await supabase
+      // Obter a sessão para verificar o reseller_id e dev
+      const adminSession = localStorage.getItem('admin_session');
+      if (!adminSession) {
+        navigate('/admin/login');
+        return;
+      }
+      
+      const session = JSON.parse(adminSession);
+      const resellerId = session.reseller_id || null;
+      const isDev = session.dev === 'S';
+      
+      // Query para carregar empresas
+      let query = supabase
         .from('companies')
         .select('*')
         .order('created_at', { ascending: false });
+      
+      // Se não for dev e tiver reseller_id, aplicar filtro
+      if (!isDev && resellerId) {
+        query = query.eq('reseller_id', resellerId);
+      }
+      
+      const { data, error } = await query;
 
       if (error) {
         throw error;
@@ -261,22 +281,7 @@ export default function AdminDashboard() {
                 )}
               </Link>
             </li>
-            <li>
-              <Link
-                to="/admin/resellers"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
-              >
-                <Users size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Revendedores</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Revendedores
-                  </div>
-                )}
-              </Link>
-            </li>
+
             <li>
               <Link
                 to="/admin/settings"
@@ -312,10 +317,43 @@ export default function AdminDashboard() {
           </ul>
           
           {/* Footer com informações do usuário */}
-          <div className={`mt-auto pt-4 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
-            <div className="border-t border-gray-800 pt-4 px-2">
-              <div className="text-sm font-medium text-white truncate">{userInfo.email}</div>
-            </div>
+          <div className={`mt-auto pt-4`}>
+            {/* Versão expandida */}
+            {!isSidebarCollapsed && (
+              <div className="border-t border-gray-800 pt-4 px-2">
+                <div className="text-sm font-medium text-white truncate">{userInfo.email}</div>
+                
+                {/* Menu Revendas abaixo do email - versão expandida (apenas se dev='S') */}
+                {userInfo.dev === 'S' && (
+                  <div className="mt-4">
+                    <Link
+                      to="/admin/resellers"
+                      className={`flex items-center gap-2 p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors`}
+                    >
+                      <Users size={18} className="text-emerald-500" />
+                      <span>Revendas</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Versão recolhida */}
+            {isSidebarCollapsed && userInfo.dev === 'S' && (
+              <div className="border-t border-gray-800 pt-4 px-2 flex justify-center">
+                <Link
+                  to="/admin/resellers"
+                  className="p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative"
+                >
+                  <Users size={22} className="text-emerald-500" />
+                  
+                  {/* Tooltip quando o menu está retraído */}
+                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
+                    Revendas
+                  </div>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>

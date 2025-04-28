@@ -170,6 +170,7 @@ export default function AdminLogin() {
           companyName: companyName,
           userType: 'admin',
           reseller_id: userData.reseller_id,
+          dev: userData.dev || 'N',
           timestamp: Date.now()
         }));
       } else if (userType === 'admin_user' && userData) {
@@ -202,9 +203,9 @@ export default function AdminLogin() {
             // Primeiro tentar obter o nome da revenda vinculada ao admin
             if (adminInfo.resellers && 
                 typeof adminInfo.resellers === 'object' && 
-                'trade_name' in adminInfo.resellers && 
-                adminInfo.resellers.trade_name) {
-              companyName = String(adminInfo.resellers.trade_name);
+                adminInfo.resellers !== null &&
+                'trade_name' in adminInfo.resellers) {
+              companyName = String((adminInfo.resellers as {trade_name?: string}).trade_name || '');
             } 
             // Fallback para o nome do usuário se não houver revenda
             else if ('nome_usuario' in adminInfo && adminInfo.nome_usuario) {
@@ -222,6 +223,7 @@ export default function AdminLogin() {
           tipo: userData.tipo,
           companyName: companyName,
           userType: 'admin_user',
+          dev: userData.dev || 'N',
           timestamp: Date.now()
         }));
       }
