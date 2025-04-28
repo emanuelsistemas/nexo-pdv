@@ -266,9 +266,8 @@ export default function ResellerEdit() {
         [day]: {
           ...reseller.opening_hours[day],
           [field]: value
-          }
         }
-      };
+      }
     });
   };
   
@@ -533,14 +532,20 @@ export default function ResellerEdit() {
         tech_support: reseller.tech_support || null,
         sales_contacts: reseller.sales_contacts || null,
         admin_contacts: reseller.admin_contacts || null,
-        additional_info: reseller.additional_info || null
+        additional_info: reseller.additional_info || null,
+        
+        // Dados de acesso ao sistema
+        user_name: reseller.user_name || null,
+        user_email: reseller.user_email || null,
+        user_password: reseller.user_password || null
       };
       
       let result;
+      let resellerId = reseller.id;
       
       if (isNew) {
         // Criar nova revenda - o código é gerado automaticamente pela função do banco
-        const { error } = await supabase
+        const { data, error } = await supabase
           .rpc('insert_reseller_with_code', {
             p_trade_name: reseller.trade_name,
             p_legal_name: reseller.legal_name,
@@ -557,6 +562,11 @@ export default function ResellerEdit() {
 
         if (error) throw error;
         
+        // Se a função retornou o ID da revenda criada, vamos usá-lo
+        if (data && data[0] && data[0].id) {
+          resellerId = data[0].id;
+        }
+        
         toast.success('Revenda criada com sucesso!');
       } else {
         // Atualizar revenda existente
@@ -568,6 +578,55 @@ export default function ResellerEdit() {
         if (result.error) throw result.error;
         
         toast.success('Revenda atualizada com sucesso!');
+      }
+      
+      // Salvar dados de acesso na tabela profile_admin se fornecidos
+      if (reseller.user_name && reseller.user_email && reseller.user_password) {
+        // Verificar se já existe um usuário com este email
+        const { data: existingUser } = await supabase
+          .from('profile_admin')
+          .select('id, email')
+          .eq('email', reseller.user_email)
+          .maybeSingle();
+        
+        if (existingUser) {
+          // Atualizar usuário existente
+          const { error: updateError } = await supabase
+            .from('profile_admin')
+            .update({
+              nome_usuario: reseller.user_name,
+              senha: reseller.user_password,
+              updated_at: new Date().toISOString(),
+              tipo_user: 'Admin'
+            })
+            .eq('id', existingUser.id);
+          
+          if (updateError) {
+            console.error('Erro ao atualizar usuário de acesso:', updateError);
+            toast.error('Erro ao atualizar dados de acesso ao sistema');
+          } else {
+            toast.success('Dados de acesso atualizados com sucesso!');
+          }
+        } else {
+          // Criar novo usuário
+          const { error: insertError } = await supabase
+            .from('profile_admin')
+            .insert({
+              nome_usuario: reseller.user_name,
+              email: reseller.user_email,
+              senha: reseller.user_password,
+              status: 'active',
+              tipo_user: 'Admin',
+              dev: 'N'
+            });
+          
+          if (insertError) {
+            console.error('Erro ao criar usuário de acesso:', insertError);
+            toast.error('Erro ao criar acesso ao sistema');
+          } else {
+            toast.success('Acesso ao sistema criado com sucesso!');
+          }
+        }
       }
       
       navigate('/admin/resellers');
