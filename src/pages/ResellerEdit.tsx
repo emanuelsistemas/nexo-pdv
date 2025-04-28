@@ -42,6 +42,10 @@ interface Reseller {
   sales_contacts?: Contact[];
   admin_contacts?: Contact[];
   additional_info?: string;
+  // Campos para acesso ao sistema
+  user_name?: string;
+  user_email?: string;
+  user_password?: string;
   [key: string]: any;
 }
 
@@ -86,6 +90,10 @@ export default function ResellerEdit() {
   const [supportPhone, setSupportPhone] = useState('');
   const [salesPhone, setSalesPhone] = useState('');
   const [adminPhone, setAdminPhone] = useState('');
+  
+  // Estados para senha e confirmação
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const isNew = id === 'new';
 
@@ -128,7 +136,10 @@ export default function ResellerEdit() {
         tech_support: [],
         sales_contacts: [],
         admin_contacts: [],
-        additional_info: ''
+        additional_info: '',
+        user_name: '',
+        user_email: '',
+        user_password: ''
       });
       setLoading(false);
     } else if (id) {
@@ -211,6 +222,12 @@ export default function ResellerEdit() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     
+    // Limpar erro de senha quando o usuário digita
+    if (name === 'user_password') {
+      setPasswordError('');
+    }
+    
+    // Atualizar o estado do reseller
     if (reseller) {
       setReseller(prevReseller => {
         if (!prevReseller) return null;
@@ -222,20 +239,33 @@ export default function ResellerEdit() {
     }
   };
   
+  // Função para lidar com a confirmação de senha
+  const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setConfirmPassword(e.target.value);
+    setPasswordError('');
+  };
+  
+  // Função para validar as senhas
+  const validatePasswords = () => {
+    if (reseller?.user_password && confirmPassword && reseller.user_password !== confirmPassword) {
+      setPasswordError('As senhas não coincidem');
+      return false;
+    }
+    setPasswordError('');
+    return true;
+  };
+
   // Função para lidar com alterações nos horários de funcionamento
   const handleOpeningHoursChange = (day: string, field: 'active' | 'open' | 'close', value: boolean | string) => {
     if (!reseller || !reseller.opening_hours) return;
     
-    setReseller(prevReseller => {
-      if (!prevReseller || !prevReseller.opening_hours) return prevReseller;
-      
-      return {
-        ...prevReseller,
-        opening_hours: {
-          ...prevReseller.opening_hours,
-          [day]: {
-            ...prevReseller.opening_hours[day],
-            [field]: value
+    setReseller({
+      ...reseller,
+      opening_hours: {
+        ...reseller.opening_hours,
+        [day]: {
+          ...reseller.opening_hours[day],
+          [field]: value
           }
         }
       };
@@ -472,14 +502,15 @@ export default function ResellerEdit() {
   };
 
   const handleSave = async () => {
-    if (!reseller) return;
-    
-    // Validação básica
-    if (!reseller.trade_name || !reseller.legal_name || !reseller.document_number) {
-      toast.error('Preencha todos os campos obrigatórios');
-      return;
-    }
     try {
+      if (!reseller) return;
+      
+      // Validar senhas antes de salvar
+      if (reseller.user_password && !validatePasswords()) {
+        setSaving(false);
+        return;
+      }
+      
       setSaving(true);
       
       // Prepare data for save
@@ -1175,6 +1206,74 @@ export default function ResellerEdit() {
                       className="w-full px-4 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       placeholder="Informações adicionais sobre a revenda..."
                     />
+                  </div>
+                  
+                  {/* Acesso ao Sistema */}
+                  <div className="pt-6 pb-4 border-t border-gray-800 mt-6">
+                    <label className="block text-lg text-white font-medium mb-4">Acesso ao Sistema</label>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      {/* Nome de Usuário */}
+                      <div>
+                        <label className="block text-gray-400 mb-1">Nome de Usuário</label>
+                        <input
+                          type="text"
+                          name="user_name"
+                          value={reseller.user_name || ''}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          placeholder="Nome para login no sistema"
+                        />
+                      </div>
+                      
+                      {/* Email */}
+                      <div>
+                        <label className="block text-gray-400 mb-1">Email</label>
+                        <input
+                          type="email"
+                          name="user_email"
+                          value={reseller.user_email || ''}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          placeholder="Email para login"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Senha */}
+                      <div>
+                        <label className="block text-gray-400 mb-1">Senha</label>
+                        <input
+                          type="password"
+                          name="user_password"
+                          value={reseller.user_password || ''}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 bg-[#1C1C1C] border border-gray-800 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                          placeholder="••••••••"
+                        />
+                      </div>
+                      
+                      {/* Confirmar Senha */}
+                      <div>
+                        <label className="block text-gray-400 mb-1">Confirmar Senha</label>
+                        <input
+                          type="password"
+                          value={confirmPassword}
+                          onChange={handleConfirmPasswordChange}
+                          onBlur={validatePasswords}
+                          className={`w-full px-4 py-2 bg-[#1C1C1C] border ${passwordError ? 'border-red-500' : 'border-gray-800'} rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent`}
+                          placeholder="••••••••"
+                        />
+                        {passwordError && (
+                          <p className="mt-1 text-sm text-red-500">{passwordError}</p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <p className="text-sm text-gray-400 mt-3">
+                      Estes dados serão utilizados para o login da revenda no sistema administrativo.
+                    </p>
                   </div>
                 </div>
               </div>
