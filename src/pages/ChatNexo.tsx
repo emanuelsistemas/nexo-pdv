@@ -400,11 +400,6 @@ export default function ChatNexo() {
 
       {/* Main Content - Chat Interface */}
       <div className="flex-1 bg-[#1C1C1C] flex flex-col">
-        <header className="bg-[#2A2A2A] border-b border-gray-800 p-6">
-          <h1 className="text-2xl font-bold text-white">Chat</h1>
-          <p className="text-gray-400">Converse com seus clientes e colaboradores</p>
-        </header>
-
         {/* Chat Interface */}
         <div className="flex flex-1 overflow-hidden">
           {/* Lista de Conversas (WhatsApp Style) */}
