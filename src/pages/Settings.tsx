@@ -482,7 +482,26 @@ export default function Settings() {
   // Função para carregar conexões WhatsApp do banco de dados
   const loadWhatsAppConnections = async (adminId: string) => {
     try {
+      console.log('Carregando conexões WhatsApp para adminId:', adminId);
       setWhatsappLoading(true);
+      
+      // Buscar diretamente na API Evolution todas as instâncias
+      try {
+        const apiResponse = await fetch('https://apiwhatsapp.nexopdv.com/instance/fetchInstances', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+          }
+        });
+        
+        if (apiResponse.ok) {
+          const apiData = await apiResponse.json();
+          console.log('Instâncias encontradas na API:', apiData?.data?.length || 0);
+        }
+      } catch (apiError) {
+        console.error('Erro ao buscar instâncias na API:', apiError);
+      }
       
       // Buscar as conexões existentes na tabela do Supabase
       const { data, error } = await supabase
@@ -495,6 +514,8 @@ export default function Settings() {
       }
       
       let typedConnections: WhatsAppConnection[] = [];
+      
+      console.log('Conexões encontradas no banco:', data ? data.length : 0);
       
       if (data) {
         // Converter explicitamente para o tipo WhatsAppConnection
@@ -620,6 +641,14 @@ export default function Settings() {
     setQRCodeData('');
     setSelectedConnectionId(null);
     setSelectedInstance('');
+    
+    // Forçar atualização da lista de conexões quando fechar o modal
+    if (userInfo) {
+      // Pequeno delay para garantir que qualquer operação de banco tenha finalizado
+      setTimeout(() => {
+        loadWhatsAppConnections(userInfo.id);
+      }, 500);
+    }
   };
   
   const createInstance = async () => {
@@ -1197,20 +1226,22 @@ export default function Settings() {
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     
-    if (userInfo && activeTab === 'whatsapp' && !whatsappLoading) {
+    if (userInfo && activeTab === 'whatsapp') {
       // Carregar imediatamente
       loadWhatsAppConnections(userInfo.id);
       
       // E então iniciar o intervalo
       intervalId = setInterval(() => {
-        loadWhatsAppConnections(userInfo.id);
-      }, 15000); // Atualizar a cada 15 segundos
+        if (!whatsappLoading) {
+          loadWhatsAppConnections(userInfo.id);
+        }
+      }, 10000); // Atualizar a cada 10 segundos
     }
     
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [userInfo, activeTab, whatsappLoading]);
+  }, [userInfo, activeTab]); // Remover whatsappLoading da dependência para evitar problemas
 
   const handleAddUsuario = () => {
     // Limpar os dados do formulário e abrir o modal para adicionar novo usuário
@@ -1968,6 +1999,29 @@ export default function Settings() {
                 </button>
               </div>
 
+              <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center">
+                  {whatsappLoading && (
+                    <div className="flex items-center mr-2">
+                      <svg className="animate-spin h-4 w-4 text-gray-400 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span className="text-xs text-gray-400">Atualizando...</span>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => userInfo && loadWhatsAppConnections(userInfo.id)}
+                    className="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg flex items-center gap-1 transition-colors"
+                    title="Atualizar status"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/>
+                    </svg>
+                    <span>Atualizar</span>
+                  </button>
+                </div>
+              </div>
               <div className="bg-[#2A2A2A] rounded-lg border border-gray-800 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -1982,19 +2036,7 @@ export default function Settings() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800">
-                      {whatsappLoading ? (
-                        <tr>
-                          <td colSpan={6} className="p-4 text-center text-gray-400">
-                            <div className="flex justify-center items-center">
-                              <svg className="animate-spin mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              Carregando conexões...
-                            </div>
-                          </td>
-                        </tr>
-                      ) : whatsappConnections.length === 0 ? (
+                      {whatsappConnections.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="p-4 text-center text-gray-400">
                             Nenhuma conexão WhatsApp configurada. Clique em "Adicionar Conexão" para começar.
