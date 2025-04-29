@@ -13,6 +13,7 @@ interface WhatsAppConnection {
   status: 'active' | 'inactive' | 'connecting' | 'disconnected';
   created_at: string;
   instance_name: string;
+  reseller_id?: string;
 }
 
 // Interface para instância da Evolution API
@@ -485,6 +486,20 @@ export default function Settings() {
       console.log('Carregando conexões WhatsApp para adminId:', adminId);
       setWhatsappLoading(true);
       
+      // Primeiro, precisamos obter o reseller_id do admin logado
+      const { data: adminData, error: adminError } = await supabase
+        .from('profile_admin')
+        .select('reseller_id')
+        .eq('id', adminId)
+        .single();
+        
+      if (adminError) {
+        throw new Error('Erro ao obter dados do administrador: ' + adminError.message);
+      }
+      
+      const resellerId = adminData?.reseller_id;
+      console.log('Reseller ID do admin logado:', resellerId);
+      
       // Buscar diretamente na API Evolution todas as instâncias
       try {
         const apiResponse = await fetch('https://apiwhatsapp.nexopdv.com/instance/fetchInstances', {
@@ -503,11 +518,18 @@ export default function Settings() {
         console.error('Erro ao buscar instâncias na API:', apiError);
       }
       
-      // Buscar as conexões existentes na tabela do Supabase
-      const { data, error } = await supabase
+      // Buscar as conexões existentes na tabela do Supabase, filtrando por reseller_id se existir
+      let query = supabase
         .from('whatsapp_connections')
         .select('*')
         .eq('admin_id', adminId);
+      
+      // Se tiver reseller_id, filtrar por ele também
+      if (resellerId) {
+        query = query.eq('reseller_id', resellerId);
+      }
+      
+      const { data, error } = await query;
         
       if (error) {
         throw error;
@@ -525,7 +547,8 @@ export default function Settings() {
           phone: item.phone as string,
           status: (item.status as 'active' | 'inactive' | 'connecting' | 'disconnected') || 'inactive',
           created_at: item.created_at as string,
-          instance_name: item.instance_name as string
+          instance_name: item.instance_name as string,
+          reseller_id: item.reseller_id as string
         }));
       }
       
@@ -766,6 +789,21 @@ export default function Settings() {
     try {
       console.log('Salvando instância no banco:', instanceNameToSave, 'para admin_id:', userInfo.id);
       
+      // Obter o reseller_id do admin logado
+      const { data: adminData, error: adminError } = await supabase
+        .from('profile_admin')
+        .select('reseller_id')
+        .eq('id', userInfo.id)
+        .single();
+        
+      if (adminError) {
+        console.error('Erro ao obter reseller_id do admin:', adminError);
+        throw new Error('Erro ao obter dados do administrador: ' + adminError.message);
+      }
+      
+      const resellerId = adminData?.reseller_id;
+      console.log('Reseller ID do admin logado:', resellerId);
+      
       const { data: newConnection, error: insertError } = await supabase
         .from('whatsapp_connections')
         .insert([
@@ -775,6 +813,7 @@ export default function Settings() {
             name: instanceNameToSave,
             phone: '',
             status: 'disconnected',
+            reseller_id: resellerId,
             created_at: new Date().toISOString()
           }
         ])
