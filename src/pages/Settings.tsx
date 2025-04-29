@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Trash2, X, Plus, Settings as SettingsIcon, MessageCircle, MessageSquare } from 'lucide-react';
 import AIChat from '../components/AIChat';
@@ -72,6 +72,9 @@ interface Revenda {
 
 export default function Settings() {
   const navigate = useNavigate();
+  // Referência para o intervalo de atualização do QR Code
+  const qrCodeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const [activeTab, setActiveTab] = useState<'whatsapp' | 'usuarios' | 'revenda'>('whatsapp');
   const [whatsappConnections, setWhatsappConnections] = useState<WhatsAppConnection[]>([]);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
@@ -667,6 +670,12 @@ export default function Settings() {
   };
   
   const closeWhatsAppModal = () => {
+    // Limpar o intervalo de atualização do QR Code ao fechar o modal
+    if (qrCodeIntervalRef.current) {
+      clearInterval(qrCodeIntervalRef.current);
+      qrCodeIntervalRef.current = null;
+    }
+    
     setShowWhatsAppModal(false);
     setConnectionError('');
     setQRCodeData('');
@@ -867,6 +876,12 @@ export default function Settings() {
   
   const getQRCode = async () => {
     try {
+      // Limpar intervalo anterior se existir
+      if (qrCodeIntervalRef.current) {
+        clearInterval(qrCodeIntervalRef.current);
+        qrCodeIntervalRef.current = null;
+      }
+      
       setLoadingQRCode(true);
       setConnectionError('');
       
@@ -1073,6 +1088,12 @@ export default function Settings() {
   
   // Função para abrir o modal de conexão com uma instância existente
   const handleConnectInstance = (connectionId: string, instanceName: string) => {
+    // Limpar intervalo anterior se existir
+    if (qrCodeIntervalRef.current) {
+      clearInterval(qrCodeIntervalRef.current);
+      qrCodeIntervalRef.current = null;
+    }
+    
     setSelectedConnectionId(connectionId);
     setSelectedInstance(instanceName);
     setConnectionError('');
@@ -1082,6 +1103,20 @@ export default function Settings() {
     
     // Após abrir o modal, gerar o QR code
     getQRCodeForExistingInstance(instanceName);
+    
+    // Configurar atualização automática do QR Code a cada 30 segundos (antes de expirar)
+    qrCodeIntervalRef.current = setInterval(() => {
+      if (showWhatsAppModal) {
+        console.log('Atualizando QR Code automaticamente para evitar expiração');
+        getQRCodeForExistingInstance(instanceName);
+      } else {
+        // Se o modal for fechado, parar o intervalo
+        if (qrCodeIntervalRef.current) {
+          clearInterval(qrCodeIntervalRef.current);
+          qrCodeIntervalRef.current = null;
+        }
+      }
+    }, 30000); // 30 segundos - QR code geralmente expira em 45-60 segundos
   };
   
   // Função para desconectar uma instância
