@@ -684,6 +684,41 @@ export default function Settings() {
       setInstanceCreated(true);
       toast.success('Instância criada com sucesso! Gerando QR Code...');
       
+      // Salvar a instância no banco de dados imediatamente
+      try {
+        const { data: newConnection, error: insertError } = await supabase
+          .from('whatsapp_connections')
+          .insert({
+            admin_id: userInfo.id,
+            instance_name: instanceName.trim(),
+            name: instanceName.trim(),
+            phone: '',
+            status: 'disconnected',
+            created_at: new Date().toISOString()
+          })
+          .select();
+          
+        if (insertError) {
+          console.error('Erro ao salvar conexão no banco:', insertError);
+          // Não exibir erro ao usuário, pois a instância foi criada com sucesso na API
+        } else if (newConnection && newConnection.length > 0) {
+          // Adicionar a nova conexão à lista em memória
+          setWhatsappConnections(prev => [
+            ...prev,
+            {
+              id: newConnection[0].id,
+              name: newConnection[0].name,
+              phone: newConnection[0].phone,
+              status: newConnection[0].status,
+              created_at: newConnection[0].created_at,
+              instance_name: newConnection[0].instance_name
+            }
+          ]);
+        }
+      } catch (dbError) {
+        console.error('Erro ao inserir conexão no banco:', dbError);
+      }
+      
       // Agora vamos buscar o QR Code
       getQRCode();
     } catch (error: any) {
