@@ -628,13 +628,18 @@ export default function Settings() {
       return;
     }
     
+    if (!userInfo || !userInfo.id) {
+      setConnectionError('Erro de autenticação. Faça login novamente.');
+      return;
+    }
+    
     try {
       setLoadingQRCode(true);
       setConnectionError('');
       
       console.log('Tentando criar instância:', instanceName.trim());
       
-      // Verificar primeiro se a instância já existe
+      // Verificar primeiro se a instância já existe na Evolution API
       try {
         const checkResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/fetchInstances`, {
           method: 'GET',
@@ -646,6 +651,32 @@ export default function Settings() {
         
         const checkData = await checkResponse.json();
         console.log('Instâncias existentes:', checkData);
+        
+        // Verificar se a instância já existe
+        if (checkData && checkData.data && Array.isArray(checkData.data)) {
+          const exists = checkData.data.some(instance => 
+            instance.instance.instanceName === instanceName.trim()
+          );
+          
+          if (exists) {
+            // Se a instância já existe na API, criar apenas no banco se não existir
+            const { data: existsInDb } = await supabase
+              .from('whatsapp_connections')
+              .select('id')
+              .eq('instance_name', instanceName.trim())
+              .eq('admin_id', userInfo.id);
+              
+            if (!existsInDb || existsInDb.length === 0) {
+              // Instância existe na API mas não no banco, então criar no banco
+              await saveInstanceToDatabase(instanceName.trim());
+              toast.success('Instância existente vinculada com sucesso!');
+            }
+            
+            setInstanceCreated(true);
+            getQRCode();
+            return;
+          }
+        }
       } catch (checkError) {
         console.error('Erro ao verificar instâncias:', checkError);
       }
@@ -685,39 +716,7 @@ export default function Settings() {
       toast.success('Instância criada com sucesso! Gerando QR Code...');
       
       // Salvar a instância no banco de dados imediatamente
-      try {
-        const { data: newConnection, error: insertError } = await supabase
-          .from('whatsapp_connections')
-          .insert({
-            admin_id: userInfo.id,
-            instance_name: instanceName.trim(),
-            name: instanceName.trim(),
-            phone: '',
-            status: 'disconnected',
-            created_at: new Date().toISOString()
-          })
-          .select();
-          
-        if (insertError) {
-          console.error('Erro ao salvar conexão no banco:', insertError);
-          // Não exibir erro ao usuário, pois a instância foi criada com sucesso na API
-        } else if (newConnection && newConnection.length > 0) {
-          // Adicionar a nova conexão à lista em memória
-          setWhatsappConnections(prev => [
-            ...prev,
-            {
-              id: newConnection[0].id,
-              name: newConnection[0].name,
-              phone: newConnection[0].phone,
-              status: newConnection[0].status,
-              created_at: newConnection[0].created_at,
-              instance_name: newConnection[0].instance_name
-            }
-          ]);
-        }
-      } catch (dbError) {
-        console.error('Erro ao inserir conexão no banco:', dbError);
-      }
+      await saveInstanceToDatabase(instanceName.trim());
       
       // Agora vamos buscar o QR Code
       getQRCode();
@@ -725,6 +724,62 @@ export default function Settings() {
       console.error('Erro ao criar instância:', error);
       setConnectionError(error.message || 'Erro ao criar instância');
       setLoadingQRCode(false);
+    }
+  };
+  
+  // Função auxiliar para salvar a instância no banco de dados
+  const saveInstanceToDatabase = async (instanceNameToSave: string) => {
+    if (!userInfo || !userInfo.id) {
+      console.error('userInfo não disponível para salvar instância');
+      return;
+    }
+    
+    try {
+      console.log('Salvando instância no banco:', instanceNameToSave, 'para admin_id:', userInfo.id);
+      
+      const { data: newConnection, error: insertError } = await supabase
+        .from('whatsapp_connections')
+        .insert([
+          {
+            admin_id: userInfo.id,
+            instance_name: instanceNameToSave,
+            name: instanceNameToSave,
+            phone: '',
+            status: 'disconnected',
+            created_at: new Date().toISOString()
+          }
+        ])
+        .select();
+        
+      console.log('Resultado insert:', newConnection, insertError);
+        
+      if (insertError) {
+        console.error('Erro ao salvar conexão no banco:', insertError);
+        toast.error('Erro ao salvar conexão no banco: ' + insertError.message);
+      } else if (newConnection && newConnection.length > 0) {
+        console.log('Conexão criada com sucesso:', newConnection[0]);
+        
+        // Adicionar a nova conexão à lista em memória
+        setWhatsappConnections(prev => [
+          ...prev,
+          {
+            id: newConnection[0].id,
+            name: newConnection[0].name,
+            phone: newConnection[0].phone || '',
+            status: newConnection[0].status || 'disconnected',
+            created_at: newConnection[0].created_at,
+            instance_name: newConnection[0].instance_name
+          }
+        ]);
+        
+        // Forçar atualização da lista de conexões
+        setTimeout(() => {
+          if (userInfo) loadWhatsAppConnections(userInfo.id);
+        }, 1000);
+      }
+    } catch (dbError: any) {
+      console.error('Erro ao inserir conexão no banco:', dbError);
+      toast.error('Erro ao inserir conexão: ' + dbError.message);
     }
   };
   
@@ -1119,11 +1174,15 @@ export default function Settings() {
     }
   };
   
-  // Verificar o status da conexão periodicamente quando o QR code estiver sendo exibido
+  // Função para verificar o status da conexão periodicamente
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     
     if (qrCodeData && instanceCreated) {
+      // Verificar imediatamente
+      checkConnectionStatus();
+      
+      // E então iniciar o intervalo
       intervalId = setInterval(() => {
         checkConnectionStatus();
       }, 5000); // Verificar a cada 5 segundos
@@ -1139,9 +1198,13 @@ export default function Settings() {
     let intervalId: NodeJS.Timeout;
     
     if (userInfo && activeTab === 'whatsapp' && !whatsappLoading) {
+      // Carregar imediatamente
+      loadWhatsAppConnections(userInfo.id);
+      
+      // E então iniciar o intervalo
       intervalId = setInterval(() => {
         loadWhatsAppConnections(userInfo.id);
-      }, 30000); // Atualizar a cada 30 segundos
+      }, 15000); // Atualizar a cada 15 segundos
     }
     
     return () => {
