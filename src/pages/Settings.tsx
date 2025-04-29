@@ -599,24 +599,59 @@ export default function Settings() {
       setLoadingQRCode(true);
       setConnectionError('');
       
-      // Buscar o QR Code da Evolution API
-      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/qrcode?instanceName=${instanceName}`, {
-        method: 'GET',
+      // Na versão 2.2.3 da Evolution API, o endpoint correto para iniciar uma conexão e obter o QR code
+      // é POST /v1/instance/init ou POST /v1/instance/{instanceName}/init
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/init`, {
+        method: 'POST',  // Importante: é um POST, não um GET
         headers: {
           'Content-Type': 'application/json',
           'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-        }
+        },
+        body: JSON.stringify({}) // Corpo vazio, mas necessário para POST
       });
       
-      const data = await response.json();
-      
+      // Alternativamente, tentamos outro formato de endpoint
       if (!response.ok) {
-        throw new Error(data.message || 'Erro ao obter QR Code');
+        const altResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connect/${instanceName}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+          },
+          body: JSON.stringify({})
+        });
+        
+        const altData = await altResponse.json();
+        
+        if (!altResponse.ok) {
+          console.error('Erro na tentativa alternativa:', altData);
+          throw new Error(altData.message || 'Erro ao obter QR Code em ambas tentativas');
+        }
+        
+        if (altData.qrcode) {
+          setQRCodeData(altData.qrcode);
+          return;
+        } else if (altData.base64) { // Alguns endpoints retornam com nome base64
+          setQRCodeData(altData.base64);
+          return;
+        } else {
+          console.error('Resposta alternativa sem QR code:', altData);
+          throw new Error('QR Code não disponível na resposta alternativa');
+        }
       }
       
+      const data = await response.json();
+      console.log('Resposta da API para QR code:', data);
+      
+      // Dependendo da versão da API, o QR code pode estar em diferentes campos
       if (data.qrcode) {
         setQRCodeData(data.qrcode);
+      } else if (data.base64) { // Alguns endpoints retornam com nome base64
+        setQRCodeData(data.base64);
+      } else if (data.qr) { // Outra possibilidade
+        setQRCodeData(data.qr);
       } else {
+        console.error('Resposta sem QR code:', data);
         throw new Error('QR Code não disponível');
       }
       
@@ -631,19 +666,14 @@ export default function Settings() {
   // Função para verificar o status da conexão periodicamente
   const checkConnectionStatus = async () => {
     try {
-      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState?instanceName=${instanceName}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-        }
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.state === 'open') {
-        // Obter informações adicionais da conexão
-        const infoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/info?instanceName=${instanceName}`, {
+      // Na Evolution API 2.2.3, o endpoint para verificar status pode ser diferente
+      // Tentamos primeiro o formato v1, depois o formato padrão
+      let isConnected = false;
+      let connectionData = null;
+
+      try {
+        // Tente o formato v1 primeiro
+        const response = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/status`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -651,17 +681,94 @@ export default function Settings() {
           }
         });
         
-        const infoData = await infoResponse.json();
+        const data = await response.json();
+        console.log('Resposta do status v1:', data);
         
-        if (infoResponse.ok && infoData.instance) {
+        // Verificar se está conectado pelo formato v1
+        if (response.ok && (data.status === 'connected' || data.status === 'open')) {
+          isConnected = true;
+          connectionData = data;
+        }
+      } catch (v1Error) {
+        console.error('Erro ao verificar status v1:', v1Error);
+      }
+      
+      // Se não tiver sucesso com o formato v1, tente o formato padrão
+      if (!isConnected) {
+        try {
+          const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState?instanceName=${instanceName}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+            }
+          });
+          
+          const data = await response.json();
+          console.log('Resposta do status padrão:', data);
+          
+          // Verificar se está conectado pelo formato padrão
+          if (response.ok && data.state === 'open') {
+            isConnected = true;
+            connectionData = data;
+          }
+        } catch (stdError) {
+          console.error('Erro ao verificar status padrão:', stdError);
+        }
+      }
+      
+      // Se está conectado, obter informações e salvar no banco
+      if (isConnected) {
+        console.log('Conexão detectada! Buscando informações...');
+        try {
+          // Tente primeiro o formato v1
+          const infoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/info`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+            }
+          });
+          
+          let infoData = await infoResponse.json();
+          console.log('Info da conexão:', infoData);
+          
+          // Se não funcionar, tente o formato padrão
+          if (!infoResponse.ok) {
+            const stdInfoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/info?instanceName=${instanceName}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+              }
+            });
+            
+            infoData = await stdInfoResponse.json();
+          }
+          
+          // Extrair informações relevantes dependendo do formato da resposta
+          let phoneNumber = '';
+          let displayName = instanceName;
+          
+          if (infoData.instance?.user?.id) {
+            phoneNumber = infoData.instance.user.id.split(':')[0] || '';
+            displayName = infoData.instance.user.name || instanceName;
+          } else if (infoData.phone) {
+            phoneNumber = infoData.phone;
+            displayName = infoData.name || instanceName;
+          } else if (infoData.wid) {
+            phoneNumber = infoData.wid.split('@')[0] || '';
+            displayName = infoData.pushname || instanceName;
+          }
+          
           // Adicionar a conexão ao banco de dados
           const { error } = await supabase
             .from('whatsapp_connections')
             .insert({
               admin_id: userInfo.id,
               instance_name: instanceName,
-              phone: infoData.instance.user?.id?.split(':')[0] || '',
-              name: infoData.instance.user?.name || instanceName,
+              phone: phoneNumber,
+              name: displayName,
               status: 'active',
               created_at: new Date().toISOString()
             });
@@ -674,6 +781,8 @@ export default function Settings() {
             loadWhatsAppConnections(userInfo.id); // Recarregar as conexões
             closeWhatsAppModal();
           }
+        } catch (infoError) {
+          console.error('Erro ao obter informações da conexão:', infoError);
         }
       }
     } catch (error: any) {
