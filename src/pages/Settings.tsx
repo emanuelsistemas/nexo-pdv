@@ -74,6 +74,8 @@ export default function Settings() {
   const navigate = useNavigate();
   // Referência para o intervalo de atualização do QR Code
   const qrCodeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Referência para o intervalo de verificação do status da conexão
+  const statusCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [activeTab, setActiveTab] = useState<'whatsapp' | 'usuarios' | 'revenda'>('whatsapp');
   const [whatsappConnections, setWhatsappConnections] = useState<WhatsAppConnection[]>([]);
@@ -670,10 +672,15 @@ export default function Settings() {
   };
   
   const closeWhatsAppModal = () => {
-    // Limpar o intervalo de atualização do QR Code ao fechar o modal
+    // Limpar os intervalos ao fechar o modal
     if (qrCodeIntervalRef.current) {
       clearInterval(qrCodeIntervalRef.current);
       qrCodeIntervalRef.current = null;
+    }
+    
+    if (statusCheckIntervalRef.current) {
+      clearInterval(statusCheckIntervalRef.current);
+      statusCheckIntervalRef.current = null;
     }
     
     setShowWhatsAppModal(false);
@@ -1086,12 +1093,78 @@ export default function Settings() {
     }
   };
   
+  // Função para verificar o status da conexão WhatsApp pela API
+  const checkWhatsAppStatus = async (instanceName: string, connectionId: string) => {
+    try {
+      console.log('Verificando status da conexão WhatsApp:', instanceName);
+      
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState/${instanceName}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('Erro ao verificar status da conexão:', response.status);
+        return;
+      }
+      
+      const data = await response.json();
+      console.log('Status atual da conexão:', data);
+      
+      // Verificar se o estado indica conexão estabelecida
+      // Na Evolution API, 'open' ou outros estados semelhantes indicam que o WhatsApp está conectado
+      if (data.state === 'open' || 
+          data.state === 'connected' ||
+          data.state === 'authenticated' ||
+          data.state === 'CONNECTED') {
+        
+        console.log('WhatsApp conectado com sucesso!');
+        
+        // Atualizar o status da conexão no banco de dados
+        const { error: updateError } = await supabase
+          .from('whatsapp_connections')
+          .update({ status: 'active' })
+          .eq('id', connectionId);
+        
+        if (updateError) {
+          console.error('Erro ao atualizar status da conexão:', updateError);
+        } else {
+          console.log('Status da conexão atualizado para active');
+          
+          // Mostrar mensagem de sucesso
+          toast.success('WhatsApp conectado com sucesso!');
+          
+          // Fechar o modal e limpar os intervalos
+          closeWhatsAppModal();
+          
+          // Atualizar a lista de conexões
+          loadWhatsAppConnections(userInfo.id);
+          
+          return true;
+        }
+      }
+      
+      return false; // Ainda não está conectado
+    } catch (error) {
+      console.error('Erro ao verificar status da conexão:', error);
+      return false;
+    }
+  };
+
   // Função para abrir o modal de conexão com uma instância existente
   const handleConnectInstance = (connectionId: string, instanceName: string) => {
-    // Limpar intervalo anterior se existir
+    // Limpar intervalos anteriores se existirem
     if (qrCodeIntervalRef.current) {
       clearInterval(qrCodeIntervalRef.current);
       qrCodeIntervalRef.current = null;
+    }
+    
+    if (statusCheckIntervalRef.current) {
+      clearInterval(statusCheckIntervalRef.current);
+      statusCheckIntervalRef.current = null;
     }
     
     setSelectedConnectionId(connectionId);
@@ -1117,6 +1190,19 @@ export default function Settings() {
         }
       }
     }, 30000); // 30 segundos - QR code geralmente expira em 45-60 segundos
+    
+    // Iniciar verificação periódica do status da conexão a cada 5 segundos
+    statusCheckIntervalRef.current = setInterval(() => {
+      if (showWhatsAppModal) {
+        checkWhatsAppStatus(instanceName, connectionId);
+      } else {
+        // Se o modal for fechado, parar o intervalo
+        if (statusCheckIntervalRef.current) {
+          clearInterval(statusCheckIntervalRef.current);
+          statusCheckIntervalRef.current = null;
+        }
+      }
+    }, 5000); // Verificar a cada 5 segundos
   };
   
   // Função para desconectar uma instância
