@@ -872,70 +872,84 @@ export default function Settings() {
       
       console.log('Tentando obter QR Code para instância:', instanceName);
       
-      // Na versão 2.2.3 da Evolution API, o endpoint correto para iniciar uma conexão e obter o QR code
-      // é POST /v1/instance/init ou POST /v1/instance/{instanceName}/init
-      const response = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/init`, {
-        method: 'POST',  // Importante: é um POST, não um GET
+      // Na Evolution API 2.2.3, o endpoint correto para obter o QR code é GET /instance/connect/{instanceName}
+      console.log('Usando o endpoint correto para Evolution API 2.2.3');
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connect/${instanceName}`, {
+        method: 'GET',  // IMPORTANTE: deve ser GET, não POST
         headers: {
           'Content-Type': 'application/json',
           'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-        },
-        body: JSON.stringify({}) // Corpo vazio, mas necessário para POST
+        }
       });
       
-      // Alternativamente, tentamos outro formato de endpoint
       if (!response.ok) {
-        console.log('Primeiro endpoint falhou, tentando alternativa...');
-        const altResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connect/${instanceName}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-          },
-          body: JSON.stringify({})
-        });
+        console.log('Endpoint principal falhou, tentando endpoints alternativos...');
+        // Tentar endpoint alternativo (compatibilidade com versões anteriores)
+        const altEndpoints = [
+          `https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/qrcode`,
+          `https://apiwhatsapp.nexopdv.com/instance/qrcode?instanceName=${instanceName}`
+        ];
         
-        const altData = await altResponse.json();
-        console.log('Resposta do endpoint alternativo:', altData);
-        
-        if (!altResponse.ok) {
-          console.error('Erro na tentativa alternativa:', altData);
-          throw new Error(altData.message || 'Erro ao obter QR Code em ambas tentativas');
+        for (const endpoint of altEndpoints) {
+          try {
+            console.log(`Tentando endpoint alternativo: ${endpoint}`);
+            const altResponse = await fetch(endpoint, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+              }
+            });
+            
+            if (altResponse.ok) {
+              const altData = await altResponse.json();
+              console.log('Resposta do endpoint alternativo:', altData);
+              
+              // Extrair QR Code de vários possíveis campos na resposta
+              if (altData.base64) {
+                console.log('QR Code encontrado no campo base64');
+                setQRCodeData(altData.base64); // Já vem com prefixo correto
+                return;
+              } else if (altData.qrcode) {
+                console.log('QR Code encontrado no campo qrcode');
+                const formattedQRCode = formatQRCodeToDataURL(altData.qrcode);
+                setQRCodeData(formattedQRCode);
+                return;
+              }
+            }
+          } catch (altError) {
+            console.error(`Erro no endpoint alternativo ${endpoint}:`, altError);
+          }
         }
         
-        // Formatar o QR Code como uma URL de dados base64
-        if (altData.qrcode) {
-          const formattedQRCode = formatQRCodeToDataURL(altData.qrcode);
-          setQRCodeData(formattedQRCode);
-          return;
-        } else if (altData.base64) { // Alguns endpoints retornam com nome base64
-          const formattedQRCode = formatQRCodeToDataURL(altData.base64);
-          setQRCodeData(formattedQRCode);
-          return;
-        } else {
-          console.error('Resposta alternativa sem QR code:', altData);
-          throw new Error('QR Code não disponível na resposta alternativa');
-        }
+        // Se chegou aqui, todas as alternativas falharam
+        throw new Error('Não foi possível obter o QR Code em nenhum endpoint');
       }
       
+      // Processando a resposta do endpoint principal
       const data = await response.json();
       console.log('Resposta da API para QR code:', data);
       
-      // Dependendo da versão da API, o QR code pode estar em diferentes campos
-      if (data.qrcode) {
+      // Na Evolution API 2.2.3, o QR Code fica no campo 'base64' e já vem formatado corretamente
+      if (data.base64) {
+        console.log('QR Code encontrado no campo base64 (formato correto do Evolution API 2.2.3)');
+        setQRCodeData(data.base64); // Já está com prefixo data:image/png;base64,
+      } 
+      // Verificar outros campos possíveis (diferentes versões/endpoints da API)
+      else if (data.qrcode) {
+        console.log('QR Code encontrado no campo qrcode');
         const formattedQRCode = formatQRCodeToDataURL(data.qrcode);
         setQRCodeData(formattedQRCode);
-      } else if (data.base64) { // Alguns endpoints retornam com nome base64
-        const formattedQRCode = formatQRCodeToDataURL(data.base64);
+      } 
+      else if (data.code) {
+        console.log('QR Code encontrado no campo code');
+        const formattedQRCode = formatQRCodeToDataURL(data.code);
         setQRCodeData(formattedQRCode);
-      } else if (data.qr) { // Outra possibilidade
-        const formattedQRCode = formatQRCodeToDataURL(data.qr);
-        setQRCodeData(formattedQRCode);
-      } else {
-        console.error('Resposta sem QR code:', data);
-        throw new Error('QR Code não disponível');
       }
-      
+      else {
+        console.error('Resposta não contém campo de QR Code conhecido:', data);
+        throw new Error('QR Code não disponível na resposta da API');
+      }  
     } catch (error: any) {
       console.error('Erro ao obter QR Code:', error);
       setConnectionError(error.message || 'Erro ao obter QR Code');
@@ -972,68 +986,83 @@ export default function Settings() {
       
       console.log('Tentando obter QR Code para instância existente:', instanceName);
       
-      // Tentar obter o QR code para a instância existente
+      // Na Evolution API 2.2.3, o endpoint correto para obter o QR code é GET /instance/connect/{instanceName}
       const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connect/${instanceName}`, {
-        method: 'POST',
+        method: 'GET', // IMPORTANTE: deve ser GET, não POST
         headers: {
           'Content-Type': 'application/json',
           'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-        },
-        body: JSON.stringify({})
+        }
       });
       
       if (!response.ok) {
-        console.log('Primeiro endpoint falhou para instância existente, tentando alternativa...');
-        // Tentar endpoint alternativo se o primeiro falhar
-        const altResponse = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/init`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-          },
-          body: JSON.stringify({})
-        });
+        console.log('Endpoint principal falhou para instância existente, tentando alternativas...');
         
-        const altData = await altResponse.json();
-        console.log('Resposta do endpoint alternativo para instância existente:', altData);
+        // Tentar endpoints alternativos um a um
+        const altEndpoints = [
+          `https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/qrcode`,
+          `https://apiwhatsapp.nexopdv.com/instance/qrcode?instanceName=${instanceName}`
+        ];
         
-        if (!altResponse.ok) {
-          console.error('Erro na tentativa alternativa:', altData);
-          throw new Error(altData.message || 'Erro ao obter QR Code');
+        for (const endpoint of altEndpoints) {
+          try {
+            console.log(`Tentando endpoint alternativo: ${endpoint}`);
+            const altResponse = await fetch(endpoint, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+              }
+            });
+            
+            if (altResponse.ok) {
+              const altData = await altResponse.json();
+              console.log('Resposta do endpoint alternativo para instância existente:', altData);
+              
+              // Processar resposta de endpoints alternativos
+              if (altData.base64) {
+                console.log('QR Code encontrado no campo base64');
+                setQRCodeData(altData.base64); // Já está com prefixo correto
+                return;
+              } else if (altData.qrcode) {
+                console.log('QR Code encontrado no campo qrcode');
+                const formattedQRCode = formatQRCodeToDataURL(altData.qrcode);
+                setQRCodeData(formattedQRCode);
+                return;
+              }
+            }
+          } catch (altError) {
+            console.error(`Erro no endpoint alternativo ${endpoint}:`, altError);
+          }
         }
         
-        if (altData.qrcode) {
-          const formattedQRCode = formatQRCodeToDataURL(altData.qrcode);
-          setQRCodeData(formattedQRCode);
-          return;
-        } else if (altData.base64) {
-          const formattedQRCode = formatQRCodeToDataURL(altData.base64);
-          setQRCodeData(formattedQRCode);
-          return;
-        } else {
-          console.error('Resposta alternativa sem QR code:', altData);
-          throw new Error('QR Code não disponível na resposta alternativa');
-        }
+        throw new Error('Não foi possível obter o QR Code em nenhum endpoint');
       }
       
+      // Processando a resposta do endpoint principal
       const data = await response.json();
       console.log('Resposta da API para QR code (instância existente):', data);
       
-      // Tentar obter o QR code de diferentes propriedades da resposta
-      if (data.qrcode) {
+      // Na Evolution API 2.2.3, o QR Code fica no campo 'base64' e já vem formatado corretamente
+      if (data.base64) {
+        console.log('QR Code encontrado no campo base64 (formato correto do Evolution API 2.2.3)');
+        setQRCodeData(data.base64); // Já está com prefixo data:image/png;base64,
+      }
+      // Verificar outros campos possíveis (diferentes versões/endpoints da API)
+      else if (data.qrcode) {
+        console.log('QR Code encontrado no campo qrcode');
         const formattedQRCode = formatQRCodeToDataURL(data.qrcode);
         setQRCodeData(formattedQRCode);
-      } else if (data.base64) {
-        const formattedQRCode = formatQRCodeToDataURL(data.base64);
-        setQRCodeData(formattedQRCode);
-      } else if (data.qr) {
-        const formattedQRCode = formatQRCodeToDataURL(data.qr);
-        setQRCodeData(formattedQRCode);
-      } else {
-        console.error('Resposta sem QR code:', data);
-        throw new Error('QR Code não disponível');
       }
-      
+      else if (data.code) {
+        console.log('QR Code encontrado no campo code');
+        const formattedQRCode = formatQRCodeToDataURL(data.code);
+        setQRCodeData(formattedQRCode);
+      }
+      else {
+        console.error('Resposta não contém campo de QR Code conhecido:', data);
+        throw new Error('QR Code não disponível na resposta da API');
+      }  
     } catch (error: any) {
       console.error('Erro ao obter QR Code:', error);
       setConnectionError(error.message || 'Erro ao obter QR Code');
