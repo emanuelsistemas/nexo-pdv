@@ -12,6 +12,22 @@ interface WhatsAppConnection {
   phone: string;
   status: 'active' | 'inactive' | 'connecting';
   created_at: string;
+  instance_name?: string;
+}
+
+// Interface para instância da Evolution API
+interface EvolutionInstance {
+  instanceName: string;
+  token: string;
+  status: string;
+  qrcode?: string;
+  number?: string;
+}
+
+// Interface para resposta do QR Code
+interface QRCodeResponse {
+  qrcode: string;
+  status: string;
 }
 
 // Interface para usuários
@@ -56,11 +72,20 @@ interface Revenda {
 export default function Settings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'whatsapp' | 'usuarios' | 'revenda'>('whatsapp');
-  const [whatsappConnections] = useState<WhatsAppConnection[]>([]);
+  const [whatsappConnections, setWhatsappConnections] = useState<WhatsAppConnection[]>([]);
+  const [whatsappLoading, setWhatsappLoading] = useState(false);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [revenda, setRevenda] = useState<Revenda | null>(null);
   const [loading, setLoading] = useState(false);
   const [revendaLoading, setRevendaLoading] = useState(false);
+  
+  // Estados para o modal de WhatsApp
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
+  const [instanceName, setInstanceName] = useState('');
+  const [qrCodeData, setQRCodeData] = useState<string>('');
+  const [loadingQRCode, setLoadingQRCode] = useState(false);
+  const [connectionError, setConnectionError] = useState('');
+  const [instanceCreated, setInstanceCreated] = useState(false);
   
   // Estados para o modal de adicionar/editar usuário
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -141,6 +166,9 @@ export default function Settings() {
     if (session.userType === 'admin' && session.reseller_id) {
       loadRevendaData(session.reseller_id);
     }
+    
+    // Carregar conexões WhatsApp
+    loadWhatsAppConnections(session.id);
   }, [navigate]);
 
   // Função para carregar os dados da revenda
@@ -446,10 +474,227 @@ export default function Settings() {
     }
   };
 
-  const handleAddWhatsAppConnection = () => {
-    // Implementar modal para adicionar nova conexão WhatsApp
-    toast.info('Funcionalidade em desenvolvimento');
+  // Função para carregar conexões WhatsApp do banco de dados
+  const loadWhatsAppConnections = async (adminId: string) => {
+    try {
+      setWhatsappLoading(true);
+      
+      // Buscar as conexões existentes na tabela do Supabase
+      const { data, error } = await supabase
+        .from('whatsapp_connections')
+        .select('*')
+        .eq('admin_id', adminId);
+        
+      if (error) {
+        throw error;
+      }
+      
+      if (data) {
+        // Converter explicitamente para o tipo WhatsAppConnection
+        const typedConnections: WhatsAppConnection[] = data.map((item: any) => ({
+          id: item.id as string,
+          name: item.name as string,
+          phone: item.phone as string,
+          status: (item.status as 'active' | 'inactive' | 'connecting') || 'inactive',
+          created_at: item.created_at as string,
+          instance_name: item.instance_name as string
+        }));
+        setWhatsappConnections(typedConnections);
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar conexões WhatsApp:', error);
+      toast.error('Erro ao carregar conexões: ' + error.message);
+    } finally {
+      setWhatsappLoading(false);
+    }
   };
+
+  const handleAddWhatsAppConnection = () => {
+    setConnectionError('');
+    setQRCodeData('');
+    setInstanceName('');
+    setInstanceCreated(false);
+    setShowWhatsAppModal(true);
+  };
+  
+  const closeWhatsAppModal = () => {
+    setShowWhatsAppModal(false);
+    setConnectionError('');
+    setQRCodeData('');
+  };
+  
+  const createInstance = async () => {
+    if (!instanceName.trim()) {
+      setConnectionError('Nome da instância é obrigatório');
+      return;
+    }
+    
+    try {
+      setLoadingQRCode(true);
+      setConnectionError('');
+      
+      console.log('Tentando criar instância:', instanceName.trim());
+      
+      // Verificar primeiro se a instância já existe
+      try {
+        const checkResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/fetchInstances`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+          }
+        });
+        
+        const checkData = await checkResponse.json();
+        console.log('Instâncias existentes:', checkData);
+      } catch (checkError) {
+        console.error('Erro ao verificar instâncias:', checkError);
+      }
+      
+      // Criar a instância na Evolution API - formato validado via curl
+      const response = await fetch('https://apiwhatsapp.nexopdv.com/instance/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        },
+        body: JSON.stringify({
+          instanceName: instanceName.trim(),
+          integration: 'WHATSAPP-BAILEYS'
+        })
+      });
+      
+      console.log('Status da resposta:', response.status, response.statusText);
+      
+      const responseText = await response.text();
+      console.log('Resposta bruta:', responseText);
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Erro ao analisar JSON:', parseError);
+        throw new Error(`Erro no formato da resposta: ${responseText.substring(0, 100)}...`);
+      }
+      
+      if (!response.ok) {
+        console.error('Erro detalhado:', data);
+        throw new Error(data.message || data.error || 'Erro ao criar instância');
+      }
+      
+      setInstanceCreated(true);
+      toast.success('Instância criada com sucesso! Gerando QR Code...');
+      
+      // Agora vamos buscar o QR Code
+      getQRCode();
+    } catch (error: any) {
+      console.error('Erro ao criar instância:', error);
+      setConnectionError(error.message || 'Erro ao criar instância');
+      setLoadingQRCode(false);
+    }
+  };
+  
+  const getQRCode = async () => {
+    try {
+      setLoadingQRCode(true);
+      setConnectionError('');
+      
+      // Buscar o QR Code da Evolution API
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/qrcode?instanceName=${instanceName}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Erro ao obter QR Code');
+      }
+      
+      if (data.qrcode) {
+        setQRCodeData(data.qrcode);
+      } else {
+        throw new Error('QR Code não disponível');
+      }
+      
+    } catch (error: any) {
+      console.error('Erro ao obter QR Code:', error);
+      setConnectionError(error.message || 'Erro ao obter QR Code');
+    } finally {
+      setLoadingQRCode(false);
+    }
+  };
+  
+  // Função para verificar o status da conexão periodicamente
+  const checkConnectionStatus = async () => {
+    try {
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState?instanceName=${instanceName}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.state === 'open') {
+        // Obter informações adicionais da conexão
+        const infoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/info?instanceName=${instanceName}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+          }
+        });
+        
+        const infoData = await infoResponse.json();
+        
+        if (infoResponse.ok && infoData.instance) {
+          // Adicionar a conexão ao banco de dados
+          const { error } = await supabase
+            .from('whatsapp_connections')
+            .insert({
+              admin_id: userInfo.id,
+              instance_name: instanceName,
+              phone: infoData.instance.user?.id?.split(':')[0] || '',
+              name: infoData.instance.user?.name || instanceName,
+              status: 'active',
+              created_at: new Date().toISOString()
+            });
+            
+          if (error) {
+            console.error('Erro ao salvar conexão:', error);
+            toast.error('Erro ao salvar conexão: ' + error.message);
+          } else {
+            toast.success('WhatsApp conectado com sucesso!');
+            loadWhatsAppConnections(userInfo.id); // Recarregar as conexões
+            closeWhatsAppModal();
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Erro ao verificar status da conexão:', error);
+    }
+  };
+  
+  // Verificar o status da conexão periodicamente quando o QR code estiver sendo exibido
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
+    if (qrCodeData && instanceCreated) {
+      intervalId = setInterval(() => {
+        checkConnectionStatus();
+      }, 5000); // Verificar a cada 5 segundos
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [qrCodeData, instanceCreated]);
 
   const handleAddUsuario = () => {
     // Limpar os dados do formulário e abrir o modal para adicionar novo usuário
@@ -1197,7 +1442,7 @@ export default function Settings() {
           {activeTab === 'whatsapp' && (
             <div>
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold text-white">Conexões WhatsApp</h2>
+                <h2 className="text-xl font-semibold text-white">Configurações do WhatsApp</h2>
                 <button
                   onClick={handleAddWhatsAppConnection}
                   className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-2 transition-colors"
@@ -1214,21 +1459,28 @@ export default function Settings() {
                       <tr className="bg-[#353535] text-left">
                         <th className="p-4 text-gray-300 font-medium">Nome</th>
                         <th className="p-4 text-gray-300 font-medium">Número</th>
+                        <th className="p-4 text-gray-300 font-medium">Instância</th>
                         <th className="p-4 text-gray-300 font-medium">Status</th>
                         <th className="p-4 text-gray-300 font-medium">Criado em</th>
                         <th className="p-4 text-gray-300 font-medium">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800">
-                      {loading ? (
+                      {whatsappLoading ? (
                         <tr>
-                          <td colSpan={5} className="p-4 text-center text-gray-400">
-                            Carregando conexões...
+                          <td colSpan={6} className="p-4 text-center text-gray-400">
+                            <div className="flex justify-center items-center">
+                              <svg className="animate-spin mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Carregando conexões...
+                            </div>
                           </td>
                         </tr>
                       ) : whatsappConnections.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="p-4 text-center text-gray-400">
+                          <td colSpan={6} className="p-4 text-center text-gray-400">
                             Nenhuma conexão WhatsApp configurada. Clique em "Adicionar Conexão" para começar.
                           </td>
                         </tr>
@@ -1237,6 +1489,7 @@ export default function Settings() {
                           <tr key={connection.id} className="hover:bg-[#333]">
                             <td className="p-4 text-white">{connection.name}</td>
                             <td className="p-4 text-white">{connection.phone}</td>
+                            <td className="p-4 text-white">{connection.instance_name || 'N/A'}</td>
                             <td className="p-4">
                               <span
                                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -1446,6 +1699,136 @@ export default function Settings() {
           )}
         </div>
       </div>
+      
+      {/* Modal para adicionar conexão WhatsApp */}
+      {showWhatsAppModal && (
+        <div className="fixed inset-0 bg-black/50 z-50">
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#2A2A2A] rounded-lg shadow-lg border border-gray-800 p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold text-white mb-4">Adicionar conexão WhatsApp</h3>
+              
+              {!instanceCreated ? (
+                <>
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-300 mb-1" htmlFor="instanceName">
+                      Nome da instância
+                    </label>
+                    <input
+                      id="instanceName"
+                      value={instanceName}
+                      onChange={(e) => setInstanceName(e.target.value)}
+                      placeholder="Nome da instância (ex: loja-principal)"
+                      className="w-full p-2 bg-[#333] border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Use apenas letras, números e hífen. Sem espaços.</p>
+                  </div>
+                  
+                  {connectionError && (
+                    <div className="mb-4 p-2 bg-red-900/50 text-red-100 rounded border border-red-700">
+                      {connectionError}
+                    </div>
+                  )}
+                  
+                  <div className="flex justify-end space-x-2">
+                    <button
+                      onClick={closeWhatsAppModal}
+                      className="px-4 py-2 border border-gray-700 rounded text-gray-300 hover:bg-gray-700"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={createInstance}
+                      disabled={loadingQRCode}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-emerald-800/50 disabled:cursor-not-allowed flex items-center"
+                    >
+                      {loadingQRCode ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Criando...
+                        </>
+                      ) : (
+                        'Criar instância'
+                      )}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-4 text-center">
+                    <p className="mb-4 text-gray-300">
+                      Escaneie o QR Code abaixo com seu celular para conectar o WhatsApp:
+                    </p>
+                    
+                    <div className="bg-white p-4 rounded-lg mx-auto w-[220px] h-[220px] flex items-center justify-center">
+                      {loadingQRCode ? (
+                        <div className="flex flex-col items-center justify-center">
+                          <svg className="animate-spin h-10 w-10 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <p className="mt-2 text-gray-600">Gerando QR Code...</p>
+                        </div>
+                      ) : qrCodeData ? (
+                        <img
+                          src={qrCodeData}
+                          alt="QR Code para conexão WhatsApp"
+                          className="w-full h-full object-contain"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <p className="mt-2 text-red-500">Erro ao gerar QR Code</p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {connectionError && (
+                      <div className="mt-4 p-2 bg-red-900/50 text-red-100 rounded border border-red-700">
+                        {connectionError}
+                      </div>
+                    )}
+                    
+                    <p className="mt-4 text-gray-400 text-sm">
+                      Após escanear, o sistema verificará automaticamente a conexão.
+                    </p>
+                  </div>
+                  
+                  <div className="flex justify-end space-x-2">
+                    <button
+                      onClick={closeWhatsAppModal}
+                      className="px-4 py-2 border border-gray-700 rounded text-gray-300 hover:bg-gray-700"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={getQRCode}
+                      disabled={loadingQRCode}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-emerald-800/50 disabled:cursor-not-allowed flex items-center"
+                    >
+                      {loadingQRCode ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Gerando...
+                        </>
+                      ) : (
+                        'Tentar novamente'
+                      )}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Modal para adicionar/editar usuário */}
       {showAddUserModal && (
