@@ -483,6 +483,13 @@ export default function Settings() {
   // Função para carregar conexões WhatsApp do banco de dados
   const loadWhatsAppConnections = async (adminId: string) => {
     try {
+      // Verificar se adminId é válido (não vazio)
+      if (!adminId) {
+        console.error('AdminId inválido ou vazio:', adminId);
+        setWhatsappLoading(false);
+        return;
+      }
+      
       console.log('Carregando conexões WhatsApp para adminId:', adminId);
       setWhatsappLoading(true);
       
@@ -494,6 +501,7 @@ export default function Settings() {
         .single();
         
       if (adminError) {
+        console.error('Erro ao obter dados do administrador:', adminError);
         throw new Error('Erro ao obter dados do administrador: ' + adminError.message);
       }
       
@@ -787,6 +795,12 @@ export default function Settings() {
     }
     
     try {
+      // Verificar se userInfo.id é válido
+      if (!userInfo.id || userInfo.id.trim() === '') {
+        console.error('ID do usuário inválido ou vazio');
+        throw new Error('ID do usuário inválido. Faça login novamente.');
+      }
+      
       console.log('Salvando instância no banco:', instanceNameToSave, 'para admin_id:', userInfo.id);
       
       // Obter o reseller_id do admin logado
@@ -1304,16 +1318,19 @@ export default function Settings() {
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     
-    if (userInfo && activeTab === 'whatsapp') {
-      // Carregar imediatamente
-      loadWhatsAppConnections(userInfo.id);
-      
-      // E então iniciar o intervalo
-      intervalId = setInterval(() => {
-        if (!whatsappLoading) {
-          loadWhatsAppConnections(userInfo.id);
-        }
-      }, 10000); // Atualizar a cada 10 segundos
+    if (userInfo && userInfo.id && activeTab === 'whatsapp') {
+      // Verificar se userInfo.id existe e é válido
+      if (userInfo.id && userInfo.id.trim() !== '') {
+        // Carregar imediatamente
+        loadWhatsAppConnections(userInfo.id);
+        
+        // E então iniciar o intervalo
+        intervalId = setInterval(() => {
+          if (!whatsappLoading && userInfo && userInfo.id) {
+            loadWhatsAppConnections(userInfo.id);
+          }
+        }, 10000); // Atualizar a cada 10 segundos
+      }
     }
     
     return () => {
