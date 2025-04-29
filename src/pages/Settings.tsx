@@ -10,9 +10,9 @@ interface WhatsAppConnection {
   id: string;
   name: string;
   phone: string;
-  status: 'active' | 'inactive' | 'connecting';
+  status: 'active' | 'inactive' | 'connecting' | 'disconnected';
   created_at: string;
-  instance_name?: string;
+  instance_name: string;
 }
 
 // Interface para instância da Evolution API
@@ -86,6 +86,11 @@ export default function Settings() {
   const [loadingQRCode, setLoadingQRCode] = useState(false);
   const [connectionError, setConnectionError] = useState('');
   const [instanceCreated, setInstanceCreated] = useState(false);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [selectedInstance, setSelectedInstance] = useState<string>('');
+  const [loadingAction, setLoadingAction] = useState<{id: string, action: string} | null>(null);
+  const [showDeleteConfirmWhatsapp, setShowDeleteConfirmWhatsapp] = useState(false);
+  const [instanceToDelete, setInstanceToDelete] = useState<{id: string, name: string, instance: string} | null>(null);
   
   // Estados para o modal de adicionar/editar usuário
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -489,18 +494,108 @@ export default function Settings() {
         throw error;
       }
       
+      let typedConnections: WhatsAppConnection[] = [];
+      
       if (data) {
         // Converter explicitamente para o tipo WhatsAppConnection
-        const typedConnections: WhatsAppConnection[] = data.map((item: any) => ({
+        typedConnections = data.map((item: any) => ({
           id: item.id as string,
           name: item.name as string,
           phone: item.phone as string,
-          status: (item.status as 'active' | 'inactive' | 'connecting') || 'inactive',
+          status: (item.status as 'active' | 'inactive' | 'connecting' | 'disconnected') || 'inactive',
           created_at: item.created_at as string,
           instance_name: item.instance_name as string
         }));
-        setWhatsappConnections(typedConnections);
       }
+      
+      // Buscar todas as instâncias na Evolution API
+      try {
+        const response = await fetch('https://apiwhatsapp.nexopdv.com/instance/fetchInstances', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+          }
+        });
+        
+        if (response.ok) {
+          const apiInstances = await response.json();
+          console.log('Instâncias da API:', apiInstances);
+          
+          if (apiInstances && apiInstances.data && Array.isArray(apiInstances.data)) {
+            // Para cada instância da API, verificar se já existe no banco
+            for (const instance of apiInstances.data) {
+              // Buscar o status da instância
+              let instanceStatus = 'disconnected';
+              try {
+                const statusResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState?instanceName=${instance.instance.instanceName}`, {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+                  }
+                });
+                
+                if (statusResponse.ok) {
+                  const statusData = await statusResponse.json();
+                  instanceStatus = statusData.state === 'open' ? 'active' : 'disconnected';
+                }
+              } catch (statusError) {
+                console.error('Erro ao verificar status da instância:', statusError);
+              }
+              
+              // Verificar se a instância já existe no banco
+              const existingConnection = typedConnections.find(conn => 
+                conn.instance_name === instance.instance.instanceName
+              );
+              
+              if (existingConnection) {
+                // Atualizar o status da instância existente
+                if (existingConnection.status !== instanceStatus) {
+                  await supabase
+                    .from('whatsapp_connections')
+                    .update({ status: instanceStatus })
+                    .eq('id', existingConnection.id);
+                    
+                  // Atualizar na lista em memória
+                  existingConnection.status = instanceStatus as any;
+                }
+              } else {
+                // Criar nova conexão no banco para instância encontrada na API
+                const { data: newConn, error: insertError } = await supabase
+                  .from('whatsapp_connections')
+                  .insert({
+                    admin_id: adminId,
+                    instance_name: instance.instance.instanceName,
+                    name: instance.instance.instanceName,
+                    phone: '',  // Podemos tentar buscar mais informações se necessário
+                    status: instanceStatus,
+                    created_at: new Date().toISOString()
+                  })
+                  .select();
+                  
+                if (insertError) {
+                  console.error('Erro ao inserir nova conexão:', insertError);
+                } else if (newConn && newConn.length > 0) {
+                  // Adicionar a nova conexão à lista
+                  typedConnections.push({
+                    id: newConn[0].id,
+                    name: newConn[0].name,
+                    phone: newConn[0].phone,
+                    status: newConn[0].status,
+                    created_at: newConn[0].created_at,
+                    instance_name: newConn[0].instance_name
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (apiError) {
+        console.error('Erro ao buscar instâncias da API:', apiError);
+      }
+      
+      setWhatsappConnections(typedConnections);
     } catch (error: any) {
       console.error('Erro ao carregar conexões WhatsApp:', error);
       toast.error('Erro ao carregar conexões: ' + error.message);
@@ -514,6 +609,8 @@ export default function Settings() {
     setQRCodeData('');
     setInstanceName('');
     setInstanceCreated(false);
+    setSelectedConnectionId(null);
+    setSelectedInstance('');
     setShowWhatsAppModal(true);
   };
   
@@ -521,6 +618,8 @@ export default function Settings() {
     setShowWhatsAppModal(false);
     setConnectionError('');
     setQRCodeData('');
+    setSelectedConnectionId(null);
+    setSelectedInstance('');
   };
   
   const createInstance = async () => {
@@ -664,12 +763,207 @@ export default function Settings() {
   };
   
   // Função para verificar o status da conexão periodicamente
+  const getQRCodeForExistingInstance = async (instanceName: string) => {
+    try {
+      setLoadingQRCode(true);
+      setConnectionError('');
+      
+      // Tentar obter o QR code para a instância existente
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connect/${instanceName}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        },
+        body: JSON.stringify({})
+      });
+      
+      if (!response.ok) {
+        // Tentar endpoint alternativo se o primeiro falhar
+        const altResponse = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/init`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+          },
+          body: JSON.stringify({})
+        });
+        
+        const altData = await altResponse.json();
+        
+        if (!altResponse.ok) {
+          console.error('Erro na tentativa alternativa:', altData);
+          throw new Error(altData.message || 'Erro ao obter QR Code');
+        }
+        
+        if (altData.qrcode) {
+          setQRCodeData(altData.qrcode);
+          return;
+        } else if (altData.base64) {
+          setQRCodeData(altData.base64);
+          return;
+        } else {
+          console.error('Resposta alternativa sem QR code:', altData);
+          throw new Error('QR Code não disponível na resposta alternativa');
+        }
+      }
+      
+      const data = await response.json();
+      console.log('Resposta da API para QR code:', data);
+      
+      // Tentar obter o QR code de diferentes propriedades da resposta
+      if (data.qrcode) {
+        setQRCodeData(data.qrcode);
+      } else if (data.base64) {
+        setQRCodeData(data.base64);
+      } else if (data.qr) {
+        setQRCodeData(data.qr);
+      } else {
+        console.error('Resposta sem QR code:', data);
+        throw new Error('QR Code não disponível');
+      }
+      
+    } catch (error: any) {
+      console.error('Erro ao obter QR Code:', error);
+      setConnectionError(error.message || 'Erro ao obter QR Code');
+    } finally {
+      setLoadingQRCode(false);
+    }
+  };
+  
+  // Função para abrir o modal de conexão com uma instância existente
+  const handleConnectInstance = (connectionId: string, instanceName: string) => {
+    setSelectedConnectionId(connectionId);
+    setSelectedInstance(instanceName);
+    setConnectionError('');
+    setQRCodeData('');
+    setInstanceCreated(true); // Indicar que não precisamos criar a instância
+    setShowWhatsAppModal(true);
+    
+    // Após abrir o modal, gerar o QR code
+    getQRCodeForExistingInstance(instanceName);
+  };
+  
+  // Função para desconectar uma instância
+  const handleDisconnectInstance = async (connectionId: string, instanceName: string) => {
+    try {
+      setLoadingAction({id: connectionId, action: 'disconnect'});
+      
+      // Chamar a API para fazer logout da instância
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/logout`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        },
+        body: JSON.stringify({ instanceName })
+      });
+      
+      if (!response.ok) {
+        // Tentar endpoint alternativo
+        const altResponse = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+          },
+          body: JSON.stringify({})
+        });
+        
+        if (!altResponse.ok) {
+          const altData = await altResponse.json();
+          console.error('Erro ao desconectar (alternativo):', altData);
+          throw new Error(altData.message || 'Erro ao desconectar instância');
+        }
+      }
+      
+      // Atualizar o status no banco de dados
+      const { error } = await supabase
+        .from('whatsapp_connections')
+        .update({ status: 'disconnected' })
+        .eq('id', connectionId);
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Atualizar a lista de conexões na interface
+      setWhatsappConnections(prev => 
+        prev.map(conn => 
+          conn.id === connectionId ? { ...conn, status: 'disconnected' } : conn
+        )
+      );
+      
+      toast.success('WhatsApp desconectado com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao desconectar instância:', error);
+      toast.error('Erro ao desconectar: ' + error.message);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+  
+  // Função para confirmar a exclusão de uma instância
+  const handleConfirmDeleteInstance = (connectionId: string, name: string, instanceName: string) => {
+    setInstanceToDelete({ id: connectionId, name, instance: instanceName });
+    setShowDeleteConfirmWhatsapp(true);
+  };
+  
+  // Função para cancelar a exclusão
+  const handleCancelDeleteInstance = () => {
+    setInstanceToDelete(null);
+    setShowDeleteConfirmWhatsapp(false);
+  };
+  
+  // Função para excluir a instância
+  const handleDeleteInstance = async () => {
+    if (!instanceToDelete) return;
+    
+    try {
+      setLoadingAction({id: instanceToDelete.id, action: 'delete'});
+      
+      // Chamar a API para excluir a instância
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/delete`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        },
+        body: JSON.stringify({ instanceName: instanceToDelete.instance })
+      });
+      
+      // Excluir o registro no banco de dados independentemente do resultado da API
+      const { error } = await supabase
+        .from('whatsapp_connections')
+        .delete()
+        .eq('id', instanceToDelete.id);
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Remover a conexão da lista na interface
+      setWhatsappConnections(prev => 
+        prev.filter(conn => conn.id !== instanceToDelete.id)
+      );
+      
+      toast.success(`Instância ${instanceToDelete.name} excluída com sucesso!`);
+    } catch (error: any) {
+      console.error('Erro ao excluir instância:', error);
+      toast.error('Erro ao excluir: ' + error.message);
+    } finally {
+      setLoadingAction(null);
+      setInstanceToDelete(null);
+      setShowDeleteConfirmWhatsapp(false);
+    }
+  };
+  
   const checkConnectionStatus = async () => {
     try {
       // Na Evolution API 2.2.3, o endpoint para verificar status pode ser diferente
       // Tentamos primeiro o formato v1, depois o formato padrão
       let isConnected = false;
-      let connectionData = null;
+      let connectionDetails = null;
 
       try {
         // Tente o formato v1 primeiro
@@ -687,7 +981,7 @@ export default function Settings() {
         // Verificar se está conectado pelo formato v1
         if (response.ok && (data.status === 'connected' || data.status === 'open')) {
           isConnected = true;
-          connectionData = data;
+          connectionDetails = data;
         }
       } catch (v1Error) {
         console.error('Erro ao verificar status v1:', v1Error);
@@ -710,7 +1004,7 @@ export default function Settings() {
           // Verificar se está conectado pelo formato padrão
           if (response.ok && data.state === 'open') {
             isConnected = true;
-            connectionData = data;
+            connectionDetails = data;
           }
         } catch (stdError) {
           console.error('Erro ao verificar status padrão:', stdError);
@@ -804,6 +1098,21 @@ export default function Settings() {
       if (intervalId) clearInterval(intervalId);
     };
   }, [qrCodeData, instanceCreated]);
+  
+  // Atualizar periodicamente o status de todas as conexões
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+    
+    if (userInfo && activeTab === 'whatsapp' && !whatsappLoading) {
+      intervalId = setInterval(() => {
+        loadWhatsAppConnections(userInfo.id);
+      }, 30000); // Atualizar a cada 30 segundos
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [userInfo, activeTab, whatsappLoading]);
 
   const handleAddUsuario = () => {
     // Limpar os dados do formulário e abrir o modal para adicionar novo usuário
@@ -939,7 +1248,7 @@ export default function Settings() {
           .select('id, email')
           .eq('email', email)
           .maybeSingle();
-          
+
         if (adminError) {
           console.error('Erro ao verificar email na tabela profile_admin:', adminError);
           throw adminError;
@@ -1194,7 +1503,7 @@ export default function Settings() {
             <li>
               <button
                 onClick={handleLogout}
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-red-400 hover:bg-red-400 hover:text-white hover:bg-opacity-20 transition-colors w-full text-left group relative`}
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-red-400 hover:text-white hover:bg-red-400 hover:bg-opacity-20 transition-colors w-full text-left group relative`}
               >
                 <LogOut size={isSidebarCollapsed ? 22 : 18} />
                 {!isSidebarCollapsed && <span>Sair</span>}
@@ -1606,13 +1915,17 @@ export default function Settings() {
                                     ? 'bg-green-100 text-green-800'
                                     : connection.status === 'connecting'
                                     ? 'bg-yellow-100 text-yellow-800'
+                                    : connection.status === 'disconnected'
+                                    ? 'bg-orange-100 text-orange-800'
                                     : 'bg-red-100 text-red-800'
                                 }`}
                               >
                                 {connection.status === 'active'
-                                  ? 'Ativo'
+                                  ? 'Conectado'
                                   : connection.status === 'connecting'
                                   ? 'Conectando'
+                                  : connection.status === 'disconnected'
+                                  ? 'Desconectado'
                                   : 'Inativo'}
                               </span>
                             </td>
@@ -1621,20 +1934,56 @@ export default function Settings() {
                             </td>
                             <td className="p-4">
                               <div className="flex items-center gap-2">
+                                {connection.status === 'active' ? (
+                                  <button
+                                    className="p-1 text-orange-400 hover:text-orange-300 rounded-lg flex items-center gap-1"
+                                    title="Desconectar"
+                                    onClick={() => handleDisconnectInstance(connection.id, connection.instance_name)}
+                                    disabled={loadingAction?.id === connection.id}
+                                  >
+                                    {loadingAction?.id === connection.id && loadingAction?.action === 'disconnect' ? (
+                                      <svg className="animate-spin h-4 w-4 text-orange-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                    ) : (
+                                      <LogOut size={18} />
+                                    )}
+                                    <span className="hidden sm:inline">Desconectar</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    className="p-1 text-green-400 hover:text-green-300 rounded-lg flex items-center gap-1"
+                                    title="Conectar"
+                                    onClick={() => handleConnectInstance(connection.id, connection.instance_name)}
+                                    disabled={loadingAction?.id === connection.id}
+                                  >
+                                    {loadingAction?.id === connection.id && loadingAction?.action === 'connect' ? (
+                                      <svg className="animate-spin h-4 w-4 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                    ) : (
+                                      <MessageSquare size={18} />
+                                    )}
+                                    <span className="hidden sm:inline">Conectar</span>
+                                  </button>
+                                )}
                                 <button
-                                  className="p-1 text-blue-400 hover:text-blue-300 rounded-lg"
-                                  title="Editar"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                                  </svg>
-                                </button>
-                                <button
-                                  className="p-1 text-red-400 hover:text-red-300 rounded-lg"
+                                  className="p-1 text-red-400 hover:text-red-300 rounded-lg flex items-center gap-1"
                                   title="Excluir"
+                                  onClick={() => handleConfirmDeleteInstance(connection.id, connection.name, connection.instance_name)}
+                                  disabled={loadingAction?.id === connection.id}
                                 >
-                                  <Trash2 size={18} />
+                                  {loadingAction?.id === connection.id && loadingAction?.action === 'delete' ? (
+                                    <svg className="animate-spin h-4 w-4 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                  ) : (
+                                    <Trash2 size={18} />
+                                  )}
+                                  <span className="hidden sm:inline">Excluir</span>
                                 </button>
                               </div>
                             </td>
@@ -1808,8 +2157,54 @@ export default function Settings() {
           )}
         </div>
       </div>
-      
-      {/* Modal para adicionar conexão WhatsApp */}
+
+      {/* Modal de confirmação para excluir conexão WhatsApp */}
+      {showDeleteConfirmWhatsapp && instanceToDelete && (
+        <div className="fixed inset-0 bg-black/50 z-50">
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#2A2A2A] rounded-lg shadow-lg border border-gray-800 p-6 w-full max-w-md">
+              <h2 className="text-base font-semibold leading-7 text-white mb-3">
+                Confirmar exclusão
+              </h2>
+              
+              <p className="text-gray-300 mb-4">
+                Tem certeza que deseja excluir a instância <strong>{instanceToDelete.name}</strong>? Esta ação não pode ser desfeita.
+              </p>
+              
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  type="button"
+                  className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+                  onClick={handleCancelDeleteInstance}
+                  disabled={loadingAction?.id === instanceToDelete.id}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 transition-colors"
+                  onClick={handleDeleteInstance}
+                  disabled={loadingAction?.id === instanceToDelete.id}
+                >
+                  {loadingAction?.id === instanceToDelete.id && loadingAction?.action === 'delete' ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Excluindo...
+                    </>
+                  ) : (
+                    <>Excluir</>                    
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para adicionar ou conectar WhatsApp */}
       {showWhatsAppModal && (
         <div className="fixed inset-0 bg-black/50 z-50">
           <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
