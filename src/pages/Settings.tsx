@@ -856,6 +856,8 @@ export default function Settings() {
       setLoadingQRCode(true);
       setConnectionError('');
       
+      console.log('Tentando obter QR Code para instância:', instanceName);
+      
       // Na versão 2.2.3 da Evolution API, o endpoint correto para iniciar uma conexão e obter o QR code
       // é POST /v1/instance/init ou POST /v1/instance/{instanceName}/init
       const response = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/init`, {
@@ -869,6 +871,7 @@ export default function Settings() {
       
       // Alternativamente, tentamos outro formato de endpoint
       if (!response.ok) {
+        console.log('Primeiro endpoint falhou, tentando alternativa...');
         const altResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connect/${instanceName}`, {
           method: 'POST',
           headers: {
@@ -879,17 +882,21 @@ export default function Settings() {
         });
         
         const altData = await altResponse.json();
+        console.log('Resposta do endpoint alternativo:', altData);
         
         if (!altResponse.ok) {
           console.error('Erro na tentativa alternativa:', altData);
           throw new Error(altData.message || 'Erro ao obter QR Code em ambas tentativas');
         }
         
+        // Formatar o QR Code como uma URL de dados base64
         if (altData.qrcode) {
-          setQRCodeData(altData.qrcode);
+          const formattedQRCode = formatQRCodeToDataURL(altData.qrcode);
+          setQRCodeData(formattedQRCode);
           return;
         } else if (altData.base64) { // Alguns endpoints retornam com nome base64
-          setQRCodeData(altData.base64);
+          const formattedQRCode = formatQRCodeToDataURL(altData.base64);
+          setQRCodeData(formattedQRCode);
           return;
         } else {
           console.error('Resposta alternativa sem QR code:', altData);
@@ -902,11 +909,14 @@ export default function Settings() {
       
       // Dependendo da versão da API, o QR code pode estar em diferentes campos
       if (data.qrcode) {
-        setQRCodeData(data.qrcode);
+        const formattedQRCode = formatQRCodeToDataURL(data.qrcode);
+        setQRCodeData(formattedQRCode);
       } else if (data.base64) { // Alguns endpoints retornam com nome base64
-        setQRCodeData(data.base64);
+        const formattedQRCode = formatQRCodeToDataURL(data.base64);
+        setQRCodeData(formattedQRCode);
       } else if (data.qr) { // Outra possibilidade
-        setQRCodeData(data.qr);
+        const formattedQRCode = formatQRCodeToDataURL(data.qr);
+        setQRCodeData(formattedQRCode);
       } else {
         console.error('Resposta sem QR code:', data);
         throw new Error('QR Code não disponível');
@@ -920,11 +930,33 @@ export default function Settings() {
     }
   };
   
+  // Função para formatar o QR Code base64 em um formato que pode ser usado em src de <img>
+  const formatQRCodeToDataURL = (qrCodeBase64: string): string => {
+    // Se já começar com 'data:', é um dataURL válido
+    if (qrCodeBase64.startsWith('data:')) {
+      return qrCodeBase64;
+    }
+    
+    // Se começar com 'http', é uma URL de imagem
+    if (qrCodeBase64.startsWith('http')) {
+      return qrCodeBase64;
+    }
+    
+    // Limpar formatações que podem vir com o base64
+    let cleanBase64 = qrCodeBase64.replace(/^data:image\/(png|jpg|jpeg|gif);base64,/, '');
+    cleanBase64 = cleanBase64.replace(/\n/g, '');
+    
+    // Adicionar o prefixo correto para uma imagem em base64
+    return `data:image/png;base64,${cleanBase64}`;
+  };
+  
   // Função para verificar o status da conexão periodicamente
   const getQRCodeForExistingInstance = async (instanceName: string) => {
     try {
       setLoadingQRCode(true);
       setConnectionError('');
+      
+      console.log('Tentando obter QR Code para instância existente:', instanceName);
       
       // Tentar obter o QR code para a instância existente
       const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connect/${instanceName}`, {
@@ -937,6 +969,7 @@ export default function Settings() {
       });
       
       if (!response.ok) {
+        console.log('Primeiro endpoint falhou para instância existente, tentando alternativa...');
         // Tentar endpoint alternativo se o primeiro falhar
         const altResponse = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/init`, {
           method: 'POST',
@@ -948,6 +981,7 @@ export default function Settings() {
         });
         
         const altData = await altResponse.json();
+        console.log('Resposta do endpoint alternativo para instância existente:', altData);
         
         if (!altResponse.ok) {
           console.error('Erro na tentativa alternativa:', altData);
@@ -955,10 +989,12 @@ export default function Settings() {
         }
         
         if (altData.qrcode) {
-          setQRCodeData(altData.qrcode);
+          const formattedQRCode = formatQRCodeToDataURL(altData.qrcode);
+          setQRCodeData(formattedQRCode);
           return;
         } else if (altData.base64) {
-          setQRCodeData(altData.base64);
+          const formattedQRCode = formatQRCodeToDataURL(altData.base64);
+          setQRCodeData(formattedQRCode);
           return;
         } else {
           console.error('Resposta alternativa sem QR code:', altData);
@@ -967,15 +1003,18 @@ export default function Settings() {
       }
       
       const data = await response.json();
-      console.log('Resposta da API para QR code:', data);
+      console.log('Resposta da API para QR code (instância existente):', data);
       
       // Tentar obter o QR code de diferentes propriedades da resposta
       if (data.qrcode) {
-        setQRCodeData(data.qrcode);
+        const formattedQRCode = formatQRCodeToDataURL(data.qrcode);
+        setQRCodeData(formattedQRCode);
       } else if (data.base64) {
-        setQRCodeData(data.base64);
+        const formattedQRCode = formatQRCodeToDataURL(data.base64);
+        setQRCodeData(formattedQRCode);
       } else if (data.qr) {
-        setQRCodeData(data.qr);
+        const formattedQRCode = formatQRCodeToDataURL(data.qr);
+        setQRCodeData(formattedQRCode);
       } else {
         console.error('Resposta sem QR code:', data);
         throw new Error('QR Code não disponível');
@@ -2459,6 +2498,11 @@ export default function Settings() {
                           src={qrCodeData}
                           alt="QR Code para conexão WhatsApp"
                           className="w-full h-full object-contain"
+                          onError={(e) => {
+                            console.error('Erro ao carregar imagem do QR Code');
+                            setConnectionError('Erro ao exibir QR Code. Tente novamente.');
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
                         />
                       ) : (
                         <div className="flex flex-col items-center justify-center">
