@@ -2522,19 +2522,9 @@ export default function Settings() {
                     </div>
                     
                     <div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <label className="text-sm font-medium text-gray-300">Horário de funcionamento</label>
-                          <p className="text-xs text-gray-400">Definir quando o chat estará disponível</p>
-                        </div>
-                        <div className="flex items-center">
-                          <input 
-                            type="checkbox" 
-                            id="24hours" 
-                            className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                          />
-                          <label htmlFor="24hours" className="ml-2 text-sm font-medium text-gray-300">24 horas</label>
-                        </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-300">Horário de funcionamento</label>
+                        <p className="text-xs text-gray-400">Defina os dias e horários em que o chat estará disponível</p>
                       </div>
                       
                       <div className="mt-3 bg-[#333] border border-gray-700 rounded-lg p-4">
