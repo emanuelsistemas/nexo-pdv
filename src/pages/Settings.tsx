@@ -1618,6 +1618,11 @@ export default function Settings() {
       statusCheckIntervalRef.current = null;
     }
     
+    if (qrCodeIntervalRef.current) {
+      clearInterval(qrCodeIntervalRef.current);
+      qrCodeIntervalRef.current = null;
+    }
+    
     // Inicia a geração do QR code para esta instância
     if (instanceName) {
       getQRCodeForExistingInstance(instanceName, connectionId);
@@ -1626,6 +1631,20 @@ export default function Settings() {
       statusCheckIntervalRef.current = setInterval(() => {
         checkConnectionStatus();
       }, 3000); // Verificar a cada 3 segundos
+      
+      // Configurar atualização automática do QR code a cada 30 segundos
+      qrCodeIntervalRef.current = setInterval(() => {
+        if (connectionStatus !== 'connected') {
+          console.log('Atualizando QR code automaticamente após 30 segundos');
+          getQRCodeForExistingInstance(instanceName, connectionId);
+        } else {
+          // Se estiver conectado, parar de atualizar o QR code
+          if (qrCodeIntervalRef.current) {
+            clearInterval(qrCodeIntervalRef.current);
+            qrCodeIntervalRef.current = null;
+          }
+        }
+      }, 30000); // Atualizar QR code a cada 30 segundos
     }
   };
   
