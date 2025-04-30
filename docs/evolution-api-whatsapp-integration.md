@@ -325,6 +325,102 @@ const handleCloseQRCodeModal = () => {
 };
 ```
 
+#### Obtenção e Atualização do Número de Telefone
+
+Após a conexão ser detectada, o sistema obtem e atualiza automaticamente o número de telefone do WhatsApp no banco de dados:
+
+```typescript
+// Dentro da função checkConnectionStatus, quando detecta conexão:
+if (isConnected) {
+  console.log('CONEXÃO DETECTADA! WhatsApp conectado com sucesso!');
+  setConnectionStatus('connected');
+  
+  // Buscar informações adicionais da instância para obter o número do telefone
+  try {
+    // Obter informações pelo endpoint fetchInstances
+    const infoResponse = await fetch(`${EVOLUTION_API_URL}/instance/fetchInstances`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVOLUTION_API_KEY
+      }
+    });
+    
+    if (!infoResponse.ok) {
+      throw new Error('Não foi possível obter informações da instância');
+    }
+    
+    const infoData = await infoResponse.json();
+    
+    // Encontrar a instância correspondente e extrair o número de telefone
+    let phoneNumber = '';
+    if (Array.isArray(infoData)) {
+      const instance = infoData.find(inst => inst.name === instanceName);
+      if (instance) {
+        // Tentar obter o número de telefone de vários campos possíveis
+        phoneNumber = instance.number || 
+                     instance.phone || 
+                     (instance.ownerJid ? instance.ownerJid.split('@')[0] : '') ||
+                     '';
+      }
+    }
+    
+    // Atualizar o status e o número de telefone no banco de dados
+    await updateConnectionStatus(connectionId, phoneNumber);
+  } catch (infoError) {
+    // Mesmo com erro, ainda atualizamos o status da conexão
+    await updateConnectionStatus(connectionId);
+  }
+}
+```
+
+#### Formatação e Atualização no Banco de Dados
+
+A função `updateConnectionStatus` foi aprimorada para atualizar o número de telefone e o nome da conexão:
+
+```typescript
+const updateConnectionStatus = async (connectionId: string, phoneNumber?: string) => {
+  try {
+    // Prepara os dados para atualização
+    const updateData = { 
+      status: 'active' 
+    };
+    
+    // Adiciona o número de telefone se estiver disponível
+    if (phoneNumber) {
+      updateData.phone = phoneNumber;
+      
+      // Formatar o número para exibição
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
+      let formattedPhone = phoneNumber;
+      
+      if (cleanPhone.length >= 11) {
+        // Formato DDI + DDD + número
+        formattedPhone = cleanPhone.replace(/^(\d{2})(\d{2})(\d+)$/, '+$1 ($2) $3');
+      } else if (cleanPhone.length >= 10) {
+        // Apenas DDD + número
+        formattedPhone = cleanPhone.replace(/^(\d{2})(\d+)$/, '($1) $2');
+      }
+      
+      updateData.name = `WhatsApp ${formattedPhone}`;
+    }
+    
+    // Atualizar no Supabase
+    const { error } = await supabase
+      .from('whatsapp_connections')
+      .update(updateData)
+      .eq('id', connectionId);
+      
+    if (!error) {
+      // Recarregar as conexões para atualizar a interface
+      loadWhatsAppConnections(adminId);
+    }
+  } catch (error) {
+    console.error('Erro ao atualizar conexão:', error);
+  }
+};
+```
+
 ## Funcionamento da Interface
 
 ### Modal de Adição/Conexão

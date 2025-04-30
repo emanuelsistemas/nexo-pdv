@@ -414,8 +414,49 @@ const WhatsConnector: React.FC = () => {
         console.log('CONEXÃO DETECTADA! WhatsApp conectado com sucesso!');
         setConnectionStatus('connected');
         
-        // Atualizar o status da conexão no banco de dados
-        await updateConnectionStatus(connectionId);
+        // Buscar informações adicionais da instância para obter o número do telefone
+        try {
+          // Tentar obter informações pelo endpoint fetchInstances
+          const infoResponse = await fetch(`${EVOLUTION_API_URL}/instance/fetchInstances`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': EVOLUTION_API_KEY
+            }
+          });
+          
+          if (!infoResponse.ok) {
+            throw new Error('Não foi possível obter informações da instância');
+          }
+          
+          const infoData = await infoResponse.json();
+          console.log('Informações das instâncias:', infoData);
+          
+          // Encontrar a instância correspondente
+          let phoneNumber = '';
+          if (Array.isArray(infoData)) {
+            const instance = infoData.find(inst => inst.name === instanceName);
+            if (instance) {
+              // Tentar obter o número de telefone de vários campos possíveis
+              phoneNumber = instance.number || 
+                           instance.phone || 
+                           (instance.ownerJid ? instance.ownerJid.split('@')[0] : '') ||
+                           '';
+              
+              console.log('Instância encontrada:', instance);
+              console.log('OwnerJid:', instance.ownerJid);
+            }
+          }
+          
+          console.log('Número de telefone obtido:', phoneNumber);
+          
+          // Atualizar o status e o número de telefone no banco de dados
+          await updateConnectionStatus(connectionId, phoneNumber);
+        } catch (infoError) {
+          console.error('Erro ao obter informações da instância:', infoError);
+          // Mesmo com erro, ainda atualizamos o status da conexão
+          await updateConnectionStatus(connectionId);
+        }
         
         // Parar de verificar o status após conectar
         if (statusCheckIntervalRef.current) {
@@ -434,27 +475,53 @@ const WhatsConnector: React.FC = () => {
     }
   };
   
-  // Função para atualizar o status da conexão no banco
-  const updateConnectionStatus = async (connectionId: string) => {
+  // Função para atualizar o status da conexão no banco e opcionalmente o número de telefone
+  const updateConnectionStatus = async (connectionId: string, phoneNumber?: string) => {
     try {
-      // Atualizar o status no Supabase
+      // Prepara os dados para atualização
+      const updateData: { status: string; phone?: string; name?: string } = { 
+        status: 'active' 
+      };
+      
+      // Adiciona o número de telefone se estiver disponível
+      if (phoneNumber) {
+        updateData.phone = phoneNumber;
+        // Atualiza o nome para incluir o número do telefone
+        // Primeiro, limpar o número de qualquer caractere não numérico
+        const cleanPhone = phoneNumber.replace(/\D/g, '');
+        
+        // Tenta formatar de acordo com o padrão brasileiro se possível
+        let formattedPhone = phoneNumber;
+        if (cleanPhone.length >= 11) {
+          // Formato DDI + DDD + número
+          formattedPhone = cleanPhone.replace(/^(\d{2})(\d{2})(\d+)$/, '+$1 ($2) $3');
+        } else if (cleanPhone.length >= 10) {
+          // Apenas DDD + número
+          formattedPhone = cleanPhone.replace(/^(\d{2})(\d+)$/, '($1) $2');
+        }
+        
+        updateData.name = `WhatsApp ${formattedPhone}`;
+      }
+      
+      console.log('Atualizando conexão com dados:', updateData);
+      
+      // Atualizar o status e telefone no Supabase
       const { error } = await supabase
         .from('whatsapp_connections')
-        .update({ status: 'active' })
+        .update(updateData)
         .eq('id', connectionId);
         
       if (error) {
-        console.error('Erro ao atualizar status da conexão:', error);
+        console.error('Erro ao atualizar conexão:', error);
       } else {
-        console.log('Status da conexão atualizado com sucesso!');
-        
-        // Atualizar a lista local de conexões
+        console.log('Conexão atualizada com sucesso!');
+        // Recarregar as conexões
         if (adminId) {
           loadWhatsAppConnections(adminId);
         }
       }
     } catch (error) {
-      console.error('Erro ao atualizar status:', error);
+      console.error('Erro ao atualizar conexão:', error);
     }
   };
   
