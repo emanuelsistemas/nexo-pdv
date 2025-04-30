@@ -210,68 +210,118 @@ const getQRCode = async () => {
 
 ### 4. Verificação do Status da Conexão
 
+#### Endpoint Correto e Formato de Resposta
+
+Após testes extensivos com diferentes endpoints da Evolution API, identificamos que o endpoint mais confiável para verificar o status da conexão é `/instance/connectionState/{instanceName}`. Este endpoint retorna consistentemente o estado da conexão no formato:
+
+```json
+{"instance":{"instanceName":"nome-da-instancia","state":"open"}}
+```
+
+Quando o valor de `state` é `"open"`, indica que a conexão foi estabelecida com sucesso.
+
+#### Implementação Funcional
+
+A seguir está a implementação que funciona corretamente para verificar o status da conexão WhatsApp:
+
 ```typescript
-const checkConnectionStatus = async () => {
+const checkConnectionStatus = async (instanceName: string, connectionId: string) => {
   try {
-    // Verificar o status da conexão na Evolution API
-    const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState/${instanceName}`, {
+    setCheckingStatus(true);
+    
+    console.log('Verificando status da conexão WhatsApp:', instanceName);
+    
+    // Usar diretamente o endpoint que sabemos que funciona
+    const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        'apikey': EVOLUTION_API_KEY
       }
     });
     
-    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(`Erro ao verificar status: ${response.status} ${response.statusText}`);
+    }
     
-    // Verificar se a conexão está estabelecida
-    const isConnected = data.state === 'open' || 
-                        data.state === 'connected' || 
-                        data.connected === true;
+    const data = await response.json();
+    console.log('Estado da conexão:', data);
+    
+    // Verificar o formato da resposta para extrair o estado
+    let state = '';
+    let isConnected = false;
+    
+    if (data.instance && data.instance.state) {
+      // Formato: {"instance":{"instanceName":"2","state":"open"}}
+      state = data.instance.state;
+      isConnected = state === 'open' || state === 'connected';
+    } else if (data.state) {
+      // Formato alternativo direto: {"state":"open"}
+      state = data.state;
+      isConnected = state === 'open' || state === 'connected';
+    }
+    
+    console.log(`Status da conexão: ${state} (Conectado: ${isConnected})`);
     
     if (isConnected) {
-      // Se conectado, obter informações da instância para salvar no banco
-      try {
-        const infoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/fetchInstances/${instanceName}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-          }
-        });
-        
-        const infoData = await infoResponse.json();
-        const instance = infoData.instance || infoData;
-        const phone = instance.phone || instance.number || '';
-        
-        // Salvar ou atualizar a conexão no banco de dados
-        const { error } = await supabase
-          .from('whatsapp_connections')
-          .insert([
-            {
-              admin_id: userInfo.id,
-              name: `WhatsApp ${phone}`,
-              phone: phone,
-              status: 'active',
-              instance_name: instanceName
-            }
-          ]);
-          
-        if (error) {
-          console.error('Erro ao salvar conexão:', error);
-          toast.error('Erro ao salvar conexão: ' + error.message);
-        } else {
-          toast.success('WhatsApp conectado com sucesso!');
-          loadWhatsAppConnections(userInfo.id); // Recarregar as conexões
-          closeWhatsAppModal();
-        }
-      } catch (infoError) {
-        console.error('Erro ao obter informações da conexão:', infoError);
+      console.log('CONEXÃO DETECTADA! WhatsApp conectado com sucesso!');
+      setConnectionStatus('connected');
+      
+      // Atualizar o status da conexão no banco de dados
+      await updateConnectionStatus(connectionId);
+      
+      // Parar de verificar o status após conectar
+      if (statusCheckIntervalRef.current) {
+        clearInterval(statusCheckIntervalRef.current);
+        statusCheckIntervalRef.current = null;
       }
+      
+      return true;
     }
-  } catch (error: any) {
-    console.error('Erro ao verificar status da conexão:', error);
+    
+    return false; // Não conectado
+  } catch (error) {
+    console.error('Erro ao verificar status:', error);
+    return false;
+  } finally {
+    setCheckingStatus(false);
   }
+};
+```
+
+#### Implementação de Polling para Detecção Automática
+
+Para detectar automaticamente quando a conexão é estabelecida, implementamos um sistema de polling que verifica o status a cada 5 segundos:
+
+```typescript
+// Iniciar a verificação de status ao abrir o modal
+const handleShowQRCode = (connection: WhatsAppConnection) => {
+  // Configurar conexão atual
+  setCurrentConnection(connection);
+  setConnectionStatus('connecting');
+  setShowQRCodeModal(true);
+  
+  // Carregar QR Code
+  setLoadingQRCode(true);
+  getQRCodeForExistingInstance(connection.instance_name || '');
+  
+  // Verificar status imediatamente e depois a cada 5 segundos
+  const instanceNameStr = connection.instance_name || '';
+  if (instanceNameStr) {
+    checkConnectionStatus(instanceNameStr, connection.id);
+    statusCheckIntervalRef.current = setInterval(() => {
+      checkConnectionStatus(instanceNameStr, connection.id);
+    }, 5000);
+  }
+};
+
+// Garantir limpeza do intervalo ao fechar o modal
+const handleCloseQRCodeModal = () => {
+  if (statusCheckIntervalRef.current) {
+    clearInterval(statusCheckIntervalRef.current);
+    statusCheckIntervalRef.current = null;
+  }
+  setShowQRCodeModal(false);
 };
 ```
 

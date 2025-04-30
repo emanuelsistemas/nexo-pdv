@@ -201,10 +201,16 @@ const WhatsConnector: React.FC = () => {
       }
       
       // Verificar status imediatamente e depois a cada 5 segundos
-      checkConnectionStatus(connection.instance_name, connection.id);
-      statusCheckIntervalRef.current = setInterval(() => {
-        checkConnectionStatus(connection.instance_name, connection.id);
-      }, 5000);
+      const instanceNameStr = connection.instance_name || '';
+      if (instanceNameStr) {
+        checkConnectionStatus(instanceNameStr, connection.id);
+        statusCheckIntervalRef.current = setInterval(() => {
+          checkConnectionStatus(instanceNameStr, connection.id);
+        }, 5000);
+      } else {
+        console.error('Nome da instância não disponível');
+        toast.error('Erro: Nome da instância não disponível');
+      }
     }
   };
   
@@ -372,7 +378,7 @@ const WhatsConnector: React.FC = () => {
       
       console.log('Verificando status da conexão WhatsApp:', instanceName);
       
-      // Chamar API para verificar o status
+      // Usar diretamente o endpoint que sabemos que funciona
       const response = await fetch(`${EVOLUTION_API_URL}/instance/connectionState/${instanceName}`, {
         method: 'GET',
         headers: {
@@ -382,22 +388,27 @@ const WhatsConnector: React.FC = () => {
       });
       
       if (!response.ok) {
-        throw new Error('Erro ao verificar status da conexão');
+        throw new Error(`Erro ao verificar status: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
-      console.log('Status da conexão:', data);
+      console.log('Estado da conexão:', data);
       
-      // Condições para detectar status conectado (diferentes formatos de resposta)
-      const isConnected = (
-        data.state === 'open' || 
-        data.state === 'connected' ||
-        data.state === 'authenticated' ||
-        data.state === 'CONNECTED' ||
-        data.connected === true ||
-        data.loggedIn === true ||
-        (data.status && ['connected', 'authenticated', 'online'].includes(data.status.toLowerCase()))
-      );
+      // Verificar o formato da resposta para extrair o estado
+      let state = '';
+      let isConnected = false;
+      
+      if (data.instance && data.instance.state) {
+        // Formato: {"instance":{"instanceName":"2","state":"open"}}
+        state = data.instance.state;
+        isConnected = state === 'open' || state === 'connected';
+      } else if (data.state) {
+        // Formato alternativo direto: {"state":"open"}
+        state = data.state;
+        isConnected = state === 'open' || state === 'connected';
+      }
+      
+      console.log(`Status da conexão: ${state} (Conectado: ${isConnected})`);
       
       if (isConnected) {
         console.log('CONEXÃO DETECTADA! WhatsApp conectado com sucesso!');
@@ -411,7 +422,11 @@ const WhatsConnector: React.FC = () => {
           clearInterval(statusCheckIntervalRef.current);
           statusCheckIntervalRef.current = null;
         }
+        
+        return true;
       }
+      
+      return false; // Não conectado
     } catch (error) {
       console.error('Erro ao verificar status:', error);
     } finally {
@@ -881,7 +896,13 @@ const WhatsConnector: React.FC = () => {
                         <span>Recarregar QR Code</span>
                       </button>
                       <button
-                        onClick={() => checkConnectionStatus(currentConnection.instance_name || '', currentConnection.id)}
+                        onClick={() => {
+                          if (currentConnection.instance_name) {
+                            checkConnectionStatus(currentConnection.instance_name, currentConnection.id);
+                          } else {
+                            toast.error('Erro: Nome da instância não disponível');
+                          }
+                        }}
                         disabled={checkingStatus}
                         className="px-3 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 text-white text-sm rounded-lg transition-colors flex items-center justify-center"
                       >
