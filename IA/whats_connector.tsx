@@ -44,6 +44,17 @@ const WhatsConnector: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<'pending' | 'connected' | 'failed'>('pending');
   const [checkingStatus, setCheckingStatus] = useState(false);
   
+  // Estados para modais de confirmação
+  const [confirmationModal, setConfirmationModal] = useState({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    isDelete: false,
+    instanceName: '',
+    connectionId: ''
+  });
+  
   // Ref para armazenar o ID do intervalo de verificação
   const statusCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
@@ -232,10 +243,42 @@ const WhatsConnector: React.FC = () => {
     setConnectionStatus('pending');
   };
   
+  // Função para mostrar modal de confirmação de desconexão
+  const showDisconnectConfirmation = (connectionId: string, instanceName: string) => {
+    setConfirmationModal({
+      show: true,
+      title: 'Desconectar WhatsApp',
+      message: `Tem certeza que deseja desconectar esta conexão WhatsApp?\n\nA instância "${instanceName}" será desconectada, mas não será excluída.\nVocê poderá reconectar escaneando o QR Code novamente.`,
+      onConfirm: () => handleDisconnectWhatsApp(connectionId, instanceName),
+      isDelete: false,
+      instanceName,
+      connectionId
+    });
+  };
+  
+  // Função para mostrar modal de confirmação de exclusão
+  const showDeleteConfirmation = (connectionId: string, instanceName: string) => {
+    setConfirmationModal({
+      show: true,
+      title: 'Excluir Conexão WhatsApp',
+      message: `Tem certeza que deseja excluir esta conexão WhatsApp?\n\nA instância "${instanceName}" será removida completamente da Evolution API e do banco de dados.\n\nEsta ação não pode ser desfeita.`,
+      onConfirm: () => handleDeleteConnectionConfirmed(connectionId, instanceName),
+      isDelete: true,
+      instanceName,
+      connectionId
+    });
+  };
+  
+  // Função para fechar o modal de confirmação
+  const closeConfirmationModal = () => {
+    setConfirmationModal(prev => ({ ...prev, show: false }));
+  };
+
   // Função para desconectar uma instância WhatsApp
   const handleDisconnectWhatsApp = async (connectionId: string, instanceName: string) => {
     try {
       setLoading(true);
+      closeConfirmationModal();
       
       // 1. Desconectar a instância na Evolution API
       if (instanceName) {
@@ -285,14 +328,16 @@ const WhatsConnector: React.FC = () => {
     }
   };
   
-  // Função para excluir uma conexão
-  const handleDeleteConnection = async (connectionId: string, instanceName: string) => {
-    if (!confirm(`Tem certeza que deseja excluir esta conexão?\nA instância ${instanceName} será removida.`)) {
-      return;
-    }
-    
+  // Função para excluir uma conexão (mostra confirmação)
+  const handleDeleteConnection = (connectionId: string, instanceName: string) => {
+    showDeleteConfirmation(connectionId, instanceName);
+  };
+  
+  // Função que executa a exclusão após confirmação
+  const handleDeleteConnectionConfirmed = async (connectionId: string, instanceName: string) => {
     try {
       setLoading(true);
+      closeConfirmationModal();
       
       // 1. Excluir a instância na Evolution API
       if (instanceName) {
@@ -783,7 +828,7 @@ const WhatsConnector: React.FC = () => {
                               <button
                                 className="p-1 text-orange-400 hover:text-orange-300 rounded-lg flex items-center gap-1 text-xs"
                                 title="Desconectar"
-                                onClick={() => handleDisconnectWhatsApp(connection.id, connection.instance_name || '')}
+                                onClick={() => showDisconnectConfirmation(connection.id, connection.instance_name || '')}
                               >
                                 <LogOut size={18} />
                                 <span className="hidden sm:inline">Desconectar</span>
@@ -907,14 +952,14 @@ const WhatsConnector: React.FC = () => {
                     <button
                       onClick={() => console.log('Recarregar QR Code')}
                       disabled={loadingQRCode}
-                      className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors"
+                      className="flex-1 px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg"
                     >
                       Recarregar QR Code
                     </button>
                     <button
                       onClick={() => console.log('Verificar status')}
                       disabled={loadingQRCode}
-                      className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors"
+                      className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg"
                     >
                       Verificar Status
                     </button>
@@ -997,11 +1042,11 @@ const WhatsConnector: React.FC = () => {
                   </>
                 )}
                 
-                <div className="flex gap-2">
+                <div className="flex gap-4">
                   {connectionStatus === 'connected' ? (
                     <button
                       onClick={handleCloseQRModal}
-                      className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+                      className="flex-1 px-3 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
                     >
                       <Check size={16} />
                       <span>Concluído</span>
@@ -1011,7 +1056,7 @@ const WhatsConnector: React.FC = () => {
                       <button
                         onClick={refreshQRCode}
                         disabled={loadingQRCode}
-                        className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+                        className="flex-1 px-3 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
                       >
                         <RefreshCw size={14} className={loadingQRCode ? "animate-spin" : ""} />
                         <span>Recarregar QR Code</span>
@@ -1025,7 +1070,7 @@ const WhatsConnector: React.FC = () => {
                           }
                         }}
                         disabled={checkingStatus}
-                        className="px-3 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 text-white text-sm rounded-lg transition-colors flex items-center justify-center"
+                        className="px-3 py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 text-white text-sm rounded-lg transition-colors flex items-center justify-center"
                       >
                         {checkingStatus ? (
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -1046,6 +1091,32 @@ const WhatsConnector: React.FC = () => {
             </div>
           </div>
         </>
+      )}
+      
+      {/* Modal de Confirmação */}
+      {confirmationModal.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 border border-gray-700">
+            <h3 className="text-xl font-bold text-white mb-4">{confirmationModal.title}</h3>
+            <p className="text-gray-300 mb-6 whitespace-pre-line">{confirmationModal.message}</p>
+            
+            <div className="flex justify-end gap-4">
+              <button
+                onClick={closeConfirmationModal}
+                className="px-8 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
+              >
+                Cancelar
+              </button>
+              
+              <button
+                onClick={() => confirmationModal.onConfirm()}
+                className={`px-8 py-3 ${confirmationModal.isDelete ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg`}
+              >
+                {confirmationModal.isDelete ? 'Excluir' : 'Desconectar'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
