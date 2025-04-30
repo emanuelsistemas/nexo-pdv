@@ -893,8 +893,11 @@ export default function Settings() {
               toast.success('Instância existente vinculada com sucesso!');
             }
             
-            setInstanceCreated(true);
-            getQRCode();
+            // Fechar o modal em vez de mostrar QR Code
+            closeWhatsAppModal();
+            setTimeout(() => {
+              toast.info('Clique em "Conectar" na linha da instância para escanear o QR code');
+            }, 1000);
             return;
           }
         }
@@ -933,14 +936,16 @@ export default function Settings() {
         throw new Error(data.message || data.error || 'Erro ao criar instância');
       }
       
-      setInstanceCreated(true);
-      toast.success('Instância criada com sucesso! Gerando QR Code...');
-      
       // Salvar a instância no banco de dados imediatamente
       await saveInstanceToDatabase(instanceName.trim());
       
-      // Agora vamos buscar o QR Code
-      getQRCode();
+      // Fechar o modal em vez de mostrar QR Code
+      closeWhatsAppModal();
+      
+      toast.success('Instância criada com sucesso!');
+      setTimeout(() => {
+        toast.info('Clique em "Conectar" na linha da instância para escanear o QR code');
+      }, 1000);
     } catch (error: any) {
       console.error('Erro ao criar instância:', error);
       setConnectionError(error.message || 'Erro ao criar instância');
