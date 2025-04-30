@@ -78,6 +78,7 @@ export default function Settings() {
   const statusCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [activeTab, setActiveTab] = useState<'whatsapp' | 'usuarios' | 'revenda' | 'chat_nexo'>('whatsapp');
+  const [iaIntegrationEnabled, setIaIntegrationEnabled] = useState(false);
   const [whatsappConnections, setWhatsappConnections] = useState<WhatsAppConnection[]>([]);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -2435,31 +2436,66 @@ export default function Settings() {
                     <div className="space-y-2 bg-[#333] border border-gray-700 rounded-lg p-3">
                       <p className="text-xs text-gray-400 mb-2">Selecione os setores disponíveis para atendimento</p>
                       
-                      <div className="flex items-center mb-2">
-                        <input 
-                          type="checkbox" 
-                          id="setor-suporte" 
-                          className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                        />
-                        <label htmlFor="setor-suporte" className="ml-2 text-sm text-white">Suporte Técnico</label>
-                      </div>
-                      
-                      <div className="flex items-center mb-2">
-                        <input 
-                          type="checkbox" 
-                          id="setor-comercial" 
-                          className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                        />
-                        <label htmlFor="setor-comercial" className="ml-2 text-sm text-white">Comercial</label>
-                      </div>
-                      
-                      <div className="flex items-center">
-                        <input 
-                          type="checkbox" 
-                          id="setor-administrativo" 
-                          className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                        />
-                        <label htmlFor="setor-administrativo" className="ml-2 text-sm text-white">Administrativo</label>
+                      <div className="space-y-3">
+                        <div>
+                          <div className="flex items-center">
+                            <input 
+                              type="checkbox" 
+                              id="setor-suporte" 
+                              className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                            />
+                            <label htmlFor="setor-suporte" className="ml-2 text-sm text-white">Suporte Técnico</label>
+                          </div>
+                          {iaIntegrationEnabled && (
+                            <div className="mt-2 ml-6">
+                              <textarea
+                                className="w-full p-2 bg-[#444] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs min-h-[80px]"
+                                placeholder="Insira o prompt para que a IA responda sobre Suporte Técnico..."
+                              />
+                              <p className="mt-1 text-xs text-gray-400">A IA usará este prompt como base para respostas automatizadas</p>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div>
+                          <div className="flex items-center">
+                            <input 
+                              type="checkbox" 
+                              id="setor-comercial" 
+                              className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                            />
+                            <label htmlFor="setor-comercial" className="ml-2 text-sm text-white">Comercial</label>
+                          </div>
+                          {iaIntegrationEnabled && (
+                            <div className="mt-2 ml-6">
+                              <textarea
+                                className="w-full p-2 bg-[#444] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs min-h-[80px]"
+                                placeholder="Insira o prompt para que a IA responda sobre questões Comerciais..."
+                              />
+                              <p className="mt-1 text-xs text-gray-400">A IA usará este prompt como base para respostas automatizadas</p>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div>
+                          <div className="flex items-center">
+                            <input 
+                              type="checkbox" 
+                              id="setor-administrativo" 
+                              className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                            />
+                            <label htmlFor="setor-administrativo" className="ml-2 text-sm text-white">Administrativo</label>
+                          </div>
+                          {iaIntegrationEnabled && (
+                            <div className="mt-2 ml-6">
+                              <textarea
+                                className="w-full p-2 bg-[#444] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs min-h-[80px]"
+                                placeholder="Insira o prompt para que a IA responda sobre questões Administrativas..."
+                              />
+                              <p className="mt-1 text-xs text-gray-400">A IA usará este prompt como base para respostas automatizadas</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2486,16 +2522,18 @@ export default function Settings() {
                     
                     <div className="flex items-center justify-between">
                       <div>
-                        <label className="text-sm font-medium text-gray-300">Integração com WhatsApp</label>
-                        <p className="text-xs text-gray-400">Encaminhar mensagens para WhatsApp quando offline</p>
+                        <label className="text-sm font-medium text-gray-300">Integração com IA</label>
+                        <p className="text-xs text-gray-400">Utilizar inteligência artificial para respostas automáticas</p>
                       </div>
                       <div className="flex items-center">
                         <input 
                           type="checkbox" 
-                          id="whatsapp_integration" 
+                          id="ia_integration" 
                           className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                          checked={iaIntegrationEnabled}
+                          onChange={(e) => setIaIntegrationEnabled(e.target.checked)}
                         />
-                        <label htmlFor="whatsapp_integration" className="ml-2 text-sm font-medium text-gray-300">Ativar</label>
+                        <label htmlFor="ia_integration" className="ml-2 text-sm font-medium text-gray-300">Ativar</label>
                       </div>
                     </div>
                   </div>
