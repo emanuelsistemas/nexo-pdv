@@ -1269,8 +1269,8 @@ export default function Settings() {
         
         // Antes de atualizar o status, tentamos obter o número de telefone
         try {
-          // Buscar informações adicionais da instância para obter o número de telefone
-          const infoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/info/${instanceName}`, {
+          // Tentar obter informações pelo endpoint fetchInstances, exatamente como no WhatsConnector
+          const infoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/fetchInstances`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
@@ -1280,21 +1280,22 @@ export default function Settings() {
           
           if (infoResponse.ok) {
             const infoData = await infoResponse.json();
-            console.log('Informações da instância:', infoData);
+            console.log('Informações das instâncias:', infoData);
             
-            // Extrair o número de telefone de diferentes possibilidades na resposta
+            // Encontrar a instância correspondente e extrair o número de telefone
             let phoneNumber = '';
-            
-            if (infoData.instance) {
-              const instance = infoData.instance;
-              // Tentar obter o número de telefone de vários campos possíveis
-              phoneNumber = instance.number || 
-                          instance.phone || 
-                          (instance.ownerJid ? instance.ownerJid.split('@')[0] : '') ||
-                          '';
-              
-              console.log('Instância encontrada:', instance);
-              console.log('OwnerJid:', instance.ownerJid);
+            if (Array.isArray(infoData)) {
+              const instance = infoData.find(inst => inst.name === instanceName);
+              if (instance) {
+                // Tentar obter o número de telefone de vários campos possíveis
+                phoneNumber = instance.number || 
+                            instance.phone || 
+                            (instance.ownerJid ? instance.ownerJid.split('@')[0] : '') ||
+                            '';
+                
+                console.log('Instância encontrada:', instance);
+                console.log('OwnerJid:', instance.ownerJid);
+              }
             }
             
             console.log('Número de telefone obtido:', phoneNumber);
