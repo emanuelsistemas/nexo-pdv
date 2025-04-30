@@ -1516,6 +1516,68 @@ export default function Settings() {
     }
   };
 
+  const handleConnectExistingInstance = (connectionId: string, instanceName: string) => {
+    setConnectionError('');
+    setQRCodeData(''); // Limpa QR code anterior
+    setConnectionStatus('pending');
+    setCheckingStatus(false);
+    
+    // Define a conexão selecionada
+    const connection = whatsappConnections.find(conn => conn.id === connectionId);
+    setCurrentConnection(connection || null);
+    
+    // Armazena o ID e nome da instância
+    setSelectedConnectionId(connectionId);
+    setSelectedInstance(instanceName);
+    
+    // Abre o modal de QR code (modal para conexão existente)
+    setShowQRModal(true);
+    
+    // Inicia a geração do QR code para esta instância
+    if (instanceName) {
+      getQRCodeForExistingInstance(instanceName, connectionId);
+    }
+  };
+  
+  // Função para obter QR Code para instância existente
+  const getQRCodeForExistingInstance = async (instanceName: string, connectionId: string) => {
+    try {
+      setLoadingQRCode(true);
+      setConnectionError('');
+      
+      console.log('Obtendo QR Code para instância:', instanceName);
+      
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connect/${instanceName}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('Erro ao obter QR Code:', response.status);
+        throw new Error('Não foi possível obter o QR Code para esta instância');
+      }
+      
+      const data = await response.json();
+      console.log('Resposta da API:', data);
+      
+      if (data.base64) {
+        setQRCodeData(data.base64); // QR code com prefixo data:image/...
+      } else if (data.qrcode) {
+        setQRCodeData(formatQRCodeToDataURL(data.qrcode));
+      } else {
+        throw new Error('QR Code não disponível na resposta');
+      }
+    } catch (error: any) {
+      console.error('Erro ao obter QR Code:', error);
+      setConnectionError(error.message || 'Erro ao obter QR Code');
+    } finally {
+      setLoadingQRCode(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#1C1C1C] flex">
       {/* Sidebar */}
@@ -1991,7 +2053,7 @@ export default function Settings() {
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-white">Conexões WhatsApp</h2>
                 <button
-                  onClick={() => navigate('/admin/whats-login')}
+                  onClick={handleAddWhatsAppConnection}
                   className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-2 transition-colors text-sm"
                 >
                   <Plus size={16} />
@@ -2064,11 +2126,11 @@ export default function Settings() {
                                     </button>
                                   ) : (
                                     <button
-                                      className="p-1 text-green-400 hover:text-green-300 rounded-lg flex items-center gap-1 text-xs"
+                                      className="text-emerald-500 hover:text-emerald-700 transition-colors flex items-center gap-1 text-sm p-1 rounded"
                                       title="Conectar"
-                                      onClick={() => navigate(`/admin/whats-login?connectionId=${connection.id}`)}
+                                      onClick={() => handleConnectExistingInstance(connection.id, connection.instance_name)}
                                     >
-                                      <MessageSquare size={18} />
+                                      <MessageSquare size={16} />
                                       <span className="hidden sm:inline">Conectar</span>
                                     </button>
                                   )}
@@ -2270,17 +2332,17 @@ export default function Settings() {
               <div className="flex justify-end gap-3 mt-4">
                 <button
                   onClick={() => setShowDeleteConfirmWhatsapp(false)}
-                  className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md mr-2"
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md mr-2"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={() => instanceToDelete && handleDeleteConnectionConfirmed(instanceToDelete.id, instanceToDelete.instance)}
-                  className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
                 >
                   {loadingAction?.id === (instanceToDelete?.id || '') && loadingAction?.action === 'delete' ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
@@ -2426,6 +2488,114 @@ export default function Settings() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de QR Code para conexões existentes */}
+      {showQRModal && currentConnection && (
+        <div className="fixed inset-0 bg-black/50 z-50">
+          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#2A2A2A] rounded-lg shadow-lg border border-gray-800 p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold text-white mb-4">Conectar WhatsApp</h3>
+              
+              <div className="mb-4 text-center">
+                <p className="mb-4 text-gray-300">
+                  Escaneie o QR Code abaixo com seu celular para conectar <strong>{currentConnection.name}</strong>:
+                </p>
+                
+                <div className="bg-white p-4 rounded-lg mx-auto w-[220px] h-[220px] flex items-center justify-center">
+                  {loadingQRCode ? (
+                    <div className="flex flex-col items-center justify-center">
+                      <svg className="animate-spin h-10 w-10 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <p className="mt-2 text-gray-600">Gerando QR Code...</p>
+                    </div>
+                  ) : qrCodeData ? (
+                    <img
+                      src={qrCodeData}
+                      alt="QR Code para conexão WhatsApp"
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        console.error('Erro ao carregar imagem do QR Code');
+                        setConnectionError('Erro ao exibir QR Code. Tente novamente.');
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="mt-2 text-red-500">Erro ao gerar QR Code</p>
+                    </div>
+                  )}
+                </div>
+                
+                {connectionError && (
+                  <div className="mt-4 p-2 bg-red-900/50 text-red-100 rounded border border-red-700">
+                    {connectionError}
+                  </div>
+                )}
+                
+                <div className="mt-4 flex items-center justify-center">
+                  {connectionStatus === 'pending' ? (
+                    <p className="text-gray-400 text-sm">
+                      {checkingStatus ? (
+                        <span className="flex items-center">
+                          <svg className="animate-spin mr-2 h-4 w-4 text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Verificando status da conexão...
+                        </span>
+                      ) : (
+                        'Aguardando conexão. Escaneie o QR Code com seu WhatsApp.'
+                      )}
+                    </p>
+                  ) : connectionStatus === 'connected' ? (
+                    <p className="text-emerald-500 text-sm flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Conectado com sucesso!
+                    </p>
+                  ) : (
+                    <p className="text-red-500 text-sm">
+                      Falha na conexão. Tente novamente.
+                    </p>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowQRModal(false)}
+                  className="px-4 py-2 border border-gray-700 rounded text-gray-300 hover:bg-gray-700"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={() => getQRCodeForExistingInstance(selectedInstance, selectedConnectionId || '')}
+                  disabled={loadingQRCode || connectionStatus === 'connected'}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-emerald-800/50 disabled:cursor-not-allowed flex items-center"
+                >
+                  {loadingQRCode ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Gerando...
+                    </>
+                  ) : (
+                    'Atualizar QR Code'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
