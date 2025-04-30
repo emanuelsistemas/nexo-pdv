@@ -1151,6 +1151,60 @@ export default function Settings() {
     return `data:image/png;base64,${cleanBase64}`;
   };
   
+  // Função para atualizar o status da conexão no banco e opcionalmente o número de telefone
+  const updateConnectionStatus = async (connectionId: string, phoneNumber?: string) => {
+    try {
+      // Prepara os dados para atualização
+      const updateData: { status: string; phone?: string; name?: string } = { 
+        status: 'active' 
+      };
+      
+      // Adiciona o número de telefone se estiver disponível
+      if (phoneNumber) {
+        updateData.phone = phoneNumber;
+        // Atualiza o nome para incluir o número do telefone
+        // Primeiro, limpar o número de qualquer caractere não numérico
+        const cleanPhone = phoneNumber.replace(/\D/g, '');
+        
+        // Tenta formatar de acordo com o padrão brasileiro se possível
+        let formattedPhone = phoneNumber;
+        if (cleanPhone.length >= 11) {
+          // Formato DDI + DDD + número
+          formattedPhone = cleanPhone.replace(/^(\d{2})(\d{2})(\d+)$/, '+$1 ($2) $3');
+        } else if (cleanPhone.length >= 10) {
+          // Apenas DDD + número
+          formattedPhone = cleanPhone.replace(/^(\d{2})(\d+)$/, '($1) $2');
+        }
+        
+        updateData.name = `WhatsApp ${formattedPhone}`;
+      }
+      
+      console.log('Atualizando conexão com dados:', updateData);
+      
+      // Atualizar o status e telefone no Supabase
+      const { error } = await supabase
+        .from('whatsapp_connections')
+        .update(updateData)
+        .eq('id', connectionId);
+        
+      if (error) {
+        console.error('Erro ao atualizar status da conexão:', error);
+        return;
+      }
+      
+      // Atualizar na lista em memória
+      setWhatsappConnections(prev => 
+        prev.map(conn => 
+          conn.id === connectionId 
+            ? { ...conn, status: 'active', phone: phoneNumber || conn.phone, name: updateData.name || conn.name } 
+            : conn
+        )
+      );
+    } catch (error) {
+      console.error('Erro ao atualizar status da conexão:', error);
+    }
+  };
+  
   // Função para verificar o status da conexão
   const checkConnectionStatus = async (instanceName: string, connectionId: string) => {
     if (!instanceName || !userInfo.id) return;
@@ -1213,21 +1267,49 @@ export default function Settings() {
         
         setConnectionStatus('connected');
         
-        // Atualizar o status no banco e na interface
-        if (connectionId) {
-          await supabase
-            .from('whatsapp_connections')
-            .update({ status: 'active' })
-            .eq('id', connectionId);
+        // Antes de atualizar o status, tentamos obter o número de telefone
+        try {
+          // Buscar informações adicionais da instância para obter o número de telefone
+          const infoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/info/${instanceName}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+            }
+          });
+          
+          if (infoResponse.ok) {
+            const infoData = await infoResponse.json();
+            console.log('Informações da instância:', infoData);
             
-          // Atualizar na lista em memória
-          setWhatsappConnections(prev => 
-            prev.map(conn => 
-              conn.id === connectionId 
-                ? { ...conn, status: 'active' } 
-                : conn
-            )
-          );
+            // Extrair o número de telefone de diferentes possibilidades na resposta
+            let phoneNumber = '';
+            
+            if (infoData.instance) {
+              const instance = infoData.instance;
+              // Tentar obter o número de telefone de vários campos possíveis
+              phoneNumber = instance.number || 
+                          instance.phone || 
+                          (instance.ownerJid ? instance.ownerJid.split('@')[0] : '') ||
+                          '';
+              
+              console.log('Instância encontrada:', instance);
+              console.log('OwnerJid:', instance.ownerJid);
+            }
+            
+            console.log('Número de telefone obtido:', phoneNumber);
+            
+            // Atualizar o status e o número de telefone no banco de dados
+            await updateConnectionStatus(connectionId, phoneNumber);
+          } else {
+            console.error('Erro ao obter informações da instância');
+            // Mesmo com erro, ainda atualizamos o status da conexão
+            await updateConnectionStatus(connectionId);
+          }
+        } catch (infoError) {
+          console.error('Erro ao obter informações da instância:', infoError);
+          // Mesmo com erro, ainda atualizamos o status da conexão
+          await updateConnectionStatus(connectionId);
         }
         
         // Parar de verificar o status após conectar
