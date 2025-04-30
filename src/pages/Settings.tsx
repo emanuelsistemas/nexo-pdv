@@ -1155,8 +1155,7 @@ export default function Settings() {
   const checkConnectionStatus = async () => {
     if (!selectedInstance || !userInfo.id) return;
     
-    // Removemos o setCheckingStatus(true) para evitar problemas com a verificação automática
-    // já que não temos mais o botão de verificar
+    setCheckingStatus(true); // Restauramos esta linha para o botão funcionar
     try {
       console.log('Verificando status da conexão WhatsApp:', selectedInstance);
       
@@ -1251,13 +1250,8 @@ export default function Settings() {
       console.error('Erro ao verificar status da conexão:', error);
       setConnectionStatus('failed');
     } finally {
-      // Aqui não precisamos mais do setCheckingStatus(false) 
-      // já que não estamos mais usando esse estado para controlar o botão de verificar
-      // que foi removido
+      setCheckingStatus(false); // Restauramos esta linha para o botão funcionar corretamente
     }
-    
-    // Log para debug da verificação automática
-    console.log('Verificação automática de status concluída');
   };
   
   // Função para recarregar o QR Code ao clicar no botão de refresh
