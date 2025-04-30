@@ -2400,73 +2400,66 @@ export default function Settings() {
               </div>
               
               <div className="bg-[#2A2A2A] rounded-lg border border-gray-800 p-6 w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium text-white mb-4">Configurações Gerais</h3>
                   <div>
-                    <h3 className="text-lg font-medium text-white mb-4">Configurações Gerais</h3>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">Nome do Assistente</label>
-                        <input
-                          type="text"
-                          className="w-full p-2 bg-[#333] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          placeholder="Ex: Assistente Nexo"
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Nome do Assistente</label>
+                    <input
+                      type="text"
+                      className="w-full p-2 bg-[#333] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      placeholder="Ex: Assistente Nexo"
+                    />
+                    <p className="mt-1 text-xs text-gray-400">Nome que será exibido para os clientes no chat</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Mensagem de Boas-vindas</label>
+                    <textarea
+                      className="w-full p-2 bg-[#333] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px]"
+                      placeholder="Ex: Olá, sou o assistente virtual do Nexo PDV. Como posso ajudar?"
+                    />
+                    <p className="mt-1 text-xs text-gray-400">Mensagem que será enviada quando um cliente iniciar uma conversa</p>
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <input 
+                      type="checkbox" 
+                      id="autoresponder" 
+                      className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                    />
+                    <label htmlFor="autoresponder" className="ml-2 text-sm font-medium text-gray-300">Ativar resposta automática</label>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Setor</label>
+                    <div className="space-y-2 bg-[#333] border border-gray-700 rounded-lg p-3">
+                      <p className="text-xs text-gray-400 mb-2">Selecione os setores disponíveis para atendimento</p>
+                      
+                      <div className="flex items-center mb-2">
+                        <input 
+                          type="checkbox" 
+                          id="setor-suporte" 
+                          className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
                         />
-                        <p className="mt-1 text-xs text-gray-400">Nome que será exibido para os clientes no chat</p>
+                        <label htmlFor="setor-suporte" className="ml-2 text-sm text-white">Suporte Técnico</label>
                       </div>
                       
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">Mensagem de Boas-vindas</label>
-                        <textarea
-                          className="w-full p-2 bg-[#333] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px]"
-                          placeholder="Ex: Olá, sou o assistente virtual do Nexo PDV. Como posso ajudar?"
+                      <div className="flex items-center mb-2">
+                        <input 
+                          type="checkbox" 
+                          id="setor-comercial" 
+                          className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
                         />
-                        <p className="mt-1 text-xs text-gray-400">Mensagem que será enviada quando um cliente iniciar uma conversa</p>
+                        <label htmlFor="setor-comercial" className="ml-2 text-sm text-white">Comercial</label>
                       </div>
                       
                       <div className="flex items-center">
                         <input 
                           type="checkbox" 
-                          id="autoresponder" 
+                          id="setor-administrativo" 
                           className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
                         />
-                        <label htmlFor="autoresponder" className="ml-2 text-sm font-medium text-gray-300">Ativar resposta automática</label>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-lg font-medium text-white mb-4">Personalização</h3>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">Cor principal</label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="color"
-                            className="h-10 w-10 rounded cursor-pointer bg-[#333] border border-gray-700"
-                            defaultValue="#10b981"
-                          />
-                          <input
-                            type="text"
-                            className="flex-1 p-2 bg-[#333] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            placeholder="#10b981"
-                            defaultValue="#10b981"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-1">Logotipo do Chat</label>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-16 bg-[#333] border border-gray-700 rounded-lg flex items-center justify-center text-gray-500">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </div>
-                          <button className="px-3 py-2 bg-[#444] hover:bg-[#555] text-white rounded-lg transition-colors text-sm">
-                            Carregar imagem
-                          </button>
-                        </div>
-                        <p className="mt-1 text-xs text-gray-400">Recomendado: 512x512px, formato PNG ou SVG</p>
+                        <label htmlFor="setor-administrativo" className="ml-2 text-sm text-white">Administrativo</label>
                       </div>
                     </div>
                   </div>
