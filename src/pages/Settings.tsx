@@ -97,6 +97,21 @@ export default function Settings() {
   const [loadingAction, setLoadingAction] = useState<{id: string, action: string} | null>(null);
   const [showDeleteConfirmWhatsapp, setShowDeleteConfirmWhatsapp] = useState(false);
   const [instanceToDelete, setInstanceToDelete] = useState<{id: string, name: string, instance: string} | null>(null);
+  const [currentConnection, setCurrentConnection] = useState<WhatsAppConnection | null>(null);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'pending' | 'connected' | 'failed'>('pending');
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  
+  // Estado para o modal de confirmação (usado tanto para desconectar quanto para excluir)
+  const [confirmationModal, setConfirmationModal] = useState({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    isDelete: false,
+    instanceName: '',
+    connectionId: ''
+  });
   
   // Estados para o modal de adicionar/editar usuário
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -171,7 +186,7 @@ export default function Settings() {
     });
     
     // Carregar usuários vinculados ao administrador logado e/ou à revenda
-    loadUsers(session.id, session.reseller_id, session.userType);
+    loadUsers(session.id, session.reseller_id as string | null, session.userType);
 
     // Se for um usuário admin (profile_admin) e tiver uma revenda associada, carregar dados da revenda
     if (session.userType === 'admin' && session.reseller_id) {
@@ -353,6 +368,134 @@ export default function Settings() {
     navigate('/admin/login');
   };
   
+  // Função para mostrar modal de confirmação de desconexão
+  const showDisconnectConfirmation = (connectionId: string, instanceName: string) => {
+    setConfirmationModal({
+      show: true,
+      title: 'Desconectar WhatsApp',
+      message: `Tem certeza que deseja desconectar esta conexão WhatsApp?\n\nA instância "${instanceName}" será desconectada, mas não será excluída.`,
+      onConfirm: () => handleDisconnectWhatsApp(connectionId, instanceName),
+      isDelete: false,
+      instanceName,
+      connectionId
+    });
+  };
+  
+  // Função para mostrar modal de confirmação de exclusão
+  const showDeleteConfirmation = (connectionId: string, instanceName: string) => {
+    setConfirmationModal({
+      show: true,
+      title: 'Excluir Conexão',
+      message: `Tem certeza que deseja excluir esta conexão WhatsApp?\n\nA instância "${instanceName}" será completamente removida. Esta ação não pode ser desfeita.`,
+      onConfirm: () => handleDeleteConnectionConfirmed(connectionId, instanceName),
+      isDelete: true,
+      instanceName,
+      connectionId
+    });
+  };
+  
+  // Função para fechar o modal de confirmação
+  const closeConfirmationModal = () => {
+    setConfirmationModal(prev => ({ ...prev, show: false }));
+  };
+  
+  // Função para desconectar uma instância WhatsApp
+  const handleDisconnectWhatsApp = async (connectionId: string, instanceName: string) => {
+    try {
+      setLoadingAction({ id: connectionId, action: 'disconnect' });
+      
+      // Chamada para a API de desconexão
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/logout/${instanceName}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        }
+      });
+      
+      // Verificar se a requisição foi bem-sucedida
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Erro ao desconectar instância');
+      }
+      
+      // Atualizar status da conexão no banco de dados
+      const { error: dbError } = await supabase
+        .from('whatsapp_connections')
+        .update({ status: 'inactive' })
+        .eq('id', connectionId);
+      
+      if (dbError) {
+        throw dbError;
+      }
+      
+      // Atualizar a lista de conexões para refletir a mudança de status
+      setWhatsappConnections(prev => 
+        prev.map(conn => 
+          conn.id === connectionId 
+            ? { ...conn, status: 'inactive' as 'active' | 'inactive' | 'connecting' } 
+            : conn
+        )
+      );
+      
+      toast.success('Conexão WhatsApp desconectada com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao desconectar WhatsApp:', error);
+      toast.error(`Erro ao desconectar: ${error.message || 'Erro desconhecido'}`);
+    } finally {
+      setLoadingAction(null);
+      closeConfirmationModal();
+    }
+  };
+  
+  // Função para excluir uma conexão (mostra confirmação)
+  const handleDeleteConnection = (connectionId: string, instanceName: string) => {
+    showDeleteConfirmation(connectionId, instanceName);
+  };
+  
+  // Função que executa a exclusão após confirmação
+  const handleDeleteConnectionConfirmed = async (connectionId: string, instanceName: string) => {
+    try {
+      setLoadingAction({ id: connectionId, action: 'delete' });
+      
+      // Deletar a instância na API Evolution
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/delete/${instanceName}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
+        }
+      });
+      
+      // Verificar se a requisição foi bem-sucedida
+      if (!response.ok) {
+        // Ignoramos erros da API, pois a instância pode não existir mais no servidor
+        console.warn('Aviso: A instância pode não ter sido encontrada na API, continuando com a exclusão do banco de dados');
+      }
+      
+      // Remover a conexão do banco de dados
+      const { error: dbError } = await supabase
+        .from('whatsapp_connections')
+        .delete()
+        .eq('id', connectionId);
+      
+      if (dbError) {
+        throw dbError;
+      }
+      
+      // Atualizar a lista de conexões para remover a conexão excluída
+      setWhatsappConnections(prev => prev.filter(conn => conn.id !== connectionId));
+      
+      toast.success('Conexão WhatsApp excluída com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao excluir conexão:', error);
+      toast.error(`Erro ao excluir: ${error.message || 'Erro desconhecido'}`);
+    } finally {
+      setLoadingAction(null);
+      closeConfirmationModal();
+    }
+  };
+  
   // Função para abrir o modal de edição de usuário
   const handleEditUser = (usuario: Usuario) => {
     // Não permitir editar usuários da tabela profile_admin
@@ -418,7 +561,8 @@ export default function Settings() {
           status: data[0].status as 'active' | 'inactive' | 'blocked',
           created_at: data[0].created_at as string,
           reseller_id: data[0].reseller_id as string | undefined,
-          source: 'profile_admin_user' // Usuários editados sempre são da tabela profile_admin_user
+          source: 'profile_admin_user', // Usuários editados sempre são da tabela profile_admin_user
+          dev: data[0].dev as string // Incluir o campo dev
         };
         
         // Atualizar o usuário na lista
@@ -495,7 +639,7 @@ export default function Settings() {
         return;
       }
       
-      console.log('Carregando conexões WhatsApp para adminId:', adminId);
+      console.log('Carregando conexões WhatsApp para adminId:', adminId || 'não definido');
       setWhatsappLoading(true);
       
       // Primeiro, precisamos obter o reseller_id do admin logado
@@ -554,15 +698,16 @@ export default function Settings() {
       
       if (data) {
         // Converter explicitamente para o tipo WhatsAppConnection
-        typedConnections = data.map((item: any) => ({
-          id: item.id as string,
-          name: item.name as string,
-          phone: item.phone as string,
-          status: (item.status as 'active' | 'inactive' | 'connecting' | 'disconnected') || 'inactive',
-          created_at: item.created_at as string,
-          instance_name: item.instance_name as string,
-          reseller_id: item.reseller_id as string
+        const connections = data.map(item => ({
+          id: String(item.id),
+          admin_id: String(item.admin_id),
+          name: String(item.name),
+          phone: String(item.phone || ''),
+          status: item.status && typeof item.status === 'string' && ['active', 'inactive', 'connecting', 'disconnected'].includes(item.status) ? item.status as WhatsAppConnection['status'] : 'inactive',
+          created_at: String(item.created_at),
+          instance_name: String(item.instance_name || '')
         }));
+        typedConnections = connections;
       }
       
       // Buscar todas as instâncias na Evolution API
@@ -583,7 +728,7 @@ export default function Settings() {
             // Para cada instância da API, verificar se já existe no banco
             for (const instance of apiInstances.data) {
               // Buscar o status da instância
-              let instanceStatus = 'disconnected';
+              let instanceStatus: WhatsAppConnection['status'] = 'disconnected';
               try {
                 const statusResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState?instanceName=${instance.instance.instanceName}`, {
                   method: 'GET',
@@ -615,7 +760,7 @@ export default function Settings() {
                     .eq('id', existingConnection.id);
                     
                   // Atualizar na lista em memória
-                  existingConnection.status = instanceStatus as any;
+                  existingConnection.status = instanceStatus;
                 }
               } else {
                 // Criar nova conexão no banco para instância encontrada na API
@@ -639,7 +784,7 @@ export default function Settings() {
                     id: newConn[0].id,
                     name: newConn[0].name,
                     phone: newConn[0].phone,
-                    status: newConn[0].status,
+                    status: newConn[0].status && typeof newConn[0].status === 'string' && ['active', 'inactive', 'connecting', 'disconnected'].includes(newConn[0].status) ? newConn[0].status as WhatsAppConnection['status'] : 'disconnected',
                     created_at: newConn[0].created_at,
                     instance_name: newConn[0].instance_name
                   });
@@ -730,7 +875,7 @@ export default function Settings() {
         
         // Verificar se a instância já existe
         if (checkData && checkData.data && Array.isArray(checkData.data)) {
-          const exists = checkData.data.some(instance => 
+          const exists = checkData.data.some((instance: { instance: { instanceName: string } }) => 
             instance.instance.instanceName === instanceName.trim()
           );
           
@@ -1000,146 +1145,13 @@ export default function Settings() {
     return `data:image/png;base64,${cleanBase64}`;
   };
   
-  // Função para verificar o status da conexão periodicamente
-  const getQRCodeForExistingInstance = async (instanceName: string) => {
+  // Função para verificar o status da conexão
+  const checkConnectionStatus = async () => {
+    if (!selectedInstance || !userInfo.id) return;
+    
+    setCheckingStatus(true);
     try {
-      setLoadingQRCode(true);
-      setConnectionError('');
-      
-      console.log('Tentando obter QR Code para instância existente:', instanceName);
-      
-      // Na Evolution API 2.2.3, o endpoint correto para obter o QR code é GET /instance/connect/{instanceName}
-      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connect/${instanceName}`, {
-        method: 'GET', // IMPORTANTE: deve ser GET, não POST
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-        }
-      });
-      
-      if (!response.ok) {
-        console.log('Endpoint principal falhou para instância existente, tentando alternativas...');
-        
-        // Tentar endpoints alternativos um a um
-        const altEndpoints = [
-          `https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/qrcode`,
-          `https://apiwhatsapp.nexopdv.com/instance/qrcode?instanceName=${instanceName}`
-        ];
-        
-        for (const endpoint of altEndpoints) {
-          try {
-            console.log(`Tentando endpoint alternativo: ${endpoint}`);
-            const altResponse = await fetch(endpoint, {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-              }
-            });
-            
-            if (altResponse.ok) {
-              const altData = await altResponse.json();
-              console.log('Resposta do endpoint alternativo para instância existente:', altData);
-              
-              // Processar resposta de endpoints alternativos
-              if (altData.base64) {
-                console.log('QR Code encontrado no campo base64');
-                setQRCodeData(altData.base64); // Já está com prefixo correto
-                return;
-              } else if (altData.qrcode) {
-                console.log('QR Code encontrado no campo qrcode');
-                const formattedQRCode = formatQRCodeToDataURL(altData.qrcode);
-                setQRCodeData(formattedQRCode);
-                return;
-              }
-            }
-          } catch (altError) {
-            console.error(`Erro no endpoint alternativo ${endpoint}:`, altError);
-          }
-        }
-        
-        throw new Error('Não foi possível obter o QR Code em nenhum endpoint');
-      }
-      
-      // Processando a resposta do endpoint principal
-      const data = await response.json();
-      console.log('Resposta da API para QR code (instância existente):', data);
-      
-      // Na Evolution API 2.2.3, o QR Code fica no campo 'base64' e já vem formatado corretamente
-      if (data.base64) {
-        console.log('QR Code encontrado no campo base64 (formato correto do Evolution API 2.2.3)');
-        setQRCodeData(data.base64); // Já está com prefixo data:image/png;base64,
-      }
-      // Verificar outros campos possíveis (diferentes versões/endpoints da API)
-      else if (data.qrcode) {
-        console.log('QR Code encontrado no campo qrcode');
-        const formattedQRCode = formatQRCodeToDataURL(data.qrcode);
-        setQRCodeData(formattedQRCode);
-      }
-      else if (data.code) {
-        console.log('QR Code encontrado no campo code');
-        const formattedQRCode = formatQRCodeToDataURL(data.code);
-        setQRCodeData(formattedQRCode);
-      }
-      else {
-        console.error('Resposta não contém campo de QR Code conhecido:', data);
-        throw new Error('QR Code não disponível na resposta da API');
-      }  
-    } catch (error: any) {
-      console.error('Erro ao obter QR Code:', error);
-      setConnectionError(error.message || 'Erro ao obter QR Code');
-    } finally {
-      setLoadingQRCode(false);
-    }
-  };
-  
-  // Função para configurar um webhook para receber notificações em tempo real de mudanças de status da conexão
-  const setupConnectionWebhook = async (instanceName: string, connectionId: string) => {
-    try {
-      console.log('Configurando webhook para a instância:', instanceName);
-      
-      // URL para webhook - pode ser um endpoint do seu backend que recebe as notificações
-      // ou um serviço temporário como webhook.site para testes
-      const webhookUrl = `${window.location.origin}/api/whatsapp-webhook`;
-      
-      // Configurar o webhook para a instância
-      const response = await fetch(`https://apiwhatsapp.nexopdv.com/webhook/set/${instanceName}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-        },
-        body: JSON.stringify({
-          url: webhookUrl,
-          webhook_by_events: false,
-          webhook_base64: false,
-          events: [
-            "CONNECTION_UPDATE",
-            "QRCODE_UPDATED"
-          ]
-        })
-      });
-      
-      const data = await response.json();
-      console.log('Webhook configurado:', data);
-      
-      // Implementar aqui um listener para o evento que será disparado quando o webhook receber a atualização
-      // Para simplificar, vamos continuar com a verificação periódica também
-      
-      return data;
-    } catch (error) {
-      console.error('Erro ao configurar webhook:', error);
-      return null;
-    }
-  };
-  
-  // Função para verificar o status da conexão WhatsApp pela API
-  const checkWhatsAppStatus = async (instanceName: string, connectionId: string) => {
-    try {
-      console.log('Verificando status da conexão WhatsApp:', instanceName);
-      
-      // Primeiro, vamos verificar usando o endpoint padrão de conexão
-      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState/${instanceName}`, {
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState?instanceName=${selectedInstance}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -1147,449 +1159,65 @@ export default function Settings() {
         }
       });
       
-      if (!response.ok) {
-        console.error('Erro ao verificar status da conexão:', response.status);
-        
-        // Se falhar, tentar um endpoint alternativo
-        const infoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/info/${instanceName}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-          }
-        });
-        
-        if (!infoResponse.ok) {
-          console.error('Falha ao verificar informações da instância:', infoResponse.status);
-          return false;
-        }
-        
-        const infoData = await infoResponse.json();
-        console.log('Informações da instância:', infoData);
-        
-        // Verificar se a instância está conectada baseado nas informações
-        if (infoData.status === 'connected' || infoData.status === 'CONNECTED' || infoData.connected === true) {
-          await updateConnectionStatusAndCloseModal(connectionId);
-          return true;
-        }
-        
-        return false;
-      }
-      
-      const data = await response.json();
-      console.log('Status atual da conexão:', data);
-      
-      // Verificar com condições mais abrangentes para detectar conexão
-      // IMPORTANT: Log detalhado para debugging
-      console.log('Detalhes do status:', {
-        state: data.state,
-        connected: typeof data.connected === 'boolean' ? data.connected : 'não disponível',
-        loggedIn: typeof data.loggedIn === 'boolean' ? data.loggedIn : 'não disponível',
-        status: typeof data.status === 'string' ? data.status : 'não disponível',
-        qrcode: data.qrcode ? 'presente' : 'ausente'
-      });
-      
-      // Condições mais abrangentes para detectar status conectado
-      const isConnected = (
-        data.state === 'open' || 
-        data.state === 'connected' ||
-        data.state === 'authenticated' ||
-        data.state === 'CONNECTED' ||
-        data.connected === true ||
-        data.loggedIn === true ||
-        (data.status && ['connected', 'authenticated', 'online'].includes(data.status.toLowerCase()))
-      );
-      
-      if (isConnected) {
-        console.log('CONEXÃO DETECTADA! WhatsApp conectado com sucesso!');
-        await updateConnectionStatusAndCloseModal(connectionId);
-        return true;
-      }
-      
-      // Verificar explicitamente se o QR code não está mais presente
-      if (data.state === 'connecting' && !data.qrcode) {
-        console.log('QR code foi escaneado, aguardando confirmação de conexão...');
-        
-        // Se não temos mais o QR code, provavelmente foi escaneado
-        // Vamos esperar um pouco e verificar novamente
-        setTimeout(async () => {
-          await checkWhatsAppStatus(instanceName, connectionId);
-        }, 2000);
-      }
-      
-      return false; // Ainda não está conectado
-    } catch (error) {
-      console.error('Erro ao verificar status da conexão:', error);
-      return false;
-    }
-  };
-  
-  // Função auxiliar para atualizar o status e fechar o modal
-  const updateConnectionStatusAndCloseModal = async (connectionId: string) => {
-    try {
-      // Forçar mudança de status no banco de dados, independente do erro
-      const { error: updateError } = await supabase
-        .from('whatsapp_connections')
-        .update({ status: 'active' })
-        .eq('id', connectionId);
-      
-      if (updateError) {
-        console.error('Erro ao atualizar status da conexão no banco:', updateError);
-        toast.error('Erro ao atualizar status: ' + updateError.message);
-      } else {
-        console.log('Status da conexão atualizado para active com sucesso');
-      }
-      
-      // Mostrar mensagem de sucesso independente de erro no banco
-      toast.success('WhatsApp conectado com sucesso!');
-      
-      // Fazer um backup do status no localStorage para garantir
-      try {
-        localStorage.setItem(`whatsapp_connection_${connectionId}`, 'active');
-      } catch (e) {
-        console.warn('Erro ao salvar status no localStorage', e);
-      }
-      
-      // Fechar o modal e limpar os intervalos SEMPRE
-      closeWhatsAppModal();
-      
-      // Atualizar a lista de conexões
-      loadWhatsAppConnections(userInfo.id);
-      
-      return true;
-    } catch (error) {
-      console.error('Erro ao processar conexão:', error);
-      // Mesmo com erro, tentar fechar o modal
-      closeWhatsAppModal();
-      return false;
-    }
-  };
-
-  // Função para abrir o modal de conexão com uma instância existente
-  const handleConnectInstance = (connectionId: string, instanceName: string) => {
-    console.log('Iniciando conexão com WhatsApp - ID:', connectionId, 'Instância:', instanceName);
-    
-    // Limpar intervalos anteriores se existirem
-    if (qrCodeIntervalRef.current) {
-      clearInterval(qrCodeIntervalRef.current);
-      qrCodeIntervalRef.current = null;
-    }
-    
-    if (statusCheckIntervalRef.current) {
-      clearInterval(statusCheckIntervalRef.current);
-      statusCheckIntervalRef.current = null;
-    }
-    
-    setSelectedConnectionId(connectionId);
-    setSelectedInstance(instanceName);
-    setConnectionError('');
-    setQRCodeData('');
-    setInstanceCreated(true); // Indicar que não precisamos criar a instância
-    setShowWhatsAppModal(true);
-    
-    // Após abrir o modal, verificar primeiro se a instância já está conectada
-    checkWhatsAppStatus(instanceName, connectionId).then(isConnected => {
-      if (isConnected) {
-        console.log('Instância já está conectada, fechando modal...');
-        return;
-      }
-      
-      // Se não estiver conectada, gerar o QR code
-      console.log('Instância não conectada, gerando QR Code...');
-      getQRCodeForExistingInstance(instanceName);
-      
-      // Tentar configurar um webhook para notificações em tempo real
-      setupConnectionWebhook(instanceName, connectionId).catch(error => {
-        console.error('Erro ao configurar webhook, usando fallback de verificação periódica:', error);
-      });
-      
-      // Configurar atualização automática do QR Code a cada 30 segundos (antes de expirar)
-      qrCodeIntervalRef.current = setInterval(() => {
-        if (showWhatsAppModal) {
-          console.log('Atualizando QR Code automaticamente para evitar expiração');
-          getQRCodeForExistingInstance(instanceName);
-        } else {
-          // Se o modal for fechado, parar o intervalo
-          if (qrCodeIntervalRef.current) {
-            clearInterval(qrCodeIntervalRef.current);
-            qrCodeIntervalRef.current = null;
-          }
-        }
-      }, 30000); // 30 segundos - QR code geralmente expira em 45-60 segundos
-    });
-    
-    // Verificação mais frequente (500ms) para garantir detecção imediata da conexão
-    statusCheckIntervalRef.current = setInterval(() => {
-      if (showWhatsAppModal) {
-        checkWhatsAppStatus(instanceName, connectionId);
-      } else {
-        // Se o modal for fechado, parar o intervalo
-        if (statusCheckIntervalRef.current) {
-          clearInterval(statusCheckIntervalRef.current);
-          statusCheckIntervalRef.current = null;
-        }
-      }
-    }, 500); // Verificar a cada 500ms para garantir resposta mais imediata
-  };
-  
-  // Função para desconectar uma instância
-  const handleDisconnectInstance = async (connectionId: string, instanceName: string) => {
-    try {
-      setLoadingAction({id: connectionId, action: 'disconnect'});
-      
-      // Chamar a API para fazer logout da instância
-      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/logout`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-        },
-        body: JSON.stringify({ instanceName })
-      });
-      
-      if (!response.ok) {
-        // Tentar endpoint alternativo
-        const altResponse = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/logout`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-          },
-          body: JSON.stringify({})
-        });
-        
-        if (!altResponse.ok) {
-          const altData = await altResponse.json();
-          console.error('Erro ao desconectar (alternativo):', altData);
-          throw new Error(altData.message || 'Erro ao desconectar instância');
-        }
-      }
-      
-      // Atualizar o status no banco de dados
-      const { error } = await supabase
-        .from('whatsapp_connections')
-        .update({ status: 'disconnected' })
-        .eq('id', connectionId);
-      
-      if (error) {
-        throw error;
-      }
-      
-      // Atualizar a lista de conexões na interface
-      setWhatsappConnections(prev => 
-        prev.map(conn => 
-          conn.id === connectionId ? { ...conn, status: 'disconnected' } : conn
-        )
-      );
-      
-      toast.success('WhatsApp desconectado com sucesso!');
-    } catch (error: any) {
-      console.error('Erro ao desconectar instância:', error);
-      toast.error('Erro ao desconectar: ' + error.message);
-    } finally {
-      setLoadingAction(null);
-    }
-  };
-  
-  // Função para confirmar a exclusão de uma instância
-  const handleConfirmDeleteInstance = (connectionId: string, name: string, instanceName: string) => {
-    setInstanceToDelete({ id: connectionId, name, instance: instanceName });
-    setShowDeleteConfirmWhatsapp(true);
-  };
-  
-  // Função para cancelar a exclusão
-  const handleCancelDeleteInstance = () => {
-    setInstanceToDelete(null);
-    setShowDeleteConfirmWhatsapp(false);
-  };
-  
-  // Função para excluir a instância
-  const handleDeleteInstance = async () => {
-    if (!instanceToDelete) return;
-    
-    try {
-      setLoadingAction({id: instanceToDelete.id, action: 'delete'});
-      
-      // Chamar a API para excluir a instância
-      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/delete`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-        },
-        body: JSON.stringify({ instanceName: instanceToDelete.instance })
-      });
-      
-      // Excluir o registro no banco de dados independentemente do resultado da API
-      const { error } = await supabase
-        .from('whatsapp_connections')
-        .delete()
-        .eq('id', instanceToDelete.id);
-      
-      if (error) {
-        throw error;
-      }
-      
-      // Remover a conexão da lista na interface
-      setWhatsappConnections(prev => 
-        prev.filter(conn => conn.id !== instanceToDelete.id)
-      );
-      
-      toast.success(`Instância ${instanceToDelete.name} excluída com sucesso!`);
-    } catch (error: any) {
-      console.error('Erro ao excluir instância:', error);
-      toast.error('Erro ao excluir: ' + error.message);
-    } finally {
-      setLoadingAction(null);
-      setInstanceToDelete(null);
-      setShowDeleteConfirmWhatsapp(false);
-    }
-  };
-  
-  const checkConnectionStatus = async () => {
-    try {
-      // Na Evolution API 2.2.3, o endpoint para verificar status pode ser diferente
-      // Tentamos primeiro o formato v1, depois o formato padrão
-      let isConnected = false;
-      let connectionDetails = null;
-
-      try {
-        // Tente o formato v1 primeiro
-        const response = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/status`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-          }
-        });
-        
+      if (response.ok) {
         const data = await response.json();
-        console.log('Resposta do status v1:', data);
-        
-        // Verificar se está conectado pelo formato v1
-        if (response.ok && (data.status === 'connected' || data.status === 'open')) {
-          isConnected = true;
-          connectionDetails = data;
+        if (data.state === 'open') {
+          setConnectionStatus('connected');
+          // Atualizar o status no banco e na interface
+          if (selectedConnectionId) {
+            await supabase
+              .from('whatsapp_connections')
+              .update({ status: 'active' })
+              .eq('id', selectedConnectionId);
+              
+            // Atualizar na lista em memória
+            setWhatsappConnections(prev => 
+              prev.map(conn => 
+                conn.id === selectedConnectionId 
+                  ? { ...conn, status: 'active' } 
+                  : conn
+              )
+            );
+          }
+          // Fechar modal de QR code após conexão bem-sucedida
+          setTimeout(() => {
+            setShowQRModal(false);
+            setLoadingQRCode(false);
+            // Recarregar conexões
+            loadWhatsAppConnections(userInfo.id);
+          }, 2000);
+        } else {
+          setConnectionStatus('pending');
         }
-      } catch (v1Error) {
-        console.error('Erro ao verificar status v1:', v1Error);
+      } else {
+        setConnectionStatus('failed');
       }
-      
-      // Se não tiver sucesso com o formato v1, tente o formato padrão
-      if (!isConnected) {
-        try {
-          const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState?instanceName=${instanceName}`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-            }
-          });
-          
-          const data = await response.json();
-          console.log('Resposta do status padrão:', data);
-          
-          // Verificar se está conectado pelo formato padrão
-          if (response.ok && data.state === 'open') {
-            isConnected = true;
-            connectionDetails = data;
-          }
-        } catch (stdError) {
-          console.error('Erro ao verificar status padrão:', stdError);
-        }
-      }
-      
-      // Se está conectado, obter informações e salvar no banco
-      if (isConnected) {
-        console.log('Conexão detectada! Buscando informações...');
-        try {
-          // Tente primeiro o formato v1
-          const infoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/v1/instance/${instanceName}/info`, {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-            }
-          });
-          
-          let infoData = await infoResponse.json();
-          console.log('Info da conexão:', infoData);
-          
-          // Se não funcionar, tente o formato padrão
-          if (!infoResponse.ok) {
-            const stdInfoResponse = await fetch(`https://apiwhatsapp.nexopdv.com/instance/info?instanceName=${instanceName}`, {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': '429683C4C977415CAAFCCE10F7D57E11'
-              }
-            });
-            
-            infoData = await stdInfoResponse.json();
-          }
-          
-          // Extrair informações relevantes dependendo do formato da resposta
-          let phoneNumber = '';
-          let displayName = instanceName;
-          
-          if (infoData.instance?.user?.id) {
-            phoneNumber = infoData.instance.user.id.split(':')[0] || '';
-            displayName = infoData.instance.user.name || instanceName;
-          } else if (infoData.phone) {
-            phoneNumber = infoData.phone;
-            displayName = infoData.name || instanceName;
-          } else if (infoData.wid) {
-            phoneNumber = infoData.wid.split('@')[0] || '';
-            displayName = infoData.pushname || instanceName;
-          }
-          
-          // Adicionar a conexão ao banco de dados
-          const { error } = await supabase
-            .from('whatsapp_connections')
-            .insert({
-              admin_id: userInfo.id,
-              instance_name: instanceName,
-              phone: phoneNumber,
-              name: displayName,
-              status: 'active',
-              created_at: new Date().toISOString()
-            });
-            
-          if (error) {
-            console.error('Erro ao salvar conexão:', error);
-            toast.error('Erro ao salvar conexão: ' + error.message);
-          } else {
-            toast.success('WhatsApp conectado com sucesso!');
-            loadWhatsAppConnections(userInfo.id); // Recarregar as conexões
-            closeWhatsAppModal();
-          }
-        } catch (infoError) {
-          console.error('Erro ao obter informações da conexão:', infoError);
-        }
-      }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Erro ao verificar status da conexão:', error);
+      setConnectionStatus('failed');
+    } finally {
+      setCheckingStatus(false);
     }
   };
   
-  // Função para verificar o status da conexão periodicamente
+  // Efeito para verificar o status da conexão periodicamente
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     
     if (qrCodeData && instanceCreated) {
       // Verificar imediatamente
-      checkConnectionStatus();
+      checkConnectionStatus && checkConnectionStatus();
       
       // E então iniciar o intervalo
       intervalId = setInterval(() => {
-        checkConnectionStatus();
+        checkConnectionStatus && checkConnectionStatus();
       }, 5000); // Verificar a cada 5 segundos
     }
     
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [qrCodeData, instanceCreated]);
+  }, [qrCodeData, instanceCreated, selectedInstance, selectedConnectionId]);
   
   // Atualizar periodicamente o status de todas as conexões
   useEffect(() => {
@@ -2360,8 +1988,107 @@ export default function Settings() {
           
           {activeTab === 'whatsapp' && (
             <div>
-              <div className="flex justify-center items-center p-6 h-64 bg-[#2A2A2A] rounded-lg border border-gray-800">
-                <p className="text-gray-400">Redirecionando para a nova página de conexões do WhatsApp...</p>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-white">Conexões WhatsApp</h2>
+                <button
+                  onClick={() => navigate('/admin/whats-login')}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg flex items-center gap-2 transition-colors text-sm"
+                >
+                  <Plus size={16} />
+                  <span>Adicionar Conexão</span>
+                </button>
+              </div>
+              
+              <div className="bg-[#2A2A2A] rounded-lg border border-gray-800 overflow-hidden w-full">
+                {whatsappLoading ? (
+                  <div className="flex items-center justify-center p-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+                    <span className="ml-2 text-gray-300">Carregando conexões...</span>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-[#353535] text-left">
+                          <th className="p-3 text-gray-300 font-medium text-sm">Nome</th>
+                          <th className="p-3 text-gray-300 font-medium text-sm">Número</th>
+                          <th className="p-3 text-gray-300 font-medium text-sm">Instância</th>
+                          <th className="p-3 text-gray-300 font-medium text-sm">Status</th>
+                          <th className="p-3 text-gray-300 font-medium text-sm">Criado em</th>
+                          <th className="p-3 text-gray-300 font-medium text-sm">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-800">
+                        {whatsappConnections.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="p-4 text-center text-gray-400">
+                              Nenhuma conexão WhatsApp configurada. Clique em "Adicionar Conexão" para começar.
+                            </td>
+                          </tr>
+                        ) : (
+                          whatsappConnections.map((connection) => (
+                            <tr key={connection.id} className="hover:bg-[#333]">
+                              <td className="p-3 text-white text-sm">{connection.name}</td>
+                              <td className="p-3 text-white text-sm">{connection.phone}</td>
+                              <td className="p-3 text-white text-sm">{connection.instance_name || 'N/A'}</td>
+                              <td className="p-3">
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    connection.status === 'active'
+                                      ? 'bg-green-100 text-green-800'
+                                      : connection.status === 'connecting'
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : 'bg-red-100 text-red-800'
+                                  }`}
+                                >
+                                  {connection.status === 'active'
+                                    ? 'Conectado'
+                                    : connection.status === 'connecting'
+                                    ? 'Conectando'
+                                    : 'Desconectado'}
+                                </span>
+                              </td>
+                              <td className="p-3 text-gray-300 text-sm">
+                                {new Date(connection.created_at).toLocaleDateString()}
+                              </td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-2">
+                                  {connection.status === 'active' ? (
+                                    <button
+                                      className="p-1 text-orange-400 hover:text-orange-300 rounded-lg flex items-center gap-1 text-xs"
+                                      title="Desconectar"
+                                      onClick={() => showDisconnectConfirmation(connection.id, connection.instance_name || '')}
+                                    >
+                                      <LogOut size={18} />
+                                      <span className="hidden sm:inline">Desconectar</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      className="p-1 text-green-400 hover:text-green-300 rounded-lg flex items-center gap-1 text-xs"
+                                      title="Conectar"
+                                      onClick={() => navigate(`/admin/whats-login?connectionId=${connection.id}`)}
+                                    >
+                                      <MessageSquare size={18} />
+                                      <span className="hidden sm:inline">Conectar</span>
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleDeleteConnection(connection.id, connection.instance_name || '')}
+                                    className="p-1 text-red-400 hover:text-red-300 rounded-lg flex items-center gap-1 text-xs"
+                                    title="Excluir"
+                                  >
+                                    <Trash2 size={18} />
+                                    <span className="hidden sm:inline">Excluir</span>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2542,29 +2269,25 @@ export default function Settings() {
               
               <div className="flex justify-end gap-3 mt-4">
                 <button
-                  type="button"
-                  className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-                  onClick={handleCancelDeleteInstance}
-                  disabled={loadingAction?.id === instanceToDelete.id}
+                  onClick={() => setShowDeleteConfirmWhatsapp(false)}
+                  className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md mr-2"
                 >
                   Cancelar
                 </button>
                 <button
-                  type="button"
-                  className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center gap-2 transition-colors"
-                  onClick={handleDeleteInstance}
-                  disabled={loadingAction?.id === instanceToDelete.id}
+                  onClick={() => instanceToDelete && handleDeleteConnectionConfirmed(instanceToDelete.id, instanceToDelete.instance)}
+                  className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
                 >
-                  {loadingAction?.id === instanceToDelete.id && loadingAction?.action === 'delete' ? (
+                  {loadingAction?.id === (instanceToDelete?.id || '') && loadingAction?.action === 'delete' ? (
                     <>
-                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
                       Excluindo...
                     </>
                   ) : (
-                    <>Excluir</>                    
+                    <>Excluir</>
                   )}
                 </button>
               </div>
@@ -2862,6 +2585,32 @@ export default function Settings() {
         onClose={() => setIsAiChatOpen(false)} 
         userName={userInfo.nome || userInfo.email}
       />
+      
+      {/* Modal de Confirmação para Conexões WhatsApp */}
+      {confirmationModal.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 border border-gray-700">
+            <h3 className="text-xl font-bold text-white mb-4">{confirmationModal.title}</h3>
+            <p className="text-gray-300 mb-6 whitespace-pre-line">{confirmationModal.message}</p>
+            
+            <div className="flex justify-end gap-4">
+              <button
+                onClick={closeConfirmationModal}
+                className="px-8 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
+              >
+                Cancelar
+              </button>
+              
+              <button
+                onClick={() => confirmationModal.onConfirm()}
+                className={`px-8 py-3 ${confirmationModal.isDelete ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg`}
+              >
+                {confirmationModal.isDelete ? 'Excluir' : 'Desconectar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
