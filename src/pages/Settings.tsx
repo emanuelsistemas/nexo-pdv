@@ -2691,14 +2691,9 @@ export default function Settings() {
                       </button>
                       <button
                         onClick={() => checkConnectionStatus()}
-                        disabled={checkingStatus}
-                        className="px-3 py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 text-white text-sm rounded-lg transition-colors flex items-center justify-center"
+                        className="px-3 py-3 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center"
                       >
-                        {checkingStatus ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        ) : (
-                          <span>Verificar</span>
-                        )}
+                        <span>Verificar</span>
                       </button>
                     </>
                   )}
