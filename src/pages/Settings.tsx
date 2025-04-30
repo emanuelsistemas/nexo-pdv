@@ -1151,6 +1151,8 @@ export default function Settings() {
     
     setCheckingStatus(true);
     try {
+      console.log('Verificando status da conexão WhatsApp:', selectedInstance);
+      
       // Usando o endpoint correto que já funcionava anteriormente
       const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState/${selectedInstance}`, {
         method: 'GET',
@@ -1160,16 +1162,26 @@ export default function Settings() {
         }
       });
       
+      // Primeiro obter o texto bruto da resposta para debugging
+      const responseText = await response.text();
+      console.log('Resposta bruta do status:', responseText);
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Erro ao analisar JSON do status:', parseError);
+        setConnectionStatus('failed');
+        return;
+      }
+      
       if (!response.ok) {
         console.error(`Erro na resposta da API: ${response.status} ${response.statusText}`);
         setConnectionStatus('failed');
         return;
       }
       
-      const data = await response.json();
-      console.log(`Status da conexão ${selectedInstance}:`, data);
-      
-      // Verificar o formato da resposta para extrair o estado (como no WhatsConnector)
+      // Verificar o formato da resposta para extrair o estado
       let state = '';
       let isConnected = false;
       
@@ -1212,6 +1224,12 @@ export default function Settings() {
           );
         }
         
+        // Parar de verificar o status após conectar
+        if (statusCheckIntervalRef.current) {
+          clearInterval(statusCheckIntervalRef.current);
+          statusCheckIntervalRef.current = null;
+        }
+        
         // Fechar modal de QR code após conexão bem-sucedida
         setTimeout(() => {
           setShowQRModal(false);
@@ -1249,25 +1267,16 @@ export default function Settings() {
     };
   }, [qrCodeData, instanceCreated, selectedInstance, selectedConnectionId]);
   
-  // Efeito para verificar o status da conexão periodicamente para conexões existentes (modal QR)
+  // Limpeza ao fechar o modal
   useEffect(() => {
-    let statusCheckId: NodeJS.Timeout;
-    
-    // Se o modal QR estiver aberto e tivermos QR code e instância selecionada
-    if (showQRModal && qrCodeData && selectedInstance) {
-      // Verificar imediatamente
-      checkConnectionStatus();
-      
-      // E então iniciar verificador a cada 3 segundos
-      statusCheckId = setInterval(() => {
-        checkConnectionStatus();
-      }, 3000);
+    if (!showQRModal) {
+      // Quando o modal é fechado, limpar o intervalo de verificação
+      if (statusCheckIntervalRef.current) {
+        clearInterval(statusCheckIntervalRef.current);
+        statusCheckIntervalRef.current = null;
+      }
     }
-    
-    return () => {
-      if (statusCheckId) clearInterval(statusCheckId);
-    };
-  }, [showQRModal, qrCodeData, selectedInstance, connectionStatus]);
+  }, [showQRModal]);
   
   // Atualizar periodicamente o status de todas as conexões
   useEffect(() => {
@@ -1583,9 +1592,20 @@ export default function Settings() {
     // Abre o modal de QR code (modal para conexão existente)
     setShowQRModal(true);
     
+    // Limpar qualquer intervalo existente
+    if (statusCheckIntervalRef.current) {
+      clearInterval(statusCheckIntervalRef.current);
+      statusCheckIntervalRef.current = null;
+    }
+    
     // Inicia a geração do QR code para esta instância
     if (instanceName) {
       getQRCodeForExistingInstance(instanceName, connectionId);
+      
+      // Inicia a verificação periódica do status
+      statusCheckIntervalRef.current = setInterval(() => {
+        checkConnectionStatus();
+      }, 3000); // Verificar a cada 3 segundos
     }
   };
   
@@ -1595,7 +1615,7 @@ export default function Settings() {
       setLoadingQRCode(true);
       setConnectionError('');
       
-      console.log('Obtendo QR Code para instância:', instanceName);
+      console.log('Obtendo QR Code para instância existente:', instanceName);
       
       const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connect/${instanceName}`, {
         method: 'GET',
@@ -1605,21 +1625,33 @@ export default function Settings() {
         }
       });
       
-      if (!response.ok) {
-        console.error('Erro ao obter QR Code:', response.status);
-        throw new Error('Não foi possível obter o QR Code para esta instância');
+      // Primeiro obter o texto bruto da resposta para debugging
+      const responseText = await response.text();
+      console.log('Resposta bruta do QR code:', responseText);
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Erro ao analisar JSON:', parseError);
+        throw new Error(`Erro no formato da resposta: ${responseText.substring(0, 100)}...`);
       }
       
-      const data = await response.json();
-      console.log('Resposta da API:', data);
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Erro ao obter QR Code');
+      }
       
+      // Dependendo da versão da API, o QR Code pode estar em diferentes propriedades
       if (data.base64) {
-        setQRCodeData(data.base64); // QR code com prefixo data:image/...
+        setQRCodeData(formatQRCodeToDataURL(data.base64));
       } else if (data.qrcode) {
         setQRCodeData(formatQRCodeToDataURL(data.qrcode));
       } else {
         throw new Error('QR Code não disponível na resposta');
       }
+      
+      // Iniciar verificação periódica do status imediatamente após receber o QR code
+      checkConnectionStatus();
     } catch (error: any) {
       console.error('Erro ao obter QR Code:', error);
       setConnectionError(error.message || 'Erro ao obter QR Code');
