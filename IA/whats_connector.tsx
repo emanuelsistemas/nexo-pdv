@@ -232,6 +232,59 @@ const WhatsConnector: React.FC = () => {
     setConnectionStatus('pending');
   };
   
+  // Função para desconectar uma instância WhatsApp
+  const handleDisconnectWhatsApp = async (connectionId: string, instanceName: string) => {
+    try {
+      setLoading(true);
+      
+      // 1. Desconectar a instância na Evolution API
+      if (instanceName) {
+        try {
+          // Chama o endpoint de logout da Evolution API
+          const response = await fetch(`${EVOLUTION_API_URL}/instance/logout/${instanceName}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': EVOLUTION_API_KEY
+            }
+          });
+          
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.message || 'Erro ao desconectar instância');
+          }
+          
+          console.log(`Instância ${instanceName} desconectada com sucesso na Evolution API`);
+        } catch (apiError: any) {
+          console.error('Erro ao desconectar instância na API:', apiError);
+          toast.error('Erro ao desconectar instância: ' + apiError.message);
+        }
+      }
+      
+      // 2. Atualizar o status da conexão para 'inactive' no banco de dados
+      const { error } = await supabase
+        .from('whatsapp_connections')
+        .update({ status: 'inactive' })
+        .eq('id', connectionId);
+      
+      if (error) {
+        throw error;
+      }
+      
+      // 3. Atualizar a lista de conexões
+      if (adminId) {
+        loadWhatsAppConnections(adminId);
+      }
+      
+      toast.success('WhatsApp desconectado com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao desconectar WhatsApp:', error);
+      toast.error('Erro ao desconectar: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   // Função para excluir uma conexão
   const handleDeleteConnection = async (connectionId: string, instanceName: string) => {
     if (!confirm(`Tem certeza que deseja excluir esta conexão?\nA instância ${instanceName} será removida.`)) {
@@ -730,6 +783,7 @@ const WhatsConnector: React.FC = () => {
                               <button
                                 className="p-1 text-orange-400 hover:text-orange-300 rounded-lg flex items-center gap-1 text-xs"
                                 title="Desconectar"
+                                onClick={() => handleDisconnectWhatsApp(connection.id, connection.instance_name || '')}
                               >
                                 <LogOut size={18} />
                                 <span className="hidden sm:inline">Desconectar</span>
