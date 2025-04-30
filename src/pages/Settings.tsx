@@ -1155,7 +1155,8 @@ export default function Settings() {
   const checkConnectionStatus = async () => {
     if (!selectedInstance || !userInfo.id) return;
     
-    setCheckingStatus(true);
+    // Removemos o setCheckingStatus(true) para evitar problemas com a verificação automática
+    // já que não temos mais o botão de verificar
     try {
       console.log('Verificando status da conexão WhatsApp:', selectedInstance);
       
@@ -1250,8 +1251,13 @@ export default function Settings() {
       console.error('Erro ao verificar status da conexão:', error);
       setConnectionStatus('failed');
     } finally {
-      setCheckingStatus(false);
+      // Aqui não precisamos mais do setCheckingStatus(false) 
+      // já que não estamos mais usando esse estado para controlar o botão de verificar
+      // que foi removido
     }
+    
+    // Log para debug da verificação automática
+    console.log('Verificação automática de status concluída');
   };
   
   // Função para recarregar o QR Code ao clicar no botão de refresh
@@ -2698,9 +2704,22 @@ export default function Settings() {
                       <span>Concluído</span>
                     </button>
                   ) : (
-                    <div className="w-full text-center">
-                      <p className="text-gray-400 text-xs">Aguarde, o QR code é atualizado automaticamente</p>
-                    </div>
+                    <>
+                      <button
+                        onClick={refreshQRCode}
+                        disabled={loadingQRCode}
+                        className="flex-1 px-3 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <RefreshCw size={14} className={loadingQRCode ? "animate-spin" : ""} />
+                        <span>Recarregar QR Code</span>
+                      </button>
+                      <button
+                        onClick={() => checkConnectionStatus()}
+                        className="px-3 py-3 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center"
+                      >
+                        <span>Verificar</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
