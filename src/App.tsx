@@ -32,6 +32,11 @@ const Resellers = lazy(() => import('./pages/Resellers'));
 const ResellerEdit = lazy(() => import('./pages/ResellerEdit'));
 const Settings = lazy(() => import('./pages/Settings'));
 const ChatNexo = lazy(() => import('./pages/ChatNexo'));
+const WhatsAppConnection = lazy(() => import('./pages/WhatsAppConnection'));
+
+// Importações temporárias para testes
+const WhatsConnector = lazy(() => import('../IA/whats_connector'));
+const LoginTest = lazy(() => import('../IA/login'));
 
 // Criando context para o tema
 type Theme = 'dark' | 'light';
@@ -350,6 +355,9 @@ function App() {
             <Route path="/admin/reseller/:id" element={<ResellerEdit />} />
             <Route path="/admin/settings" element={<Settings />} />
             <Route path="/admin/chat" element={<ChatNexo />} />
+            <Route path="/admin/whatsapp-connection" element={<WhatsAppConnection />} />
+            <Route path="/admin/whats-test" element={<WhatsConnector />} />
+            <Route path="/admin/whats-login" element={<LoginTest />} />
 
             {/* Protected routes */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
