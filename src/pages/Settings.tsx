@@ -1152,15 +1152,15 @@ export default function Settings() {
   };
   
   // Função para verificar o status da conexão
-  const checkConnectionStatus = async () => {
-    if (!selectedInstance || !userInfo.id) return;
+  const checkConnectionStatus = async (instanceName: string, connectionId: string) => {
+    if (!instanceName || !userInfo.id) return;
     
-    setCheckingStatus(true); // Restauramos esta linha para o botão funcionar
+    setCheckingStatus(true);
     try {
       console.log('Verificando status da conexão WhatsApp:', selectedInstance);
       
       // Usando o endpoint correto que já funcionava anteriormente
-      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState/${selectedInstance}`, {
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState/${instanceName}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -1214,16 +1214,16 @@ export default function Settings() {
         setConnectionStatus('connected');
         
         // Atualizar o status no banco e na interface
-        if (selectedConnectionId) {
+        if (connectionId) {
           await supabase
             .from('whatsapp_connections')
             .update({ status: 'active' })
-            .eq('id', selectedConnectionId);
+            .eq('id', connectionId);
             
           // Atualizar na lista em memória
           setWhatsappConnections(prev => 
             prev.map(conn => 
-              conn.id === selectedConnectionId 
+              conn.id === connectionId 
                 ? { ...conn, status: 'active' } 
                 : conn
             )
@@ -1238,7 +1238,7 @@ export default function Settings() {
         
         // Fechar modal de QR code após conexão bem-sucedida
         setTimeout(() => {
-          setShowQRModal(false);
+          closeQRModal();
           setLoadingQRCode(false);
           // Recarregar conexões
           loadWhatsAppConnections(userInfo.id);
@@ -1254,6 +1254,23 @@ export default function Settings() {
     }
   };
   
+  // Função para fechar o modal de QR Code e limpar intervalos
+  const closeQRModal = () => {
+    // Limpar o intervalo de verificação de status
+    if (statusCheckIntervalRef.current) {
+      clearInterval(statusCheckIntervalRef.current);
+      statusCheckIntervalRef.current = null;
+    }
+    
+    // Limpar o intervalo de atualização do QR code
+    if (qrCodeIntervalRef.current) {
+      clearInterval(qrCodeIntervalRef.current);
+      qrCodeIntervalRef.current = null;
+    }
+    
+    setShowQRModal(false);
+  };
+
   // Função para recarregar o QR Code ao clicar no botão de refresh
   const refreshQRCode = () => {
     if (selectedInstance && selectedConnectionId) {
@@ -1264,7 +1281,7 @@ export default function Settings() {
       }
       
       statusCheckIntervalRef.current = setInterval(() => {
-        checkConnectionStatus();
+        checkConnectionStatus(selectedInstance, selectedConnectionId);
       }, 3000); // Verificar a cada 3 segundos
     }
   };
@@ -1629,9 +1646,15 @@ export default function Settings() {
       getQRCodeForExistingInstance(instanceName, connectionId);
       
       // Inicia a verificação periódica do status
+      console.log('Iniciando verificação automática a cada 2 segundos...');
+      // Primeiro verificamos imediatamente
+      checkConnectionStatus(instanceName, connectionId);
+      
+      // E depois a cada 2 segundos
       statusCheckIntervalRef.current = setInterval(() => {
-        checkConnectionStatus();
-      }, 3000); // Verificar a cada 3 segundos
+        console.log('Verificando status automático...');
+        checkConnectionStatus(instanceName, connectionId);
+      }, 2000); // Verificar a cada 2 segundos
       
       // Configurar atualização automática do QR code a cada 30 segundos
       qrCodeIntervalRef.current = setInterval(() => {
@@ -2691,7 +2714,7 @@ export default function Settings() {
                 <div className="flex gap-4">
                   {connectionStatus === 'connected' ? (
                     <button
-                      onClick={() => setShowQRModal(false)}
+                      onClick={closeQRModal}
                       className="flex-1 px-3 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
                     >
                       <Check size={16} />
@@ -2708,7 +2731,7 @@ export default function Settings() {
                         <span>Recarregar QR Code</span>
                       </button>
                       <button
-                        onClick={() => checkConnectionStatus()}
+                        onClick={() => checkConnectionStatus(selectedInstance || '', selectedConnectionId || '')}
                         className="px-3 py-3 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center"
                       >
                         <span>Verificar</span>
