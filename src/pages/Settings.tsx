@@ -110,7 +110,8 @@ export default function Settings() {
     onConfirm: () => {},
     isDelete: false,
     instanceName: '',
-    connectionId: ''
+    connectionId: '',
+    loading: false
   });
   
   // Estados para o modal de adicionar/editar usuário
@@ -396,7 +397,7 @@ export default function Settings() {
   
   // Função para fechar o modal de confirmação
   const closeConfirmationModal = () => {
-    setConfirmationModal(prev => ({ ...prev, show: false }));
+    setConfirmationModal(prev => ({ ...prev, show: false, loading: false }));
   };
   
   // Função para desconectar uma instância WhatsApp
@@ -2677,9 +2678,7 @@ export default function Settings() {
                       </div>
                     )}
                     
-                    <div className="mt-2 text-xs text-gray-400 mb-6">
-                      Este QR Code expira em 45 segundos. Se expirar, clique em "Recarregar QR Code".
-                    </div>
+
                     
                     {connectionError && (
                       <div className="mt-4 mb-4 p-2 bg-red-900/50 text-red-100 rounded border border-red-700">
@@ -2699,16 +2698,9 @@ export default function Settings() {
                       <span>Concluído</span>
                     </button>
                   ) : (
-                    <>
-                      <button
-                        onClick={refreshQRCode}
-                        disabled={loadingQRCode}
-                        className="w-full px-3 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
-                      >
-                        <RefreshCw size={14} className={loadingQRCode ? "animate-spin" : ""} />
-                        <span>Recarregar QR Code</span>
-                      </button>
-                    </>
+                    <div className="w-full text-center">
+                      <p className="text-gray-400 text-xs">Aguarde, o QR code é atualizado automaticamente</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2888,10 +2880,21 @@ export default function Settings() {
               </button>
               
               <button
-                onClick={() => confirmationModal.onConfirm()}
-                className={`px-8 py-3 ${confirmationModal.isDelete ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg`}
+                onClick={() => {
+                  setConfirmationModal(prev => ({ ...prev, loading: true }));
+                  confirmationModal.onConfirm();
+                }}
+                disabled={confirmationModal.loading}
+                className={`px-8 py-3 ${confirmationModal.isDelete ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} disabled:opacity-70 text-white rounded-lg flex items-center justify-center min-w-[120px]`}
               >
-                {confirmationModal.isDelete ? 'Excluir' : 'Desconectar'}
+                {confirmationModal.loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <span>{confirmationModal.isDelete ? 'Excluindo...' : 'Desconectando...'}</span>
+                  </>
+                ) : (
+                  <span>{confirmationModal.isDelete ? 'Excluir' : 'Desconectar'}</span>
+                )}
               </button>
             </div>
           </div>
