@@ -1151,7 +1151,8 @@ export default function Settings() {
     
     setCheckingStatus(true);
     try {
-      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState?instanceName=${selectedInstance}`, {
+      // Usando o endpoint correto que já funcionava anteriormente
+      const response = await fetch(`https://apiwhatsapp.nexopdv.com/instance/connectionState/${selectedInstance}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -1159,47 +1160,67 @@ export default function Settings() {
         }
       });
       
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`Status da conexão ${selectedInstance}:`, data);
-        
-        if (data.state === 'open') {
-          // Se o status anterior não era connected, mostramos mensagem de sucesso
-          if (connectionStatus !== 'connected') {
-            toast.success('WhatsApp conectado com sucesso!');
-          }
-          
-          setConnectionStatus('connected');
-          
-          // Atualizar o status no banco e na interface
-          if (selectedConnectionId) {
-            await supabase
-              .from('whatsapp_connections')
-              .update({ status: 'active' })
-              .eq('id', selectedConnectionId);
-              
-            // Atualizar na lista em memória
-            setWhatsappConnections(prev => 
-              prev.map(conn => 
-                conn.id === selectedConnectionId 
-                  ? { ...conn, status: 'active' } 
-                  : conn
-              )
-            );
-          }
-          
-          // Fechar modal de QR code após conexão bem-sucedida
-          setTimeout(() => {
-            setShowQRModal(false);
-            setLoadingQRCode(false);
-            // Recarregar conexões
-            loadWhatsAppConnections(userInfo.id);
-          }, 2000);
-        } else {
-          setConnectionStatus('pending');
-        }
-      } else {
+      if (!response.ok) {
+        console.error(`Erro na resposta da API: ${response.status} ${response.statusText}`);
         setConnectionStatus('failed');
+        return;
+      }
+      
+      const data = await response.json();
+      console.log(`Status da conexão ${selectedInstance}:`, data);
+      
+      // Verificar o formato da resposta para extrair o estado (como no WhatsConnector)
+      let state = '';
+      let isConnected = false;
+      
+      if (data.instance && data.instance.state) {
+        // Formato: {"instance":{"instanceName":"2","state":"open"}}
+        state = data.instance.state;
+        isConnected = state === 'open' || state === 'connected';
+      } else if (data.state) {
+        // Formato alternativo direto: {"state":"open"}
+        state = data.state;
+        isConnected = state === 'open' || state === 'connected';
+      }
+      
+      console.log(`Status da conexão: ${state} (Conectado: ${isConnected})`);
+      
+      if (isConnected) {
+        console.log('CONEXÃO DETECTADA! WhatsApp conectado com sucesso!');
+        
+        // Se o status anterior não era connected, mostramos mensagem de sucesso
+        if (connectionStatus !== 'connected') {
+          toast.success('WhatsApp conectado com sucesso!');
+        }
+        
+        setConnectionStatus('connected');
+        
+        // Atualizar o status no banco e na interface
+        if (selectedConnectionId) {
+          await supabase
+            .from('whatsapp_connections')
+            .update({ status: 'active' })
+            .eq('id', selectedConnectionId);
+            
+          // Atualizar na lista em memória
+          setWhatsappConnections(prev => 
+            prev.map(conn => 
+              conn.id === selectedConnectionId 
+                ? { ...conn, status: 'active' } 
+                : conn
+            )
+          );
+        }
+        
+        // Fechar modal de QR code após conexão bem-sucedida
+        setTimeout(() => {
+          setShowQRModal(false);
+          setLoadingQRCode(false);
+          // Recarregar conexões
+          loadWhatsAppConnections(userInfo.id);
+        }, 2000);
+      } else {
+        setConnectionStatus('pending');
       }
     } catch (error) {
       console.error('Erro ao verificar status da conexão:', error);
