@@ -1161,8 +1161,16 @@ export default function Settings() {
       
       if (response.ok) {
         const data = await response.json();
+        console.log(`Status da conexão ${selectedInstance}:`, data);
+        
         if (data.state === 'open') {
+          // Se o status anterior não era connected, mostramos mensagem de sucesso
+          if (connectionStatus !== 'connected') {
+            toast.success('WhatsApp conectado com sucesso!');
+          }
+          
           setConnectionStatus('connected');
+          
           // Atualizar o status no banco e na interface
           if (selectedConnectionId) {
             await supabase
@@ -1179,6 +1187,7 @@ export default function Settings() {
               )
             );
           }
+          
           // Fechar modal de QR code após conexão bem-sucedida
           setTimeout(() => {
             setShowQRModal(false);
@@ -1200,7 +1209,7 @@ export default function Settings() {
     }
   };
   
-  // Efeito para verificar o status da conexão periodicamente
+  // Efeito para verificar o status da conexão periodicamente para novas instâncias
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     
@@ -1218,6 +1227,26 @@ export default function Settings() {
       if (intervalId) clearInterval(intervalId);
     };
   }, [qrCodeData, instanceCreated, selectedInstance, selectedConnectionId]);
+  
+  // Efeito para verificar o status da conexão periodicamente para conexões existentes (modal QR)
+  useEffect(() => {
+    let statusCheckId: NodeJS.Timeout;
+    
+    // Se o modal QR estiver aberto e tivermos QR code e instância selecionada
+    if (showQRModal && qrCodeData && selectedInstance) {
+      // Verificar imediatamente
+      checkConnectionStatus();
+      
+      // E então iniciar verificador a cada 3 segundos
+      statusCheckId = setInterval(() => {
+        checkConnectionStatus();
+      }, 3000);
+    }
+    
+    return () => {
+      if (statusCheckId) clearInterval(statusCheckId);
+    };
+  }, [showQRModal, qrCodeData, selectedInstance, connectionStatus]);
   
   // Atualizar periodicamente o status de todas as conexões
   useEffect(() => {
@@ -2557,12 +2586,15 @@ export default function Settings() {
                       )}
                     </p>
                   ) : connectionStatus === 'connected' ? (
-                    <p className="text-emerald-500 text-sm flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Conectado com sucesso!
-                    </p>
+                    <div className="flex flex-col items-center">
+                      <div className="bg-emerald-100 rounded-full h-12 w-12 flex items-center justify-center mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <p className="text-emerald-500 text-sm font-medium">Conectado com sucesso!</p>
+                      <p className="text-gray-400 text-xs mt-1">Fechando em alguns segundos...</p>
+                    </div>
                   ) : (
                     <p className="text-red-500 text-sm">
                       Falha na conexão. Tente novamente.
