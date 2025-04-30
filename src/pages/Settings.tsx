@@ -2506,22 +2506,6 @@ export default function Settings() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <label className="text-sm font-medium text-gray-300">Horário de funcionamento</label>
-                        <p className="text-xs text-gray-400">Definir quando o chat estará disponível</p>
-                      </div>
-                      <div className="flex items-center">
-                        <input 
-                          type="checkbox" 
-                          id="24hours" 
-                          className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                          defaultChecked
-                        />
-                        <label htmlFor="24hours" className="ml-2 text-sm font-medium text-gray-300">24 horas</label>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div>
                         <label className="text-sm font-medium text-gray-300">Integração com IA</label>
                         <p className="text-xs text-gray-400">Utilizar inteligência artificial para respostas automáticas</p>
                       </div>
@@ -2534,6 +2518,60 @@ export default function Settings() {
                           onChange={(e) => setIaIntegrationEnabled(e.target.checked)}
                         />
                         <label htmlFor="ia_integration" className="ml-2 text-sm font-medium text-gray-300">Ativar</label>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="text-sm font-medium text-gray-300">Horário de funcionamento</label>
+                          <p className="text-xs text-gray-400">Definir quando o chat estará disponível</p>
+                        </div>
+                        <div className="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            id="24hours" 
+                            className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                          />
+                          <label htmlFor="24hours" className="ml-2 text-sm font-medium text-gray-300">24 horas</label>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-3 bg-[#333] border border-gray-700 rounded-lg p-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map((dia, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 border-b border-gray-700">
+                              <div className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  id={`dia-${index}`}
+                                  className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                                />
+                                <label htmlFor={`dia-${index}`} className="ml-2 text-sm text-white">{dia}</label>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div>
+                                  <label htmlFor={`inicio-${index}`} className="text-xs text-gray-400 block mb-1">Início</label>
+                                  <input
+                                    type="time"
+                                    id={`inicio-${index}`}
+                                    className="text-xs p-1 bg-[#444] border border-gray-600 rounded text-white w-[85px]"
+                                    defaultValue="08:00"
+                                  />
+                                </div>
+                                <div>
+                                  <label htmlFor={`fim-${index}`} className="text-xs text-gray-400 block mb-1">Fim</label>
+                                  <input
+                                    type="time"
+                                    id={`fim-${index}`}
+                                    className="text-xs p-1 bg-[#444] border border-gray-600 rounded text-white w-[85px]"
+                                    defaultValue="18:00"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
