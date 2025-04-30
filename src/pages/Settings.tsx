@@ -2684,16 +2684,10 @@ export default function Settings() {
                       <button
                         onClick={refreshQRCode}
                         disabled={loadingQRCode}
-                        className="flex-1 px-3 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+                        className="w-full px-3 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
                       >
                         <RefreshCw size={14} className={loadingQRCode ? "animate-spin" : ""} />
                         <span>Recarregar QR Code</span>
-                      </button>
-                      <button
-                        onClick={() => checkConnectionStatus()}
-                        className="px-3 py-3 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center"
-                      >
-                        <span>Verificar</span>
                       </button>
                     </>
                   )}
