@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Trash2, X, Plus, Settings as SettingsIcon, MessageCircle, MessageSquare } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Trash2, X, Plus, Settings as SettingsIcon, MessageCircle, MessageSquare, RefreshCw, Check } from 'lucide-react';
 import AIChat from '../components/AIChat';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
@@ -1245,6 +1245,21 @@ export default function Settings() {
       setConnectionStatus('failed');
     } finally {
       setCheckingStatus(false);
+    }
+  };
+  
+  // Função para recarregar o QR Code ao clicar no botão de refresh
+  const refreshQRCode = () => {
+    if (selectedInstance && selectedConnectionId) {
+      getQRCodeForExistingInstance(selectedInstance, selectedConnectionId);
+      // Reiniciar o intervalo de verificação de status
+      if (statusCheckIntervalRef.current) {
+        clearInterval(statusCheckIntervalRef.current);
+      }
+      
+      statusCheckIntervalRef.current = setInterval(() => {
+        checkConnectionStatus();
+      }, 3000); // Verificar a cada 3 segundos
     }
   };
   
@@ -2579,107 +2594,110 @@ export default function Settings() {
       {showQRModal && currentConnection && (
         <div className="fixed inset-0 bg-black/50 z-50">
           <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-            <div className="bg-[#2A2A2A] rounded-lg shadow-lg border border-gray-800 p-6 w-full max-w-md">
-              <h3 className="text-lg font-semibold text-white mb-4">Conectar WhatsApp</h3>
-              
-              <div className="mb-4 text-center">
-                <p className="mb-4 text-gray-300">
-                  Escaneie o QR Code abaixo com seu celular para conectar <strong>{currentConnection.name}</strong>:
-                </p>
-                
-                <div className="bg-white p-4 rounded-lg mx-auto w-[220px] h-[220px] flex items-center justify-center">
-                  {loadingQRCode ? (
-                    <div className="flex flex-col items-center justify-center">
-                      <svg className="animate-spin h-10 w-10 text-emerald-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <p className="mt-2 text-gray-600">Gerando QR Code...</p>
-                    </div>
-                  ) : qrCodeData ? (
-                    <img
-                      src={qrCodeData}
-                      alt="QR Code para conexão WhatsApp"
-                      className="w-full h-full object-contain"
-                      onError={(e) => {
-                        console.error('Erro ao carregar imagem do QR Code');
-                        setConnectionError('Erro ao exibir QR Code. Tente novamente.');
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <p className="mt-2 text-red-500">Erro ao gerar QR Code</p>
-                    </div>
-                  )}
-                </div>
-                
-                {connectionError && (
-                  <div className="mt-4 p-2 bg-red-900/50 text-red-100 rounded border border-red-700">
-                    {connectionError}
-                  </div>
-                )}
-                
-                <div className="mt-4 flex items-center justify-center">
-                  {connectionStatus === 'pending' ? (
-                    <p className="text-gray-400 text-sm">
-                      {checkingStatus ? (
-                        <span className="flex items-center">
-                          <svg className="animate-spin mr-2 h-4 w-4 text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Verificando status da conexão...
-                        </span>
-                      ) : (
-                        'Aguardando conexão. Escaneie o QR Code com seu WhatsApp.'
-                      )}
-                    </p>
-                  ) : connectionStatus === 'connected' ? (
-                    <div className="flex flex-col items-center">
-                      <div className="bg-emerald-100 rounded-full h-12 w-12 flex items-center justify-center mb-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </div>
-                      <p className="text-emerald-500 text-sm font-medium">Conectado com sucesso!</p>
-                      <p className="text-gray-400 text-xs mt-1">Fechando em alguns segundos...</p>
-                    </div>
-                  ) : (
-                    <p className="text-red-500 text-sm">
-                      Falha na conexão. Tente novamente.
-                    </p>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex justify-end space-x-2">
+            <div className="bg-[#2A2A2A] rounded-lg shadow-lg border border-gray-800 p-4 w-full max-w-[400px]">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                  <MessageSquare size={18} className="text-emerald-500" />
+                  Conectar WhatsApp
+                </h3>
                 <button
                   onClick={() => setShowQRModal(false)}
-                  className="px-4 py-2 border border-gray-700 rounded text-gray-300 hover:bg-gray-700"
+                  className="text-gray-400 hover:text-white"
                 >
-                  Fechar
+                  <X size={18} />
                 </button>
-                <button
-                  onClick={() => getQRCodeForExistingInstance(selectedInstance, selectedConnectionId || '')}
-                  disabled={loadingQRCode || connectionStatus === 'connected'}
-                  className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-emerald-800/50 disabled:cursor-not-allowed flex items-center"
-                >
-                  {loadingQRCode ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Gerando...
-                    </>
+              </div>
+              
+              <div className="text-center">
+                {connectionStatus === 'connected' ? (
+                  <div className="mb-6">
+                    <div className="flex flex-col items-center justify-center p-6">
+                      <div className="bg-green-500 rounded-full p-4 mb-4">
+                        <Check size={40} className="text-white" />
+                      </div>
+                      <h3 className="text-lg font-medium text-white mb-2">Conexão Estabelecida!</h3>
+                      <p className="text-gray-300">
+                        Seu WhatsApp está conectado à instância
+                        <strong className="text-white"> {currentConnection.instance_name}</strong>.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mb-4 text-sm text-gray-300">
+                      Escaneie o QR Code abaixo com seu WhatsApp para conectar
+                      <strong className="text-white"> {currentConnection.name || currentConnection.instance_name}</strong>:
+                    </p>
+                    
+                    {loadingQRCode ? (
+                      <div className="flex flex-col items-center justify-center p-6">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500 mb-2"></div>
+                        <span className="text-gray-300">Gerando QR Code...</span>
+                      </div>
+                    ) : qrCodeData ? (
+                      <div className="bg-white p-4 rounded-lg inline-block mb-4">
+                        <img 
+                          src={qrCodeData} 
+                          alt="QR Code para conexão" 
+                          className="w-48 h-48 object-contain" 
+                          onError={(e) => {
+                            console.error('Erro ao carregar imagem do QR Code');
+                            setConnectionError('Erro ao exibir QR Code. Tente novamente.');
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="bg-[#1C1C1C] p-6 rounded-lg mb-4">
+                        <p className="text-red-400">{connectionError || 'QR Code não disponível'}</p>
+                      </div>
+                    )}
+                    
+                    <div className="mt-2 text-xs text-gray-400 mb-6">
+                      Este QR Code expira em 45 segundos. Se expirar, clique em "Recarregar QR Code".
+                    </div>
+                    
+                    {connectionError && (
+                      <div className="mt-4 mb-4 p-2 bg-red-900/50 text-red-100 rounded border border-red-700">
+                        {connectionError}
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                <div className="flex gap-4">
+                  {connectionStatus === 'connected' ? (
+                    <button
+                      onClick={() => setShowQRModal(false)}
+                      className="flex-1 px-3 py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Check size={16} />
+                      <span>Concluído</span>
+                    </button>
                   ) : (
-                    'Atualizar QR Code'
+                    <>
+                      <button
+                        onClick={refreshQRCode}
+                        disabled={loadingQRCode}
+                        className="flex-1 px-3 py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+                      >
+                        <RefreshCw size={14} className={loadingQRCode ? "animate-spin" : ""} />
+                        <span>Recarregar QR Code</span>
+                      </button>
+                      <button
+                        onClick={() => checkConnectionStatus()}
+                        disabled={checkingStatus}
+                        className="px-3 py-3 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 text-white text-sm rounded-lg transition-colors flex items-center justify-center"
+                      >
+                        {checkingStatus ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        ) : (
+                          <span>Verificar</span>
+                        )}
+                      </button>
+                    </>
                   )}
-                </button>
+                </div>
               </div>
             </div>
           </div>
