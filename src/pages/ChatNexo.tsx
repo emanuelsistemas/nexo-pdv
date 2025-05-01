@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Settings as SettingsIcon, MessageCircle, Send, X, Search, MessageSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import axios from 'axios';
 
 interface Message {
   id: string;
@@ -33,6 +34,20 @@ export default function ChatNexo() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const savedState = localStorage.getItem('sidebar_collapsed');
     return savedState === null ? true : savedState === 'true';
+  });
+  const [error, setError] = useState<string | null>(null);
+  
+  const [isLoading, setIsLoading] = useState(false);
+  const [evolutionApiConfig, setEvolutionApiConfig] = useState({
+    baseUrl: '',
+    apikey: ''
+  });
+  
+  // Estado para armazenar quais setores estão habilitados
+  const [enabledSectors, setEnabledSectors] = useState({
+    suporte: false,
+    comercial: false,
+    administrativo: false
   });
   
   const [userInfo, setUserInfo] = useState({
@@ -91,25 +106,29 @@ export default function ChatNexo() {
   }, [selectedConversation, conversations]);
   
   // Função para filtrar as conversas com base nos filtros aplicados
-  const filteredConversations = conversations.filter(conv => {
-    // Filtro por status (aba selecionada)
-    const statusMatch = conv.status === activeTab;
-    
-    // Filtro por setor
-    const sectorMatch = selectedSector === 'all' || conv.sector === selectedSector;
-    
-    // Filtro por pesquisa
-    const searchMatch = conv.contactName.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    return statusMatch && sectorMatch && searchMatch;
-  });
+  const filteredConversations = useMemo(() => {
+    return conversations.filter(conv => {
+      // Filtro por status (aba selecionada)
+      const statusMatch = conv.status === activeTab;
+      
+      // Filtro por setor
+      const sectorMatch = selectedSector === 'all' || conv.sector === selectedSector;
+      
+      // Filtro por pesquisa
+      const searchMatch = conv.contactName.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      return statusMatch && sectorMatch && searchMatch;
+    });
+  }, [conversations, activeTab, selectedSector, searchQuery]);
   
   // Obter a conversa atual selecionada
   const currentConversation = conversations.find(conv => conv.id === selectedConversation);
   
   // Formatar data para exibição
-  const formatDate = (date: Date) => {
+  const formatTimestamp = (timestamp: Date) => {
     const now = new Date();
+    const date = new Date(timestamp);
+    
     const diff = now.getTime() - date.getTime();
     const isToday = date.getDate() === now.getDate() && 
                     date.getMonth() === now.getMonth() && 
@@ -124,72 +143,200 @@ export default function ChatNexo() {
       return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
     }
   };
-  
-  // Enviar mensagem
-  const sendMessage = () => {
-    if (!inputMessage.trim() || !selectedConversation) return;
+
+  // Função para enviar mensagem
+  const sendMessage = async () => {
+    if (!selectedConversation || !inputMessage.trim()) return;
     
-    // Criar nova mensagem
-    const newMessage: Message = {
-      id: `msg-${Date.now()}`,
-      content: inputMessage.trim(),
-      sender: 'user',
-      timestamp: new Date()
-    };
-    
-    // Atualizar a conversa selecionada com a nova mensagem
-    setConversations(conversations.map(conv => {
-      if (conv.id === selectedConversation) {
-        return {
-          ...conv,
-          messages: [...conv.messages, newMessage],
-          lastMessage: inputMessage.trim(),
-          timestamp: new Date(),
-          unreadCount: 0
-        };
-      }
-      return conv;
-    }));
-    
-    // Limpar input
-    setInputMessage('');
-    
-    // Simular resposta automática após 1-3 segundos (apenas para demonstração)
-    const delay = 1000 + Math.random() * 2000;
-    setTimeout(() => {
-      const autoResponses = [
-        'Entendi. Como posso ajudar?',
-        'Vou verificar isso para você.',
-        'Obrigado pela informação!',
-        'Precisamos de mais detalhes para resolver esse problema.',
-        'Isso está resolvido agora.'
-      ];
+    try {
+      const conversation = conversations.find(c => c.id === selectedConversation);
+      if (!conversation) return;
       
-      const autoResponse = autoResponses[Math.floor(Math.random() * autoResponses.length)];
-      
-      // Criar mensagem de resposta
-      const responseMessage: Message = {
-        id: `msg-${Date.now()}`,
-        content: autoResponse,
-        sender: 'contact',
+      // Adicionando mensagem otimisticamente à UI
+      const newMessage: Message = {
+        id: Date.now().toString(),
+        content: inputMessage.trim(),
+        sender: 'user',
         timestamp: new Date()
       };
       
-      // Adicionar à conversa
-      setConversations(conversations.map(conv => {
+      // Atualizar a conversa localmente
+      setConversations(prevConversations => prevConversations.map(conv => {
         if (conv.id === selectedConversation) {
           return {
             ...conv,
-            messages: [...conv.messages, responseMessage],
-            lastMessage: autoResponse,
-            timestamp: new Date()
+            messages: [...conv.messages, newMessage],
+            lastMessage: inputMessage.trim(),
+            timestamp: new Date(),
+            unreadCount: 0,
+            // Se a conversa estava pendente, agora está em atendimento
+            status: conv.status === 'pending' ? 'attending' : conv.status
           };
         }
         return conv;
       }));
-    }, delay);
+      
+      // Limpar o input
+      setInputMessage('');
+      
+      // Enviar para a Evolution API se configurada
+      if (evolutionApiConfig.baseUrl && evolutionApiConfig.apikey) {
+        // Formatando o número do destinatário (removendo @c.us se presente)
+        const recipient = conversation.id.replace('@c.us', '');
+        
+        await axios.post(`${evolutionApiConfig.baseUrl}/message/sendText/${recipient}`, {
+          value: inputMessage.trim()
+        }, {
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': evolutionApiConfig.apikey
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao enviar mensagem:', err);
+      setError('Falha ao enviar mensagem. Tente novamente.');
+    }
   };
-  
+
+  // Buscar configurações da Evolution API
+  useEffect(() => {
+    // Somente buscar as configurações quando tivermos o ID do usuário
+    if (!userInfo.id) return;
+    
+    const fetchEvolutionApiConfig = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Primeiro, buscar o reseller_id associado ao usuário logado
+        const { data: userData, error: userError } = await supabase
+          .from('profiles')
+          .select('reseller_id')
+          .eq('id', userInfo.id)
+          .single();
+          
+        if (userError) {
+          console.error('Erro ao buscar informações do usuário:', userError);
+          setError(`Erro ao obter informações do usuário: ${userError.message}`);
+          setIsLoading(false);
+          return;
+        }
+        
+        if (!userData || !userData.reseller_id) {
+          console.error('Usuário sem revenda associada');
+          setError('Sua conta não está associada a uma revenda. Contate o administrador.');
+          setIsLoading(false);
+          return;
+        }
+        
+        console.log('ID da revenda do usuário:', userData.reseller_id);
+        
+        // Agora buscar as configurações da revenda específica
+        const { data, error: configError } = await supabase
+          .from('nexochat_config')
+          .select('*')
+          .eq('reseller_id', userData.reseller_id)
+          .single();
+          
+        // Configuração específica da revenda
+        const config = data;
+          
+        if (configError) {
+          console.error('Erro ao buscar configurações da API:', configError);
+          console.log('Detalhes da configuração tentada:', {
+            tabela: 'nexochat_config',
+            erro: configError,
+            mensagem: configError.message,
+            detalhes: configError.details
+          });
+          setError(`Erro ao carregar configurações do chat: ${configError.message}`);
+          return;
+        }
+        
+        console.log('Configuração retornada:', config);
+
+        if (config) {
+          // Atualizar quais setores estão habilitados
+          setEnabledSectors({
+            suporte: config.setor_suporte === true,
+            comercial: config.setor_comercial === true,
+            administrativo: config.setor_administrativo === true
+          });
+          
+          // Aqui assumimos que a tabela de configuração tem campos para a URL base e apikey
+          const baseUrl = typeof config.evolution_api_url === 'string' ? config.evolution_api_url : '';
+          const apikey = typeof config.evolution_api_key === 'string' ? config.evolution_api_key : '';
+          
+          setEvolutionApiConfig({
+            baseUrl,
+            apikey
+          });
+          
+          // Já carrega as conversas quando temos a configuração
+          if (baseUrl && apikey) {
+            fetchConversations(baseUrl, apikey);
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao buscar configurações:', err);
+        setError('Erro ao buscar configurações do sistema.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEvolutionApiConfig();
+  }, [userInfo.id]);
+
+  // Função para buscar conversas da Evolution API
+  const fetchConversations = async (baseUrl: string, apikey: string) => {
+    try {
+      setIsLoading(true);
+      // Documentação: https://doc.evolution-api.com/v2/api-reference/get-information
+      const response = await axios.get(`${baseUrl}/chat/fetchAllChats`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': apikey
+        }
+      });
+
+      if (response.data && response.data.chats) {
+        // Convertendo os dados da API para o formato usado no componente
+        const mappedConversations: Conversation[] = response.data.chats.map((chat: any) => {
+          // Convertendo mensagens se disponíveis
+          const messages: Message[] = chat.messages?.map((msg: any) => ({
+            id: msg.id || Date.now().toString(),
+            content: msg.body || msg.content || '',
+            sender: msg.fromMe ? 'user' : 'contact',
+            timestamp: new Date(msg.timestamp * 1000 || Date.now())
+          })) || [];
+
+          // Status padrão é 'pending' a menos que já esteja sendo tratado
+          const status: 'pending' | 'attending' | 'finished' = 'pending';
+
+          return {
+            id: chat.id || '',
+            contactName: chat.name || chat.pushName || chat.number || 'Desconhecido',
+            lastMessage: chat.lastMessage?.body || 'Sem mensagens',
+            timestamp: new Date(chat.lastMessage?.timestamp * 1000 || Date.now()),
+            unreadCount: chat.unreadCount || 0,
+            messages: messages,
+            avatarUrl: chat.profilePicUrl || undefined,
+            status: status,
+            sector: null // A definir com base em regras de negócio
+          };
+        });
+
+        setConversations(mappedConversations);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar conversas:', err);
+      setError('Falha ao carregar conversas. Tente novamente mais tarde.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="flex h-screen">
       {/* Sidebar */}
@@ -376,18 +523,28 @@ export default function ChatNexo() {
             {/* Abas e Filtros */}
             <div className="border-b border-gray-800">
               {/* Abas Pendentes/Atendendo */}
-              <div className="flex border-b border-gray-800">
+              <div className="flex border-b border-gray-700">
                 <button
                   className={`px-4 py-3 text-sm font-medium flex items-center gap-2 ${activeTab === 'pending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                   onClick={() => setActiveTab('pending')}
                 >
                   Pendentes
+                  {filteredConversations.filter(conv => conv.status === 'pending').length > 0 && (
+                    <span className="bg-red-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                      {filteredConversations.filter(conv => conv.status === 'pending').length}
+                    </span>
+                  )}
                 </button>
                 <button
                   className={`px-4 py-3 text-sm font-medium flex items-center gap-2 ${activeTab === 'attending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                   onClick={() => setActiveTab('attending')}
                 >
                   Atendendo
+                  {filteredConversations.filter(conv => conv.status === 'attending').length > 0 && (
+                    <span className="bg-yellow-500 text-gray-900 text-xs font-semibold px-2 py-0.5 rounded-full">
+                      {filteredConversations.filter(conv => conv.status === 'attending').length}
+                    </span>
+                  )}
                 </button>
                 <button
                   className={`px-4 py-3 text-sm font-medium flex items-center gap-2 ${activeTab === 'finished' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
@@ -398,17 +555,18 @@ export default function ChatNexo() {
               </div>
               
               {/* Filtro de Setor */}
-              <div className="p-3 border-b border-gray-800 bg-[#1E1E1E]">
-                <label className="block text-sm font-medium text-gray-300 mb-1">Setor</label>
+              <div className="px-4 pt-4">
+                <label htmlFor="sector" className="block text-sm font-medium text-gray-400 mb-1">Setor</label>
                 <select
-                  className="w-full p-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  id="sector"
                   value={selectedSector}
-                  onChange={(e) => setSelectedSector(e.target.value as 'all' | 'suporte' | 'comercial' | 'administrativo')}
+                  onChange={(e) => setSelectedSector(e.target.value as any)}
+                  className="w-full p-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="all">Todos os setores</option>
-                  <option value="suporte">Suporte Técnico</option>
-                  <option value="comercial">Comercial</option>
-                  <option value="administrativo">Administrativo</option>
+                  {enabledSectors.suporte && <option value="suporte">Suporte Técnico</option>}
+                  {enabledSectors.comercial && <option value="comercial">Comercial</option>}
+                  {enabledSectors.administrativo && <option value="administrativo">Administrativo</option>}
                 </select>
               </div>
             </div>
@@ -451,7 +609,7 @@ export default function ChatNexo() {
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-center">
                           <h3 className="font-medium text-white truncate">{conv.contactName}</h3>
-                          <span className="text-xs text-gray-400">{formatDate(conv.timestamp)}</span>
+                          <span className="text-xs text-gray-400">{formatTimestamp(conv.timestamp)}</span>
                         </div>
                         <div className="flex justify-between items-center mt-1">
                           <p className="text-sm text-gray-400 truncate">{conv.lastMessage}</p>
@@ -471,6 +629,27 @@ export default function ChatNexo() {
           
           {/* Área de Chat */}
           <div className="flex-1 flex flex-col">
+            {isLoading && (
+              <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+                <div className="text-white text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+                  <p>Carregando conversas...</p>
+                </div>
+              </div>
+            )}
+            
+            {error && (
+              <div className="bg-red-600 text-white p-2 text-center">
+                {error}
+                <button 
+                  className="ml-2 underline" 
+                  onClick={() => setError(null)}
+                >
+                  Fechar
+                </button>
+              </div>
+            )}
+            
             {currentConversation ? (
               <>
                 {/* Cabeçalho da Conversa */}
