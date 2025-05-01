@@ -50,6 +50,15 @@ export default function ChatNexo() {
     administrativo: false
   });
   
+  // Estado para armazenar as instâncias de WhatsApp da revenda
+  const [whatsappInstances, setWhatsappInstances] = useState<Array<{
+    id: string;
+    instance_name: string;
+    name: string;
+    phone: string;
+    status: string;
+  }>>([]);
+  
   const [userInfo, setUserInfo] = useState({
     email: '',
     companyName: '',
@@ -274,54 +283,140 @@ export default function ChatNexo() {
     fetchEvolutionApiConfig();
   }, [userInfo.resellerId]);
 
-  // Função para buscar conversas da Evolution API
+  // Buscar instâncias de WhatsApp associadas à revenda
+  useEffect(() => {
+    if (!userInfo.resellerId) return;
+    
+    const fetchWhatsappInstances = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('whatsapp_connections')
+          .select('*')
+          .eq('reseller_id', userInfo.resellerId);
+          
+        if (error) {
+          console.error('Erro ao buscar instâncias de WhatsApp:', error);
+          setError(`Erro ao obter instâncias de WhatsApp: ${error.message}`);
+          return;
+        }
+        
+        if (data && data.length > 0) {
+          console.log('Instâncias de WhatsApp encontradas:', data);
+          // Converter e garantir o tipo correto
+          const typedInstances = data.map(instance => ({
+            id: instance.id as string,
+            instance_name: instance.instance_name as string,
+            name: instance.name as string,
+            phone: instance.phone as string,
+            status: instance.status as string
+          }));
+          
+          setWhatsappInstances(typedInstances);
+          
+          // Se temos instâncias e configurações, podemos buscar as conversas
+          if (evolutionApiConfig.baseUrl && evolutionApiConfig.apikey) {
+            console.log('Buscando conversas para as instâncias...');
+            // Descomente abaixo quando a função fetchConversations estiver implementada
+            // fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
+          }
+        } else {
+          console.log('Nenhuma instância de WhatsApp encontrada para esta revenda');
+        }
+      } catch (err) {
+        console.error('Erro ao buscar instâncias de WhatsApp:', err);
+      }
+    };
+    
+    fetchWhatsappInstances();
+  }, [userInfo.resellerId, evolutionApiConfig]);
+
+  // Função para buscar todas as conversas
   const fetchConversations = async (baseUrl: string, apikey: string) => {
     try {
       setIsLoading(true);
+      // Se não temos instâncias, usamos o endpoint padrão
+      if (whatsappInstances.length === 0) {
+        const response = await axios.get(`${baseUrl}/chat/fetchAllChats`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': apikey
+          }
+        });
+        processConversationsResponse(response);
+      } else {
+        // Se temos instâncias, buscamos para cada uma delas
+        for (const instance of whatsappInstances) {
+          try {
+            await fetchConversationsForInstance(baseUrl, apikey, instance.instance_name);
+          } catch (err) {
+            console.error(`Erro ao buscar conversas para instância ${instance.instance_name}:`, err);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao buscar todas as conversas:', err);
+      setError('Falha ao carregar conversas. Tente novamente mais tarde.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Função para buscar conversas da Evolution API para uma instância específica
+  const fetchConversationsForInstance = async (baseUrl: string, apikey: string, instanceName: string) => {
+    try {
+      console.log(`Buscando conversas para instância: ${instanceName}`);
       // Documentação: https://doc.evolution-api.com/v2/api-reference/get-information
-      const response = await axios.get(`${baseUrl}/chat/fetchAllChats`, {
+      const response = await axios.get(`${baseUrl}/instance/fetchAllChats/${instanceName}`, {
         headers: {
           'Content-Type': 'application/json',
           'apikey': apikey
         }
       });
 
-      if (response.data && response.data.chats) {
-        // Convertendo os dados da API para o formato usado no componente
-        const mappedConversations: Conversation[] = response.data.chats.map((chat: any) => {
-          // Convertendo mensagens se disponíveis
-          const messages: Message[] = chat.messages?.map((msg: any) => ({
-            id: msg.id || Date.now().toString(),
-            content: msg.body || msg.content || '',
-            sender: msg.fromMe ? 'user' : 'contact',
-            timestamp: new Date(msg.timestamp * 1000 || Date.now())
-          })) || [];
-
-          // Status padrão é 'pending' a menos que já esteja sendo tratado
-          const status: 'pending' | 'attending' | 'finished' = 'pending';
-
-          return {
-            id: chat.id || '',
-            contactName: chat.name || chat.pushName || chat.number || 'Desconhecido',
-            lastMessage: chat.lastMessage?.body || 'Sem mensagens',
-            timestamp: new Date(chat.lastMessage?.timestamp * 1000 || Date.now()),
-            unreadCount: chat.unreadCount || 0,
-            messages: messages,
-            avatarUrl: chat.profilePicUrl || undefined,
-            status: status,
-            sector: null // A definir com base em regras de negócio
-          };
-        });
-
-        setConversations(mappedConversations);
-      }
+      processConversationsResponse(response);
     } catch (err) {
-      console.error('Erro ao buscar conversas:', err);
-      setError('Falha ao carregar conversas. Tente novamente mais tarde.');
-    } finally {
-      setIsLoading(false);
+      console.error(`Erro ao buscar conversas para instância ${instanceName}:`, err);
     }
   };
+  
+  // Função para processar a resposta da API e converter para o formato do componente
+  const processConversationsResponse = (response: any) => {
+    if (response.data && response.data.chats) {
+      // Convertendo os dados da API para o formato usado no componente
+      const mappedConversations: Conversation[] = response.data.chats.map((chat: any) => {
+        // Convertendo mensagens se disponíveis
+        const messages: Message[] = chat.messages?.map((msg: any) => ({
+          id: msg.id || Date.now().toString(),
+          content: msg.body || msg.content || '',
+          sender: msg.fromMe ? 'user' : 'contact',
+          timestamp: new Date(msg.timestamp * 1000 || Date.now())
+        })) || [];
+
+        // Status padrão é 'pending' a menos que já esteja sendo tratado
+        const status: 'pending' | 'attending' | 'finished' = 'pending';
+
+        return {
+          id: chat.id || '',
+          contactName: chat.name || chat.pushName || chat.number || 'Desconhecido',
+          lastMessage: chat.lastMessage?.body || 'Sem mensagens',
+          timestamp: new Date(chat.lastMessage?.timestamp * 1000 || Date.now()),
+          unreadCount: chat.unreadCount || 0,
+          messages: messages,
+          avatarUrl: chat.profilePicUrl || undefined,
+          status: status,
+          sector: null // A definir com base em regras de negócio
+        };
+      });
+
+      // Adicionar as novas conversas às existentes (evitando duplicatas pelo ID)
+      setConversations(prevConversations => {
+        const existingIds = new Set(prevConversations.map(c => c.id));
+        const newConversations = mappedConversations.filter(c => !existingIds.has(c.id));
+        return [...prevConversations, ...newConversations];
+      });
+    }
+  };
+
 
   return (
     <div className="flex h-screen">
