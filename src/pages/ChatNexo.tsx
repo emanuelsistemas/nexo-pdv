@@ -38,9 +38,10 @@ export default function ChatNexo() {
   const [error, setError] = useState<string | null>(null);
   
   const [isLoading, setIsLoading] = useState(false);
+  // Configuração da Evolution API
   const [evolutionApiConfig, setEvolutionApiConfig] = useState({
-    baseUrl: '',
-    apikey: ''
+    baseUrl: 'https://apiwhatsapp.nexopdv.com',
+    apikey: '429683C4C977415CAAFCCE10F7D57E11'
   });
   
   // Estado para armazenar quais setores estão habilitados
@@ -240,13 +241,7 @@ export default function ChatNexo() {
           
         if (configError) {
           console.error('Erro ao buscar configurações da API:', configError);
-          console.log('Detalhes da configuração tentada:', {
-            tabela: 'nexochat_config',
-            erro: configError,
-            mensagem: configError.message,
-            detalhes: configError.details
-          });
-          setError(`Erro ao carregar configurações do chat: ${configError.message}`);
+          setError(`Erro ao carregar configurações da API: ${configError.message}`);
           return;
         }
         
@@ -260,23 +255,51 @@ export default function ChatNexo() {
             administrativo: config.setor_administrativo === true
           });
           
-          // Aqui assumimos que a tabela de configuração tem campos para a URL base e apikey
+          // Verificar se há configurações da API e instância
+          if (!config.evolution_api_url || !config.evolution_api_key || !config.instance_name) {
+            setError('Configuração incompleta. Verifique a URL da API, API Key e nome da instância.');
+            console.error('Configuração incompleta:', {
+              url: config.evolution_api_url ? 'OK' : 'Faltando',
+              apiKey: config.evolution_api_key ? 'OK' : 'Faltando',
+              instancia: config.instance_name ? 'OK' : 'Faltando'
+            });
+            return;
+          }
+          
+          // Usar configurações do banco
           const baseUrl = typeof config.evolution_api_url === 'string' ? config.evolution_api_url : '';
           const apikey = typeof config.evolution_api_key === 'string' ? config.evolution_api_key : '';
+          const instanceName = typeof config.instance_name === 'string' ? config.instance_name : '';
           
+          console.log('Configuração completa detectada:', { 
+            baseUrl,
+            apikey: apikey ? '*****' : 'não configurada',
+            instanceName 
+          });
+          
+          // Atualizar configuração
           setEvolutionApiConfig({
             baseUrl,
             apikey
           });
           
-          // Já carrega as conversas quando temos a configuração
-          if (baseUrl && apikey) {
-            fetchConversations(baseUrl, apikey);
-          }
+          // Definir instância associada à revenda diretamente
+          setWhatsappInstances([{
+            id: instanceName,
+            instance_name: instanceName,
+            name: `WhatsApp ${instanceName}`,
+            phone: instanceName,
+            status: 'active'
+          }]);
+          
+          // Agora que temos a instância configurada, buscar mensagens
+          fetchConversations(baseUrl, apikey);
+        } else {
+          setError('Configuração da API não encontrada para esta revenda.');
         }
       } catch (err) {
         console.error('Erro ao buscar configurações:', err);
-        setError('Erro ao buscar configurações do sistema.');
+        setError(`Erro ao buscar configurações do sistema: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
       } finally {
         setIsLoading(false);
       }
@@ -284,6 +307,75 @@ export default function ChatNexo() {
 
     fetchEvolutionApiConfig();
   }, [userInfo.resellerId]);
+  
+  // Função para verificar o status da instância no servidor
+  const checkInstanceStatus = async (baseUrl: string, apikey: string, instanceName: string) => {
+    try {
+      setError(null);
+      setIsLoading(true);
+      console.log(`Verificando status da instância ${instanceName} em: ${baseUrl}`);
+      
+      // Verificar se a URL e instância são válidas
+      if (!baseUrl || !instanceName) {
+        throw new Error('URL da API ou nome da instância não definidos');
+      }
+      
+      // Adiciona um console.log para ver os cabeçalhos que estão sendo enviados
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      
+      // Só adiciona apikey se ela não estiver vazia
+      if (apikey && apikey.trim() !== '') {
+        headers['apikey'] = apikey;
+      }
+      
+      console.log('Enviando requisição para verificar status com headers:', headers);
+      
+      // Tentar verificar o status da instância
+      try {
+        // Verificar status da instância específica
+        const statusResponse = await axios.get(`${baseUrl}/instance/connectionState/${instanceName}`, {
+          headers: headers
+        });
+        
+        console.log(`Status da instância ${instanceName}:`, statusResponse.data);
+        
+        // Independente da resposta, vamos considerar a instância válida
+        setWhatsappInstances([{
+          id: instanceName,
+          instance_name: instanceName,
+          name: `WhatsApp ${instanceName}`,
+          phone: instanceName,
+          status: statusResponse.data?.state || 'active'
+        }]);
+        
+        console.log(`Instância ${instanceName} configurada com sucesso`);
+        setError(null);
+        return true;
+      } catch (err) {
+        console.error(`Erro ao verificar status da instância ${instanceName}:`, err);
+        
+        // Mesmo com erro, vamos tentar usar a instância configurada
+        setWhatsappInstances([{
+          id: instanceName,
+          instance_name: instanceName,
+          name: `WhatsApp ${instanceName}`,
+          phone: instanceName,
+          status: 'unknown'
+        }]);
+        
+        console.log(`Configurando instância ${instanceName} mesmo sem confirmação de status`);
+        return true;
+      }
+    } catch (err) {
+      console.error('Erro ao verificar status da instância:', err);
+      setError(`Falha ao verificar status da instância: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Implementar polling para atualização de novas mensagens a cada 30 segundos
   useEffect(() => {
@@ -365,91 +457,237 @@ export default function ChatNexo() {
 
   // Função para buscar todas as conversas
   const fetchConversations = async (baseUrl: string, apikey: string) => {
+    console.log('Iniciando fetchConversations...', { baseUrl, instancias: whatsappInstances });
+    setIsLoading(true);
+    setError(null);
+    
     try {
-      setIsLoading(true);
-      // Se não temos instâncias, usamos o endpoint padrão
-      if (whatsappInstances.length === 0) {
-        const response = await axios.get(`${baseUrl}/chat/fetchAllChats`, {
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': apikey
+      // Se não temos instâncias, mostrar erro
+      if (!whatsappInstances || whatsappInstances.length === 0) {
+        console.log('Nenhuma instância encontrada');
+        setError('Nenhuma instância de WhatsApp configurada. Verifique as configurações da revenda.');
+        return;
+      }
+      
+      // Se temos instâncias, buscamos para cada uma delas
+      console.log(`Buscando conversas para ${whatsappInstances.length} instâncias`);
+      let totalMensagens = 0;
+      
+      for (const instance of whatsappInstances) {
+        try {
+          // Verificar se a instância tem um nome válido
+          if (!instance || !instance.instance_name) {
+            console.error('Instância inválida ou sem nome:', instance);
+            continue; // Pular esta instância e seguir para a próxima
           }
-        });
-        processConversationsResponse(response);
-      } else {
-        // Se temos instâncias, buscamos para cada uma delas
-        for (const instance of whatsappInstances) {
-          try {
-            await fetchConversationsForInstance(baseUrl, apikey, instance.instance_name);
-          } catch (err) {
-            console.error(`Erro ao buscar conversas para instância ${instance.instance_name}:`, err);
-          }
+          
+          console.log(`Processando instância: ${instance.instance_name}`);
+          const response = await fetchConversationsForInstance(baseUrl, apikey, instance.instance_name);
+          if (response) totalMensagens += response?.data?.messages?.records?.length || 0;
+        } catch (err) {
+          const instanceName = instance?.instance_name || 'desconhecida';
+          console.error(`Erro ao buscar conversas para instância ${instanceName}:`, err);
         }
       }
+      
+      console.log(`Total de ${totalMensagens} mensagens recuperadas de todas as instâncias`);
     } catch (err) {
       console.error('Erro ao buscar todas as conversas:', err);
       setError('Falha ao carregar conversas. Tente novamente mais tarde.');
     } finally {
       setIsLoading(false);
+      console.log('Finalizando fetchConversations.');
     }
   };
 
   // Função para buscar conversas da Evolution API para uma instância específica
   const fetchConversationsForInstance = async (baseUrl: string, apikey: string, instanceName: string) => {
     try {
+      // Verificar se o nome da instância é válido
+      if (!instanceName) {
+        console.error('Nome da instância inválido ou undefined');
+        throw new Error('Nome da instância é obrigatório');
+      }
+      
       console.log(`Buscando conversas para instância: ${instanceName}`);
-      // Documentação: https://doc.evolution-api.com/v2/api-reference/get-information
-      const response = await axios.get(`${baseUrl}/instance/fetchAllChats/${instanceName}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': apikey
+      
+      // Verificar a documentação da sua versão da Evolution API
+      // Alguns endpoints podem ser diferentes. Testando algumas opções comuns:
+      
+      // Opção 1: findMessages com body vazio
+      try {
+        const response = await axios.post(`${baseUrl}/chat/findMessages/${instanceName}`, 
+          // Adicionando parâmetros conforme documentação
+          {
+            where: {},
+            count: 50  // Limitar para 50 mensagens para teste
+          }, 
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': apikey
+            }
+          }
+        );
+        
+        console.log('Resposta da API (/chat/findMessages) Opção 1:', response.data);
+        processConversationsResponse(response);
+        return response;
+      } catch (err1) {
+        console.log('Falha na Opção 1, tentando opção alternativa...');
+        
+        // Opção 2: fetchAllChats para a instância
+        try {
+          const response2 = await axios.get(`${baseUrl}/chat/fetchAllChats/${instanceName}`, {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': apikey
+            }
+          });
+          
+          console.log('Resposta da API (/chat/fetchAllChats) Opção 2:', response2.data);
+          processConversationsResponse(response2);
+          return response2;
+        } catch (err2) {
+          console.error('Falha na Opção 2:', err2);
+          throw new Error(`Todas as tentativas de buscar mensagens para a instância ${instanceName} falharam`);
         }
-      });
-
-      processConversationsResponse(response);
+      }
     } catch (err) {
       console.error(`Erro ao buscar conversas para instância ${instanceName}:`, err);
+      throw err; // Propagar erro para tratamento adequado
     }
   };
   
   // Função para processar a resposta da API e converter para o formato do componente
   const processConversationsResponse = (response: any) => {
-    if (response.data && response.data.chats) {
-      // Convertendo os dados da API para o formato usado no componente
-      const mappedConversations: Conversation[] = response.data.chats.map((chat: any) => {
-        // Convertendo mensagens se disponíveis
-        const messages: Message[] = chat.messages?.map((msg: any) => ({
-          id: msg.id || Date.now().toString(),
-          content: msg.body || msg.content || '',
-          sender: msg.fromMe ? 'user' : 'contact',
-          timestamp: new Date(msg.timestamp * 1000 || Date.now())
-        })) || [];
-
-        // Status padrão é 'pending' a menos que já esteja sendo tratado
-        const status: 'pending' | 'attending' | 'finished' = 'pending';
-
-        return {
-          id: chat.id || '',
-          contactName: chat.name || chat.pushName || chat.number || 'Desconhecido',
-          lastMessage: chat.lastMessage?.body || 'Sem mensagens',
-          timestamp: new Date(chat.lastMessage?.timestamp * 1000 || Date.now()),
-          unreadCount: chat.unreadCount || 0,
-          messages: messages,
-          avatarUrl: chat.profilePicUrl || undefined,
-          status: status,
-          sector: null // A definir com base em regras de negócio
-        };
+    console.log('Iniciando processConversationsResponse com:', response); // Log da entrada da função
+    if (response.data && response.data.messages && response.data.messages.records) {
+      // Agrupar mensagens por contato (remoteJid)
+      const messagesByContact = new Map<string, any[]>();
+      
+      // Filtrar mensagens de status e agrupar por contato
+      const records = response.data.messages.records;
+      console.log(`Total de ${records.length} mensagens recebidas da API`);
+      
+      // Filtrar apenas mensagens reais (não de status)
+      const validMessages = records.filter((msg: any) => 
+        msg.key && msg.key.remoteJid && 
+        msg.key.remoteJid !== 'status@broadcast' && 
+        !msg.key.remoteJid.includes('broadcast')
+      );
+      
+      console.log(`${validMessages.length} mensagens válidas após filtrar status`);
+      
+      // Agrupar mensagens por contato
+      validMessages.forEach((msg: any) => {
+        const contactId = msg.key.remoteJid;
+        if (!messagesByContact.has(contactId)) {
+          messagesByContact.set(contactId, []);
+        }
+        messagesByContact.get(contactId)?.push(msg);
       });
-
-      // Adicionar as novas conversas às existentes (evitando duplicatas pelo ID)
+      
+      console.log(`Encontrados ${messagesByContact.size} contatos diferentes`);
+      
+      // Converter para o formato de conversas
+      const mappedConversations: Conversation[] = [];
+      
+      messagesByContact.forEach((messages, contactId) => {
+        // Ordenar mensagens por timestamp (mais antigas primeiro)
+        messages.sort((a: any, b: any) => a.messageTimestamp - b.messageTimestamp);
+        
+        // Extrair nome do contato do pushName ou do ID
+        const contactName = messages.find((m: any) => m.pushName)?.pushName || 
+                           contactId.split('@')[0];
+        
+        // Converter mensagens para o formato do componente
+        const formattedMessages: Message[] = messages.map((msg: any) => {
+          // Extrair conteúdo da mensagem
+          let content = '';
+          
+          if (msg.message?.conversation) {
+            content = msg.message.conversation;
+          } else if (msg.message?.extendedTextMessage?.text) {
+            content = msg.message.extendedTextMessage.text;
+          } else if (msg.message?.imageMessage) {
+            content = '[Imagem]';
+          } else if (msg.message?.videoMessage) {
+            content = '[Vídeo]';
+          } else if (msg.message?.audioMessage) {
+            content = '[Áudio]';
+          } else if (msg.message?.documentMessage) {
+            content = '[Documento]';
+          } else {
+            content = '[Mídia não suportada]';
+          }
+          
+          return {
+            id: msg.key.id || `${Date.now()}-${Math.random()}`,
+            content: content,
+            sender: msg.key.fromMe ? 'user' : 'contact',
+            timestamp: new Date(msg.messageTimestamp * 1000)
+          };
+        });
+        
+        // Extrair última mensagem para informações da conversa
+        const lastMsg = messages[messages.length - 1];
+        let lastMessageContent = '';
+        
+        if (lastMsg.message?.conversation) {
+          lastMessageContent = lastMsg.message.conversation;
+        } else if (lastMsg.message?.extendedTextMessage?.text) {
+          lastMessageContent = lastMsg.message.extendedTextMessage.text;
+        } else if (lastMsg.message?.imageMessage) {
+          lastMessageContent = '[Imagem]';
+        } else if (lastMsg.message?.videoMessage) {
+          lastMessageContent = '[Vídeo]';
+        } else if (lastMsg.message?.audioMessage) {
+          lastMessageContent = '[Áudio]';
+        } else {
+          lastMessageContent = '[Mídia não suportada]';
+        }
+        
+        mappedConversations.push({
+          id: contactId,
+          contactName: contactName,
+          lastMessage: lastMessageContent,
+          timestamp: new Date(lastMsg.messageTimestamp * 1000),
+          unreadCount: 0, // Implementar contagem de não lidas depois
+          messages: formattedMessages,
+          status: 'pending', // Status padrão para novas conversas
+          sector: null // A definir com base em regras de negócio
+        });
+      });
+      
+      console.log(`${mappedConversations.length} conversas mapeadas`);
+      
+      // Atualizar a lista de conversas, preservando status e setor de conversas existentes
       setConversations(prevConversations => {
-        const existingIds = new Set(prevConversations.map(c => c.id));
-        const newConversations = mappedConversations.filter(c => !existingIds.has(c.id));
-        return [...prevConversations, ...newConversations];
+        const conversationMap = new Map<string, Conversation>();
+        
+        // Adicionar conversas existentes ao mapa
+        prevConversations.forEach(conv => conversationMap.set(conv.id, conv));
+        
+        // Adicionar ou atualizar com novas conversas
+        mappedConversations.forEach(newConv => {
+          const existingConv = conversationMap.get(newConv.id);
+          if (existingConv) {
+            // Se já existir, mantém o status e setor, mas atualiza o restante
+            conversationMap.set(newConv.id, {
+              ...newConv,
+              status: existingConv.status,
+              sector: existingConv.sector
+            });
+          } else {
+            conversationMap.set(newConv.id, newConv);
+          }
+        });
+        
+        return Array.from(conversationMap.values());
       });
     }
   };
-
 
   return (
     <div className="flex h-screen">
@@ -699,8 +937,75 @@ export default function ChatNexo() {
               </div>
             </div>
             
+            {/* Configuração Manual da Evolution API */}
+            <div className="px-4 mt-2 mb-3 border-b border-gray-700 pb-3">
+              <p className="text-sm font-semibold text-white mb-2">Status da Conexão</p>
+              
+              {/* Status da conexão */}
+              <div className="p-2 bg-gray-800 rounded-md mb-3">
+                <p className="text-xs text-gray-400 flex justify-between">
+                  <span>URL API:</span>
+                  <span className="text-green-400 truncate max-w-[180px]">{evolutionApiConfig.baseUrl}</span>
+                </p>
+                <p className="text-xs text-gray-400 flex justify-between">
+                  <span>API Key:</span>
+                  <span className="text-gray-300">*************</span>
+                </p>
+                {whatsappInstances.length > 0 && (
+                  <p className="text-xs text-gray-400 flex justify-between mt-1">
+                    <span>Instância:</span>
+                    <span className="text-green-400">{whatsappInstances[0].instance_name}</span>
+                  </p>
+                )}
+              </div>
+              
+              {/* Botão para verificar status da conexão */}
+              <button 
+                onClick={() => {
+                  if (whatsappInstances.length > 0) {
+                    checkInstanceStatus(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey, whatsappInstances[0].instance_name);
+                  } else {
+                    setError('Nenhuma instância configurada. Verifique as configurações da revenda.');
+                  }
+                }}
+                disabled={isLoading || whatsappInstances.length === 0}
+                className={`w-full px-3 py-2 text-sm rounded-md flex items-center justify-center ${isLoading || whatsappInstances.length === 0 ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+              >
+                {isLoading ? 'Verificando...' : 'Verificar Status da Conexão'}
+              </button>
+              
+              {whatsappInstances.length > 0 && (
+                <>
+                  <div className="mt-3 p-2 bg-gray-800 rounded-md">
+                    <p className="text-xs text-gray-400 mb-1">Instâncias disponíveis:</p>
+                    {whatsappInstances.map((instance) => (
+                      <div key={instance.id} className="text-xs text-gray-300 flex justify-between">
+                        <span>{instance.name}</span>
+                        <span className="text-green-500">{instance.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Botão de Atualização de Conversas */}
+                  <button 
+                    onClick={() => fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey)}
+                    disabled={isLoading}
+                    className={`w-full px-3 py-2 text-sm rounded-md flex items-center justify-center mt-3 ${isLoading ? 'bg-gray-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'} text-white`}
+                  >
+                    {isLoading ? 'Atualizando...' : 'Atualizar Conversas'}
+                  </button>
+                </>
+              )}
+              
+              {error && (
+                <div className="mt-2 p-2 bg-red-900/30 border border-red-800 rounded-md">
+                  <p className="text-xs text-red-300">{error}</p>
+                </div>
+              )}
+            </div>
+            
             {/* Lista de Conversas */}
-            <div className="flex-1 overflow-y-auto" data-component-name="ChatNexo">
+            <div className="flex-1 overflow-y-auto">
               {filteredConversations.length === 0 ? (
                 <div className="p-4 text-center text-gray-400">
                   <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
