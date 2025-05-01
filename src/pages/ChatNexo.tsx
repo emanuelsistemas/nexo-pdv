@@ -449,9 +449,26 @@ export default function ChatNexo() {
     }
     
     try {
-      console.log(`Conectando Socket.io para instância ${instanceName} em ${baseUrl}`);
+      console.log(`Conectando Socket.io para instância ${instanceName} em ${baseUrl} com apikey: ${apikey.substring(0, 5)}...`);
       
-      // Configurar opções do Socket.io
+      // Verificar se baseUrl tem o formato correto
+      if (!baseUrl) {
+        console.error('URL base inválida para conexão Socket.io');
+        return;
+      }
+      
+      if (!instanceName) {
+        console.error('Nome da instância inválido para conexão Socket.io');
+        return;
+      }
+      
+      // Configurar opções do Socket.io com debug habilitado
+      console.log('Socket.io configurando com opções:', {
+        transports: ['websocket', 'polling'],
+        query: { instance: instanceName },
+        // Não logamos a apikey completa por segurança
+      });
+      
       const socket = io(baseUrl, {
         transports: ['websocket', 'polling'],
         query: {
@@ -459,7 +476,15 @@ export default function ChatNexo() {
         },
         extraHeaders: {
           'apikey': apikey
-        }
+        },
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
+      });
+      
+      // Monitorar todos os eventos do Socket
+      socket.onAny((event, ...args) => {
+        console.log(`Socket.io evento recebido: ${event}`, args);
       });
       
       // Evento de conexão
@@ -473,6 +498,15 @@ export default function ChatNexo() {
         };
         console.log('Enviando mensagem de inscrição:', subscribeMessage);
         socket.emit('subscribe', subscribeMessage);
+        
+        // Também tentar se inscrever com outros formatos que podem ser usados pela API
+        console.log('Tentando inscrição alternativa');
+        socket.emit('subscribe', instanceName);
+      });
+      
+      // Confirmação de inscrição
+      socket.on('subscribed', (data) => {
+        console.log('Inscrição confirmada no Socket.io:', data);
       });
       
       // Desconexão
@@ -480,49 +514,70 @@ export default function ChatNexo() {
         console.log(`Socket.io desconectado. Razão: ${reason}`);
       });
       
+      // Evento connect_error - importante para depurar problemas de conexão
+      socket.on('connect_error', (error) => {
+        console.error('Erro de conexão Socket.io:', error.message);
+      });
+      
+      // Evento connect_timeout
+      socket.on('connect_timeout', () => {
+        console.error('Timeout na conexão Socket.io');
+      });
+      
       // Evento de erro
       socket.on('error', (error) => {
         console.error('Erro no Socket.io:', error);
       });
       
-      // Eventos específicos da Evolution API
+      // Eventos específicos da Evolution API - usando registro direto para todos os formatos possíveis
       socket.on('MESSAGES_UPSERT', (data) => {
-        console.log('Nova mensagem recebida via Socket.io:', data);
-        
-        // Converter para o formato que nossa aplicação espera
-        if (data && Array.isArray(data.data)) {
-          const newMessage = {
-            data: {
-              messages: {
-                records: data.data
-              }
-            }
-          };
-          
-          // Processar mensagens - a função processConversationsResponse já atualiza o estado
-          // então apenas precisamos chamar ela com os dados recebidos
-          console.log('Processando mensagem recebida via Socket.io');
-          fetchConversations(baseUrl, apikey);
-        }
+        console.log('Evento MESSAGES_UPSERT recebido:', data);
+        alert('Nova mensagem recebida via Socket.io! Verifique o console.');
+        fetchConversations(baseUrl, apikey);
       });
       
-      socket.on('CONNECTION_UPDATE', (data) => {
-        console.log('Atualização de conexão via Socket.io:', data);
-        // Atualizar status da instância se necessário
-        if (data && data.state) {
-          setWhatsappInstances(prev => {
-            return prev.map(inst => {
-              if (inst.instance_name === instanceName) {
-                return { ...inst, status: data.state };
-              }
-              return inst;
+      socket.on('messages.upsert', (data) => {
+        console.log('Evento messages.upsert recebido:', data);
+        alert('Nova mensagem recebida via Socket.io! Verifique o console.');
+        fetchConversations(baseUrl, apikey);
+      });
+      
+      socket.on('message', (data) => {
+        console.log('Evento message recebido:', data);
+        alert('Nova mensagem recebida via Socket.io! Verifique o console.');
+        fetchConversations(baseUrl, apikey);
+      });
+      
+      socket.on('messages', (data) => {
+        console.log('Evento messages recebido:', data);
+        alert('Nova mensagem recebida via Socket.io! Verifique o console.');
+        fetchConversations(baseUrl, apikey);
+      });
+      
+      // Monitorar eventos de conexão
+      ['CONNECTION_UPDATE', 'connection.update', 'status.instance'].forEach(eventName => {
+        socket.on(eventName, (data) => {
+          console.log(`Evento ${eventName} recebido:`, data);
+          
+          // Atualizar status da instância
+          const state = data?.state || data?.status;
+          if (state) {
+            console.log(`Atualizando status da instância ${instanceName} para ${state}`);
+            setWhatsappInstances(prev => {
+              return prev.map(inst => {
+                if (inst.instance_name === instanceName) {
+                  return { ...inst, status: state };
+                }
+                return inst;
+              });
             });
-          });
-        }
+          }
+        });
       });
       
       // Armazenar referência à conexão
       socketRef.current = socket;
+      console.log('Referência Socket.io armazenada com sucesso');
       
     } catch (error) {
       console.error('Erro ao criar conexão Socket.io:', error);
@@ -1102,76 +1157,81 @@ export default function ChatNexo() {
                 />
               </div>
             </div>
-            
-            {/* Configuração Manual da Evolution API */}
+                        {/* Configuração Manual da Evolution API */}
             <div className="px-4 mt-2 mb-3 border-b border-gray-700 pb-3">
               <p className="text-sm font-semibold text-white mb-2">Status da Conexão</p>
               
               {/* Status da conexão */}
               <div className="p-2 bg-gray-800 rounded-md mb-3">
-                <p className="text-xs text-gray-400 flex justify-between">
+                <div className="text-xs text-gray-400 flex justify-between mb-1">
                   <span>URL API:</span>
                   <span className="text-green-400 truncate max-w-[180px]">{evolutionApiConfig.baseUrl}</span>
-                </p>
-                <p className="text-xs text-gray-400 flex justify-between">
+                </div>
+                <div className="text-xs text-gray-400 flex justify-between mb-1">
                   <span>API Key:</span>
                   <span className="text-gray-300">*************</span>
-                </p>
+                </div>
                 {whatsappInstances.length > 0 && (
-                  <p className="text-xs text-gray-400 flex justify-between mt-1">
+                  <div className="text-xs text-gray-400 flex justify-between mb-1">
                     <span>Instância:</span>
                     <span className="text-green-400">{whatsappInstances[0].instance_name}</span>
-                  </p>
+                  </div>
                 )}
+                <div className="text-xs text-gray-400 flex justify-between mb-1">
+                  <span>Socket.io:</span>
+                  <span className={socketRef.current ? "text-green-400" : "text-red-400"}>
+                    {socketRef.current ? "Conectado" : "Desconectado"}
+                  </span>
+                </div>
               </div>
               
-              {/* Botão para verificar status e atualizar mensagens */}
+              {/* Botão para testar Socket.io */}
               <button 
                 onClick={() => {
-                  if (whatsappInstances.length > 0) {
-                    const instanceName = whatsappInstances[0].instance_name;
-                    console.log(`Verificando status e atualizando mensagens para instância: ${instanceName}`);
+                  if (socketRef.current && socketRef.current.connected) {
+                    alert('Socket.io está conectado! ID: ' + socketRef.current.id);
+                    console.log('Socket.io está conectado! ID:', socketRef.current.id);
                     
-                    // Primeiro verificar status e depois buscar mensagens
-                    checkInstanceStatus(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey, instanceName)
-                      .then(() => {
-                        // Após verificar status, buscar mensagens
-                        fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
-                      });
+                    // Tentar enviar uma mensagem para testar
+                    socketRef.current.emit('ping');
+                    alert('Mensagem de teste enviada. Verifique o console!');
                   } else {
-                    setError('Nenhuma instância configurada. Verifique as configurações da revenda.');
+                    alert('Socket.io não está conectado! Tentando reconectar...');
+                    console.error('Socket.io não está conectado! Tentando reconectar...');
+                    
+                    // Tentar reconectar
+                    if (evolutionApiConfig.baseUrl && whatsappInstances.length > 0 && evolutionApiConfig.apikey) {
+                      connectSocketIO(evolutionApiConfig.baseUrl, whatsappInstances[0].instance_name, evolutionApiConfig.apikey);
+                    } else {
+                      alert('Dados de conexão inválidos!');
+                    }
                   }
                 }}
+                className="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center mb-2 bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Verificar Socket.io
+              </button>
+              
+              {/* Botão para atualizar mensagens */}
+              <button 
+                onClick={() => fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey)}
                 disabled={isLoading || whatsappInstances.length === 0}
                 className={`w-full px-3 py-2 text-sm rounded-md flex items-center justify-center ${isLoading || whatsappInstances.length === 0 ? 'bg-gray-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'} text-white`}
               >
                 {isLoading ? 'Atualizando...' : 'Atualizar Mensagens'}
               </button>
               
-              {/* Informação sobre atualização */}
-              <p className="text-xs text-gray-400 mt-1 text-center">Verificar status e atualizar mensagens</p>
-              
+              {/* Informação sobre instâncias */}
               {whatsappInstances.length > 0 && (
-                <>
-                  <div className="mt-3 p-2 bg-gray-800 rounded-md">
-                    <p className="text-xs text-gray-400 mb-1">Instâncias disponíveis:</p>
-                    {whatsappInstances.map((instance) => (
-                      <div key={instance.id} className="text-xs text-gray-300 flex justify-between">
-                        <span>{instance.name}</span>
-                        <span className="text-green-500">{instance.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  {/* Botão de Atualização de Conversas */}
-                  <button 
-                    onClick={() => fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey)}
-                    disabled={isLoading}
-                    className={`w-full px-3 py-2 text-sm rounded-md flex items-center justify-center mt-3 ${isLoading ? 'bg-gray-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'} text-white`}
-                  >
-                    {isLoading ? 'Atualizando...' : 'Atualizar Conversas'}
-                  </button>
-                </>
+                <div className="mt-3 p-2 bg-gray-800 rounded-md">
+                  <p className="text-xs text-gray-400 mb-1">Instâncias disponíveis:</p>
+                  {whatsappInstances.map((instance) => (
+                    <div key={instance.id || instance.instance_name} className="text-xs text-gray-300 flex justify-between">
+                      <span>{instance.name || instance.instance_name}</span>
+                      <span className={instance.status === 'open' || instance.status === 'active' ? "text-green-500" : "text-red-400"}>{instance.status}</span>
+                    </div>
+                  ))}
+                </div>
               )}
               
               {error && (
