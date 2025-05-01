@@ -18,6 +18,8 @@ interface Conversation {
   unreadCount: number;
   messages: Message[];
   avatarUrl?: string;
+  status: 'pending' | 'attending' | 'finished';
+  sector?: 'suporte' | 'comercial' | 'administrativo' | null;
 }
 
 export default function ChatNexo() {
@@ -26,6 +28,8 @@ export default function ChatNexo() {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [inputMessage, setInputMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'pending' | 'attending' | 'finished'>('pending');
+  const [selectedSector, setSelectedSector] = useState<'all' | 'suporte' | 'comercial' | 'administrativo'>('all');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const savedState = localStorage.getItem('sidebar_collapsed');
     return savedState === null ? true : savedState === 'true';
@@ -69,65 +73,57 @@ export default function ChatNexo() {
       dev: session.dev || 'N'
     });
     
-    // Carregar conversas de exemplo (em produção, isto viria do backend)
-    loadMockConversations();
+    // Inicializar conversas vazias
+    initializeEmptyConversations();
   }, [navigate]);
   
-  // Carregar conversas de exemplo para demonstração
-  const loadMockConversations = () => {
-    const mockConversations: Conversation[] = [
-      {
-        id: '1',
-        contactName: 'João Silva',
-        lastMessage: 'Olá, preciso de ajuda com o sistema',
-        timestamp: new Date(Date.now() - 3600000), // 1 hora atrás
-        unreadCount: 2,
-        messages: [
-          { id: '1-1', content: 'Olá, preciso de ajuda com o sistema', sender: 'contact', timestamp: new Date(Date.now() - 3600000) },
-          { id: '1-2', content: 'Estou com dificuldade para cadastrar produtos', sender: 'contact', timestamp: new Date(Date.now() - 3500000) }
-        ]
-      },
-      {
-        id: '2',
-        contactName: 'Maria Souza',
-        lastMessage: 'Os relatórios estão funcionando perfeitamente',
-        timestamp: new Date(Date.now() - 24 * 3600000), // 1 dia atrás
-        unreadCount: 0,
-        messages: [
-          { id: '2-1', content: 'Como faço para gerar relatórios de vendas?', sender: 'contact', timestamp: new Date(Date.now() - 48 * 3600000) },
-          { id: '2-2', content: 'Você pode acessar em Relatórios > Vendas > Período', sender: 'user', timestamp: new Date(Date.now() - 36 * 3600000) },
-          { id: '2-3', content: 'Os relatórios estão funcionando perfeitamente', sender: 'contact', timestamp: new Date(Date.now() - 24 * 3600000) }
-        ]
-      },
-      {
-        id: '3',
-        contactName: 'Carlos Oliveira',
-        lastMessage: 'Obrigado pelo suporte!',
-        timestamp: new Date(Date.now() - 7 * 24 * 3600000), // 7 dias atrás
-        unreadCount: 0,
-        messages: [
-          { id: '3-1', content: 'Estou enfrentando um problema com o login', sender: 'contact', timestamp: new Date(Date.now() - 8 * 24 * 3600000) },
-          { id: '3-2', content: 'Pode descrever o problema em detalhes?', sender: 'user', timestamp: new Date(Date.now() - 7.5 * 24 * 3600000) },
-          { id: '3-3', content: 'A senha não está funcionando mesmo após o reset', sender: 'contact', timestamp: new Date(Date.now() - 7.2 * 24 * 3600000) },
-          { id: '3-4', content: 'Acabo de resetar manualmente, tente usar "senha123"', sender: 'user', timestamp: new Date(Date.now() - 7.1 * 24 * 3600000) },
-          { id: '3-5', content: 'Obrigado pelo suporte!', sender: 'contact', timestamp: new Date(Date.now() - 7 * 24 * 3600000) }
-        ]
-      }
-    ];
-    
-    // Salvar no estado
-    setConversations(mockConversations);
-    
-    // Se houver conversas e nenhuma estiver selecionada, selecione a primeira
-    if (mockConversations.length > 0 && !selectedConversation) {
-      setSelectedConversation(mockConversations[0].id);
-    }
+  // Função para inicializar o estado de conversas vazio
+  const initializeEmptyConversations = () => {
+    // As conversas reais serão carregadas posteriormente
+    setConversations([]);
   };
   
-  // Rolar para o fim das mensagens quando a conversa muda ou novas mensagens são adicionadas
+  // Rolar para o final da conversa quando receber novas mensagens
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [selectedConversation, conversations]);
+  
+  // Função para filtrar as conversas com base nos filtros aplicados
+  const filteredConversations = conversations.filter(conv => {
+    // Filtro por status (aba selecionada)
+    const statusMatch = conv.status === activeTab;
+    
+    // Filtro por setor
+    const sectorMatch = selectedSector === 'all' || conv.sector === selectedSector;
+    
+    // Filtro por pesquisa
+    const searchMatch = conv.contactName.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return statusMatch && sectorMatch && searchMatch;
+  });
+  
+  // Obter a conversa atual selecionada
+  const currentConversation = conversations.find(conv => conv.id === selectedConversation);
+  
+  // Formatar data para exibição
+  const formatDate = (date: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const isToday = date.getDate() === now.getDate() && 
+                    date.getMonth() === now.getMonth() && 
+                    date.getFullYear() === now.getFullYear();
+    
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else if (diff < 7 * 24 * 60 * 60 * 1000) { // Menos de 7 dias
+      const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      return days[date.getDay()];
+    } else {
+      return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
+    }
+  };
   
   // Enviar mensagem
   const sendMessage = () => {
@@ -192,33 +188,6 @@ export default function ChatNexo() {
         return conv;
       }));
     }, delay);
-  };
-  
-  // Filtrar conversas com base na pesquisa
-  const filteredConversations = conversations.filter(conv => 
-    conv.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  
-  // Obter a conversa atual selecionada
-  const currentConversation = conversations.find(conv => conv.id === selectedConversation);
-  
-  // Formatar data para exibição
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const isToday = date.getDate() === now.getDate() && 
-                    date.getMonth() === now.getMonth() && 
-                    date.getFullYear() === now.getFullYear();
-    
-    if (isToday) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diff < 7 * 24 * 60 * 60 * 1000) { // Menos de 7 dias
-      const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-      return days[date.getDay()];
-    } else {
-      return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
-    }
   };
   
   return (
@@ -404,25 +373,65 @@ export default function ChatNexo() {
         <div className="flex flex-1 overflow-hidden">
           {/* Lista de Conversas (WhatsApp Style) */}
           <div className="w-80 h-full border-r border-gray-800 flex flex-col">
-            {/* Barra de Pesquisa */}
-            <div className="p-3 border-b border-gray-800">
+            {/* Abas e Filtros */}
+            <div className="border-b border-gray-800">
+              {/* Abas Pendentes/Atendendo */}
+              <div className="flex border-b border-gray-800">
+                <button
+                  className={`px-4 py-3 text-sm font-medium flex items-center gap-2 ${activeTab === 'pending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                  onClick={() => setActiveTab('pending')}
+                >
+                  Pendentes
+                </button>
+                <button
+                  className={`px-4 py-3 text-sm font-medium flex items-center gap-2 ${activeTab === 'attending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                  onClick={() => setActiveTab('attending')}
+                >
+                  Atendendo
+                </button>
+                <button
+                  className={`px-4 py-3 text-sm font-medium flex items-center gap-2 ${activeTab === 'finished' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                  onClick={() => setActiveTab('finished')}
+                >
+                  Finalizados
+                </button>
+              </div>
+              
+              {/* Filtro de Setor */}
+              <div className="p-3 border-b border-gray-800 bg-[#1E1E1E]">
+                <label className="block text-sm font-medium text-gray-300 mb-1">Setor</label>
+                <select
+                  className="w-full p-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  value={selectedSector}
+                  onChange={(e) => setSelectedSector(e.target.value as 'all' | 'suporte' | 'comercial' | 'administrativo')}
+                >
+                  <option value="all">Todos os setores</option>
+                  <option value="suporte">Suporte Técnico</option>
+                  <option value="comercial">Comercial</option>
+                  <option value="administrativo">Administrativo</option>
+                </select>
+              </div>
+            </div>
+            
+            {/* Campo de Pesquisa */}
+            <div className="p-3 border-b border-gray-800" data-component-name="ChatNexo">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                 <input
                   type="text"
                   placeholder="Pesquisar conversas..."
+                  className="w-full pl-10 pr-4 py-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                 />
               </div>
             </div>
             
             {/* Lista de Conversas */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto" data-component-name="ChatNexo">
               {filteredConversations.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <MessageSquare size={48} className="mb-3 opacity-50" />
+                <div className="p-4 text-center text-gray-400">
+                  <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
                   <p>Nenhuma conversa encontrada</p>
                 </div>
               ) : (

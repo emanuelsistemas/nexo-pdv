@@ -70,6 +70,45 @@ interface Revenda {
   admin_senha?: string;
 }
 
+// Interface para configurações do Chat Nexo
+interface NexoChatConfig {
+  id?: string;
+  reseller_id?: string;
+  nome_assistente?: string;
+  mensagem_boas_vindas?: string;
+  resposta_automatica?: boolean;
+  setor_suporte?: boolean;
+  setor_comercial?: boolean;
+  setor_administrativo?: boolean;
+  prompt_suporte?: string;
+  prompt_comercial?: string;
+  prompt_administrativo?: string;
+  integracao_ia?: boolean;
+  horario_segunda_ativo?: boolean;
+  horario_segunda_inicio?: string;
+  horario_segunda_fim?: string;
+  horario_terca_ativo?: boolean;
+  horario_terca_inicio?: string;
+  horario_terca_fim?: string;
+  horario_quarta_ativo?: boolean;
+  horario_quarta_inicio?: string;
+  horario_quarta_fim?: string;
+  horario_quinta_ativo?: boolean;
+  horario_quinta_inicio?: string;
+  horario_quinta_fim?: string;
+  horario_sexta_ativo?: boolean;
+  horario_sexta_inicio?: string;
+  horario_sexta_fim?: string;
+  horario_sabado_ativo?: boolean;
+  horario_sabado_inicio?: string;
+  horario_sabado_fim?: string;
+  horario_domingo_ativo?: boolean;
+  horario_domingo_inicio?: string;
+  horario_domingo_fim?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   // Referência para o intervalo de atualização do QR Code
@@ -85,6 +124,42 @@ export default function Settings() {
   const [revenda, setRevenda] = useState<Revenda | null>(null);
   const [loading, setLoading] = useState(false);
   const [revendaLoading, setRevendaLoading] = useState(false);
+  
+  // Estados para configurações do Chat Nexo
+  const [chatConfig, setChatConfig] = useState<NexoChatConfig>({
+    nome_assistente: '',
+    mensagem_boas_vindas: '',
+    resposta_automatica: false,
+    setor_suporte: false,
+    setor_comercial: false,
+    setor_administrativo: false,
+    prompt_suporte: '',
+    prompt_comercial: '',
+    prompt_administrativo: '',
+    integracao_ia: false,
+    horario_segunda_ativo: false,
+    horario_segunda_inicio: '08:00',
+    horario_segunda_fim: '18:00',
+    horario_terca_ativo: false,
+    horario_terca_inicio: '08:00',
+    horario_terca_fim: '18:00',
+    horario_quarta_ativo: false,
+    horario_quarta_inicio: '08:00',
+    horario_quarta_fim: '18:00',
+    horario_quinta_ativo: false,
+    horario_quinta_inicio: '08:00',
+    horario_quinta_fim: '18:00',
+    horario_sexta_ativo: false,
+    horario_sexta_inicio: '08:00',
+    horario_sexta_fim: '18:00',
+    horario_sabado_ativo: false,
+    horario_sabado_inicio: '08:00',
+    horario_sabado_fim: '18:00',
+    horario_domingo_ativo: false,
+    horario_domingo_inicio: '08:00',
+    horario_domingo_fim: '18:00'
+  });
+  const [chatConfigLoading, setChatConfigLoading] = useState(false);
   
   // Estados para o modal de WhatsApp
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
@@ -198,6 +273,14 @@ export default function Settings() {
     // Carregar conexões WhatsApp
     loadWhatsAppConnections(session.id);
   }, [navigate]);
+  
+  // useEffect para carregar configurações do Chat Nexo quando a aba for selecionada
+  useEffect(() => {
+    if (activeTab === 'chat_nexo' && userInfo.reseller_id) {
+      console.log('Carregando configurações do Chat Nexo...');
+      loadChatConfig(userInfo.reseller_id as string);
+    }
+  }, [activeTab, userInfo.reseller_id]);
 
   // Função para carregar os dados da revenda
   const loadRevendaData = async (resellerId: string) => {
@@ -631,6 +714,139 @@ export default function Settings() {
     }
   };
 
+  // Função para carregar configurações do Chat Nexo
+  const loadChatConfig = async (resellerId: string) => {
+    if (!resellerId) {
+      console.log('ID da revenda não informado');
+      return;
+    }
+    
+    setChatConfigLoading(true);
+    try {
+      console.log('Carregando configurações do chat para revenda:', resellerId);
+      const { data, error } = await supabase
+        .from('nexochat_config')
+        .select('*')
+        .eq('reseller_id', resellerId)
+        .single();
+      
+      if (error) {
+        console.error('Erro ao carregar configurações do chat:', error);
+        // Se não encontrar configuração, pode criar uma nova
+        if (error.code === 'PGRST116') {
+          console.log('Nenhuma configuração encontrada, criando nova...');
+          await createDefaultChatConfig(resellerId);
+        } else {
+          toast.error('Erro ao carregar configurações do chat');
+        }
+      } else if (data) {
+        console.log('Configurações do chat carregadas:', data);
+        // Formatar os horários para o formato da interface (HH:MM)
+        const formattedConfig = {
+          ...data,
+          horario_segunda_inicio: data.horario_segunda_inicio ? data.horario_segunda_inicio.substring(0, 5) : '08:00',
+          horario_segunda_fim: data.horario_segunda_fim ? data.horario_segunda_fim.substring(0, 5) : '18:00',
+          horario_terca_inicio: data.horario_terca_inicio ? data.horario_terca_inicio.substring(0, 5) : '08:00',
+          horario_terca_fim: data.horario_terca_fim ? data.horario_terca_fim.substring(0, 5) : '18:00',
+          horario_quarta_inicio: data.horario_quarta_inicio ? data.horario_quarta_inicio.substring(0, 5) : '08:00',
+          horario_quarta_fim: data.horario_quarta_fim ? data.horario_quarta_fim.substring(0, 5) : '18:00',
+          horario_quinta_inicio: data.horario_quinta_inicio ? data.horario_quinta_inicio.substring(0, 5) : '08:00',
+          horario_quinta_fim: data.horario_quinta_fim ? data.horario_quinta_fim.substring(0, 5) : '18:00',
+          horario_sexta_inicio: data.horario_sexta_inicio ? data.horario_sexta_inicio.substring(0, 5) : '08:00',
+          horario_sexta_fim: data.horario_sexta_fim ? data.horario_sexta_fim.substring(0, 5) : '18:00',
+          horario_sabado_inicio: data.horario_sabado_inicio ? data.horario_sabado_inicio.substring(0, 5) : '08:00',
+          horario_sabado_fim: data.horario_sabado_fim ? data.horario_sabado_fim.substring(0, 5) : '18:00',
+          horario_domingo_inicio: data.horario_domingo_inicio ? data.horario_domingo_inicio.substring(0, 5) : '08:00',
+          horario_domingo_fim: data.horario_domingo_fim ? data.horario_domingo_fim.substring(0, 5) : '18:00',
+        };
+        
+        setChatConfig(formattedConfig);
+        // Atualizar o estado de integração com IA
+        setIaIntegrationEnabled(!!data.integracao_ia);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configurações do chat:', error);
+      toast.error('Erro ao carregar configurações do chat');
+    } finally {
+      setChatConfigLoading(false);
+    }
+  };
+
+  // Função para criar configuração padrão se não existir
+  const createDefaultChatConfig = async (resellerId: string) => {
+    try {
+      const defaultConfig = {
+        reseller_id: resellerId,
+        nome_assistente: 'Assistente Nexo',
+        mensagem_boas_vindas: 'Olá, sou o assistente virtual do Nexo PDV. Como posso ajudar?',
+        resposta_automatica: false,
+        setor_suporte: false,
+        setor_comercial: false,
+        setor_administrativo: false,
+        integracao_ia: false,
+        horario_segunda_ativo: false,
+        horario_terca_ativo: false,
+        horario_quarta_ativo: false,
+        horario_quinta_ativo: false,
+        horario_sexta_ativo: false,
+        horario_sabado_ativo: false,
+        horario_domingo_ativo: false
+      };
+      
+      const { data, error } = await supabase
+        .from('nexochat_config')
+        .insert(defaultConfig)
+        .select()
+        .single();
+        
+      if (error) {
+        console.error('Erro ao criar configuração padrão:', error);
+        toast.error('Erro ao criar configuração padrão do chat');
+      } else if (data) {
+        setChatConfig(data);
+        toast.success('Configuração padrão do chat criada com sucesso');
+      }
+    } catch (error) {
+      console.error('Erro ao criar configuração padrão:', error);
+      toast.error('Erro ao criar configuração padrão do chat');
+    }
+  };
+
+  // Função para salvar configurações do Chat Nexo
+  const saveChatConfig = async () => {
+    if (!userInfo.reseller_id) {
+      toast.error('ID da revenda não encontrado');
+      return;
+    }
+    
+    setChatConfigLoading(true);
+    try {
+      // Formatar os dados para o formato do banco
+      const dataToSave = {
+        ...chatConfig,
+        reseller_id: userInfo.reseller_id,
+        integracao_ia: iaIntegrationEnabled,
+        updated_at: new Date().toISOString()
+      };
+      
+      const { error } = await supabase
+        .from('nexochat_config')
+        .upsert(dataToSave, { onConflict: 'reseller_id' });
+        
+      if (error) {
+        console.error('Erro ao salvar configurações do chat:', error);
+        toast.error('Erro ao salvar configurações do chat');
+      } else {
+        toast.success('Configurações do chat salvas com sucesso');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar configurações do chat:', error);
+      toast.error('Erro ao salvar configurações do chat');
+    } finally {
+      setChatConfigLoading(false);
+    }
+  };
+  
   // Função para carregar conexões WhatsApp do banco de dados
   const loadWhatsAppConnections = async (adminId: string) => {
     try {
@@ -2400,184 +2616,232 @@ export default function Settings() {
                 <h2 className="text-xl font-semibold text-white">Configurações do Chat Nexo</h2>
               </div>
               
-              <div className="bg-[#2A2A2A] rounded-lg border border-gray-800 p-6 w-full">
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-white mb-4">Configurações Gerais</h3>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Nome do Assistente</label>
-                    <input
-                      type="text"
-                      className="w-full p-2 bg-[#333] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                      placeholder="Ex: Assistente Nexo"
-                    />
-                    <p className="mt-1 text-xs text-gray-400">Nome que será exibido para os clientes no chat</p>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Mensagem de Boas-vindas</label>
-                    <textarea
-                      className="w-full p-2 bg-[#333] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px]"
-                      placeholder="Ex: Olá, sou o assistente virtual do Nexo PDV. Como posso ajudar?"
-                    />
-                    <p className="mt-1 text-xs text-gray-400">Mensagem que será enviada quando um cliente iniciar uma conversa</p>
-                  </div>
-                  
-                  <div className="flex items-center">
-                    <input 
-                      type="checkbox" 
-                      id="autoresponder" 
-                      className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                    />
-                    <label htmlFor="autoresponder" className="ml-2 text-sm font-medium text-gray-300">Ativar resposta automática</label>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Setor</label>
-                    <div className="space-y-2 bg-[#333] border border-gray-700 rounded-lg p-3">
-                      <p className="text-xs text-gray-400 mb-2">Selecione os setores disponíveis para atendimento</p>
-                      
-                      <div className="space-y-3">
-                        <div>
-                          <div className="flex items-center">
-                            <input 
-                              type="checkbox" 
-                              id="setor-suporte" 
-                              className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                            />
-                            <label htmlFor="setor-suporte" className="ml-2 text-sm text-white">Suporte Técnico</label>
-                          </div>
-                          {iaIntegrationEnabled && (
-                            <div className="mt-2 ml-6">
-                              <textarea
-                                className="w-full p-2 bg-[#444] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs min-h-[80px]"
-                                placeholder="Insira o prompt para que a IA responda sobre Suporte Técnico..."
-                              />
-                              <p className="mt-1 text-xs text-gray-400">A IA usará este prompt como base para respostas automatizadas</p>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div>
-                          <div className="flex items-center">
-                            <input 
-                              type="checkbox" 
-                              id="setor-comercial" 
-                              className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                            />
-                            <label htmlFor="setor-comercial" className="ml-2 text-sm text-white">Comercial</label>
-                          </div>
-                          {iaIntegrationEnabled && (
-                            <div className="mt-2 ml-6">
-                              <textarea
-                                className="w-full p-2 bg-[#444] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs min-h-[80px]"
-                                placeholder="Insira o prompt para que a IA responda sobre questões Comerciais..."
-                              />
-                              <p className="mt-1 text-xs text-gray-400">A IA usará este prompt como base para respostas automatizadas</p>
-                            </div>
-                          )}
-                        </div>
-                        
-                        <div>
-                          <div className="flex items-center">
-                            <input 
-                              type="checkbox" 
-                              id="setor-administrativo" 
-                              className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                            />
-                            <label htmlFor="setor-administrativo" className="ml-2 text-sm text-white">Administrativo</label>
-                          </div>
-                          {iaIntegrationEnabled && (
-                            <div className="mt-2 ml-6">
-                              <textarea
-                                className="w-full p-2 bg-[#444] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs min-h-[80px]"
-                                placeholder="Insira o prompt para que a IA responda sobre questões Administrativas..."
-                              />
-                              <p className="mt-1 text-xs text-gray-400">A IA usará este prompt como base para respostas automatizadas</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              {chatConfigLoading ? (
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+                  <span className="ml-3 text-white">Carregando configurações...</span>
                 </div>
-                
-                <div className="mt-8 border-t border-gray-800 pt-6">
-                  <h3 className="text-lg font-medium text-white mb-4">Configurações Avançadas</h3>
+              ) : (
+                <div className="bg-[#2A2A2A] rounded-lg border border-gray-800 p-6 w-full">
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <label className="text-sm font-medium text-gray-300">Integração com IA</label>
-                        <p className="text-xs text-gray-400">Utilizar inteligência artificial para respostas automáticas</p>
-                      </div>
-                      <div className="flex items-center">
-                        <input 
-                          type="checkbox" 
-                          id="ia_integration" 
-                          className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                          checked={iaIntegrationEnabled}
-                          onChange={(e) => setIaIntegrationEnabled(e.target.checked)}
-                        />
-                        <label htmlFor="ia_integration" className="ml-2 text-sm font-medium text-gray-300">Ativar</label>
-                      </div>
+                    <h3 className="text-lg font-medium text-white mb-4">Configurações Gerais</h3>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Nome do Assistente</label>
+                      <input
+                        type="text"
+                        className="w-full p-2 bg-[#333] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        placeholder="Ex: Assistente Nexo"
+                        value={chatConfig.nome_assistente || ''}
+                        onChange={(e) => setChatConfig({...chatConfig, nome_assistente: e.target.value})}
+                      />
+                      <p className="mt-1 text-xs text-gray-400">Nome que será exibido para os clientes no chat</p>
                     </div>
                     
                     <div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-300">Horário de funcionamento</label>
-                        <p className="text-xs text-gray-400">Defina os dias e horários em que o chat estará disponível</p>
-                      </div>
-                      
-                      <div className="mt-3 bg-[#333] border border-gray-700 rounded-lg p-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'].map((dia, index) => (
-                            <div key={index} className="flex items-center justify-between p-2 border-b border-gray-700">
-                              <div className="flex items-center">
-                                <input
-                                  type="checkbox"
-                                  id={`dia-${index}`}
-                                  className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
-                                />
-                                <label htmlFor={`dia-${index}`} className="ml-2 text-sm text-white">{dia}</label>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div>
-                                  <label htmlFor={`inicio-${index}`} className="text-xs text-gray-400 block mb-1">Início</label>
-                                  <input
-                                    type="time"
-                                    id={`inicio-${index}`}
-                                    className="text-xs p-1 bg-[#444] border border-gray-600 rounded text-white w-[85px]"
-                                    defaultValue="08:00"
-                                  />
-                                </div>
-                                <div>
-                                  <label htmlFor={`fim-${index}`} className="text-xs text-gray-400 block mb-1">Fim</label>
-                                  <input
-                                    type="time"
-                                    id={`fim-${index}`}
-                                    className="text-xs p-1 bg-[#444] border border-gray-600 rounded text-white w-[85px]"
-                                    defaultValue="18:00"
-                                  />
-                                </div>
-                              </div>
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Mensagem de Boas-vindas</label>
+                      <textarea
+                        className="w-full p-2 bg-[#333] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px]"
+                        placeholder="Ex: Olá, sou o assistente virtual do Nexo PDV. Como posso ajudar?"
+                        value={chatConfig.mensagem_boas_vindas || ''}
+                        onChange={(e) => setChatConfig({...chatConfig, mensagem_boas_vindas: e.target.value})}
+                      />
+                      <p className="mt-1 text-xs text-gray-400">Mensagem que será enviada quando um cliente iniciar uma conversa</p>
+                    </div>
+                    
+                    <div className="flex items-center">
+                      <input 
+                        type="checkbox" 
+                        id="autoresponder" 
+                        className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                        checked={chatConfig.resposta_automatica || false}
+                        onChange={(e) => setChatConfig({...chatConfig, resposta_automatica: e.target.checked})}
+                      />
+                      <label htmlFor="autoresponder" className="ml-2 text-sm font-medium text-gray-300">Ativar resposta automática</label>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">Setor</label>
+                      <div className="space-y-2 bg-[#333] border border-gray-700 rounded-lg p-3">
+                        <p className="text-xs text-gray-400 mb-2">Selecione os setores disponíveis para atendimento</p>
+                        
+                        <div className="space-y-3">
+                          <div>
+                            <div className="flex items-center">
+                              <input 
+                                type="checkbox" 
+                                id="setor-suporte" 
+                                className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                                checked={chatConfig.setor_suporte || false}
+                                onChange={(e) => setChatConfig({...chatConfig, setor_suporte: e.target.checked})}
+                              />
+                              <label htmlFor="setor-suporte" className="ml-2 text-sm text-white">Suporte Técnico</label>
                             </div>
-                          ))}
+                            {iaIntegrationEnabled && (
+                              <div className="mt-2 ml-6">
+                                <textarea
+                                  className="w-full p-2 bg-[#444] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs min-h-[80px]"
+                                  placeholder="Insira o prompt para que a IA responda sobre Suporte Técnico..."
+                                  value={chatConfig.prompt_suporte || ''}
+                                  onChange={(e) => setChatConfig({...chatConfig, prompt_suporte: e.target.value})}
+                                />
+                                <p className="mt-1 text-xs text-gray-400">A IA usará este prompt como base para respostas automatizadas</p>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div>
+                            <div className="flex items-center">
+                              <input 
+                                type="checkbox" 
+                                id="setor-comercial" 
+                                className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                                checked={chatConfig.setor_comercial || false}
+                                onChange={(e) => setChatConfig({...chatConfig, setor_comercial: e.target.checked})}
+                              />
+                              <label htmlFor="setor-comercial" className="ml-2 text-sm text-white">Comercial</label>
+                            </div>
+                            {iaIntegrationEnabled && (
+                              <div className="mt-2 ml-6">
+                                <textarea
+                                  className="w-full p-2 bg-[#444] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs min-h-[80px]"
+                                  placeholder="Insira o prompt para que a IA responda sobre questões Comerciais..."
+                                  value={chatConfig.prompt_comercial || ''}
+                                  onChange={(e) => setChatConfig({...chatConfig, prompt_comercial: e.target.value})}
+                                />
+                                <p className="mt-1 text-xs text-gray-400">A IA usará este prompt como base para respostas automatizadas</p>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div>
+                            <div className="flex items-center">
+                              <input 
+                                type="checkbox" 
+                                id="setor-administrativo" 
+                                className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                                checked={chatConfig.setor_administrativo || false}
+                                onChange={(e) => setChatConfig({...chatConfig, setor_administrativo: e.target.checked})}
+                              />
+                              <label htmlFor="setor-administrativo" className="ml-2 text-sm text-white">Administrativo</label>
+                            </div>
+                            {iaIntegrationEnabled && (
+                              <div className="mt-2 ml-6">
+                                <textarea
+                                  className="w-full p-2 bg-[#444] border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs min-h-[80px]"
+                                  placeholder="Insira o prompt para que a IA responda sobre questões Administrativas..."
+                                  value={chatConfig.prompt_administrativo || ''}
+                                  onChange={(e) => setChatConfig({...chatConfig, prompt_administrativo: e.target.value})}
+                                />
+                                <p className="mt-1 text-xs text-gray-400">A IA usará este prompt como base para respostas automatizadas</p>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
+                  
+                  <div className="mt-8 border-t border-gray-800 pt-6">
+                    <h3 className="text-lg font-medium text-white mb-4">Configurações Avançadas</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="text-sm font-medium text-gray-300">Integração com IA</label>
+                          <p className="text-xs text-gray-400">Utilizar inteligência artificial para respostas automáticas</p>
+                        </div>
+                        <div className="flex items-center">
+                          <input 
+                            type="checkbox" 
+                            id="ia_integration" 
+                            className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                            checked={iaIntegrationEnabled}
+                            onChange={(e) => setIaIntegrationEnabled(e.target.checked)}
+                          />
+                          <label htmlFor="ia_integration" className="ml-2 text-sm font-medium text-gray-300">Ativar</label>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-300">Horário de funcionamento</label>
+                          <p className="text-xs text-gray-400">Defina os dias e horários em que o chat estará disponível</p>
+                        </div>
+                        
+                        <div className="mt-3 bg-[#333] border border-gray-700 rounded-lg p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {[
+                              {nome: 'Segunda', ativo: 'horario_segunda_ativo', inicio: 'horario_segunda_inicio', fim: 'horario_segunda_fim'},
+                              {nome: 'Terça', ativo: 'horario_terca_ativo', inicio: 'horario_terca_inicio', fim: 'horario_terca_fim'},
+                              {nome: 'Quarta', ativo: 'horario_quarta_ativo', inicio: 'horario_quarta_inicio', fim: 'horario_quarta_fim'},
+                              {nome: 'Quinta', ativo: 'horario_quinta_ativo', inicio: 'horario_quinta_inicio', fim: 'horario_quinta_fim'},
+                              {nome: 'Sexta', ativo: 'horario_sexta_ativo', inicio: 'horario_sexta_inicio', fim: 'horario_sexta_fim'},
+                              {nome: 'Sábado', ativo: 'horario_sabado_ativo', inicio: 'horario_sabado_inicio', fim: 'horario_sabado_fim'},
+                              {nome: 'Domingo', ativo: 'horario_domingo_ativo', inicio: 'horario_domingo_inicio', fim: 'horario_domingo_fim'}
+                            ].map((dia, index) => (
+                              <div key={index} className="flex items-center justify-between p-2 border-b border-gray-700">
+                                <div className="flex items-center">
+                                  <input
+                                    type="checkbox"
+                                    id={`dia-${index}`}
+                                    className="w-4 h-4 text-emerald-600 bg-gray-700 border-gray-600 rounded focus:ring-emerald-500"
+                                    checked={chatConfig[dia.ativo as keyof NexoChatConfig] as boolean || false}
+                                    onChange={(e) => setChatConfig({...chatConfig, [dia.ativo]: e.target.checked})}
+                                  />
+                                  <label htmlFor={`dia-${index}`} className="ml-2 text-sm text-white">{dia.nome}</label>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div>
+                                    <label htmlFor={`inicio-${index}`} className="text-xs text-gray-400 block mb-1">Início</label>
+                                    <input
+                                      type="time"
+                                      id={`inicio-${index}`}
+                                      className="text-xs p-1 bg-[#444] border border-gray-600 rounded text-white w-[85px]"
+                                      value={chatConfig[dia.inicio as keyof NexoChatConfig] as string || '08:00'}
+                                      onChange={(e) => setChatConfig({...chatConfig, [dia.inicio]: e.target.value})}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label htmlFor={`fim-${index}`} className="text-xs text-gray-400 block mb-1">Fim</label>
+                                    <input
+                                      type="time"
+                                      id={`fim-${index}`}
+                                      className="text-xs p-1 bg-[#444] border border-gray-600 rounded text-white w-[85px]"
+                                      value={chatConfig[dia.fim as keyof NexoChatConfig] as string || '18:00'}
+                                      onChange={(e) => setChatConfig({...chatConfig, [dia.fim]: e.target.value})}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-8 flex justify-end">
+                    <button
+                      onClick={saveChatConfig}
+                      disabled={chatConfigLoading}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:hover:bg-emerald-600"
+                    >
+                      {chatConfigLoading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <span>Salvando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                          Salvar Configurações
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-                
-                <div className="mt-8 flex justify-end">
-                  <button
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Salvar Configurações
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
           )}
 
