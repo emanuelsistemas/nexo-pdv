@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste Socket.io para Evolution API</title>
+    <!-- Importando o Socket.io client diretamente via CDN -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        pre {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 10px;
+            max-height: 300px;
+            overflow: auto;
+            margin-top: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .connected {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .disconnected {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .connecting {
+            background-color: #fcf8e3;
+            color: #8a6d3b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Teste Socket.io para Evolution API</h1>
+        
+        <div class="input-group">
+            <label for="apiUrl">URL da API</label>
+            <input type="text" id="apiUrl" value="https://apiwhatsapp.nexopdv.com" placeholder="Ex: https://api.exemplo.com">
+        </div>
+        
+        <div class="input-group">
+            <label for="instance">Nome da Instância</label>
+            <input type="text" id="instance" value="123" placeholder="Ex: whatsapp1">
+        </div>
+        
+        <div class="input-group">
+            <label for="apikey">API Key</label>
+            <input type="text" id="apikey" value="429683C4C977415CAAFCCE10F7D57E11" placeholder="Chave de API">
+        </div>
+        
+        <div class="input-group">
+            <label for="path">Caminho adicional (opcional)</label>
+            <input type="text" id="path" placeholder="Ex: /socket">
+        </div>
+        
+        <div class="input-group">
+            <label for="transports">Transports</label>
+            <select id="transports">
+                <option value="websocket">WebSocket only</option>
+                <option value="polling">Polling only</option>
+                <option value="all" selected>Todos (WebSocket + Polling)</option>
+            </select>
+        </div>
+        
+        <div class="grid">
+            <button id="connect">Conectar Socket.io</button>
+            <button id="disconnect" disabled>Desconectar</button>
+        </div>
+        
+        <div id="status" class="status disconnected">Desconectado</div>
+        
+        <h3>Log de Eventos</h3>
+        <pre id="log"></pre>
+    </div>
+
+    <script>
+        let socket = null;
+        
+        function appendLog(message) {
+            const log = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            log.textContent += `[${time}] ${message}\n`;
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function updateStatus(state, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + state;
+        }
+        
+        document.getElementById('connect').addEventListener('click', function() {
+            if (socket) {
+                appendLog('Já existe uma conexão ativa. Desconecte primeiro.');
+                return;
+            }
+            
+            let baseUrl = document.getElementById('apiUrl').value;
+            const instance = document.getElementById('instance').value;
+            const apikey = document.getElementById('apikey').value;
+            const path = document.getElementById('path').value;
+            const transportOption = document.getElementById('transports').value;
+            
+            // Criar URL completa
+            let url = baseUrl;
+            if (path) {
+                url += path;
+            }
+            
+            // Definir opções de transporte
+            let transports;
+            if (transportOption === 'websocket') {
+                transports = ['websocket'];
+            } else if (transportOption === 'polling') {
+                transports = ['polling'];
+            }
+            
+            appendLog(`Tentando conectar ao Socket.io: ${url}`);
+            updateStatus('connecting', 'Conectando...');
+            
+            try {
+                // Configurações do Socket.io
+                const options = {
+                    transports: transports,
+                    query: {
+                        instance: instance,
+                        apikey: apikey
+                    },
+                    extraHeaders: {
+                        'apikey': apikey
+                    }
+                };
+                
+                // Diferentes tentativas de conexão para testar
+                appendLog(`Tentativa 1: Conectando com Socket.io padrão`);
+                socket = io(url, options);
+                
+                // Eventos padrão do Socket.io
+                socket.on('connect', function() {
+                    appendLog(`Socket.io conectado! Socket ID: ${socket.id}`);
+                    updateStatus('connected', 'Conectado');
+                    document.getElementById('connect').disabled = true;
+                    document.getElementById('disconnect').disabled = false;
+                    
+                    // Tentar autenticar ou inscrever para eventos da instância
+                    try {
+                        const authMessage = {
+                            action: 'subscribe',
+                            instance: instance
+                        };
+                        appendLog(`Enviando mensagem de inscrição: ${JSON.stringify(authMessage)}`);
+                        socket.emit('subscribe', authMessage);
+                    } catch (e) {
+                        appendLog(`Erro ao enviar mensagem de inscrição: ${e.message}`);
+                    }
+                });
+                
+                socket.on('disconnect', function(reason) {
+                    appendLog(`Socket.io desconectado. Razão: ${reason}`);
+                    updateStatus('disconnected', 'Desconectado');
+                    document.getElementById('connect').disabled = false;
+                    document.getElementById('disconnect').disabled = true;
+                    socket = null;
+                });
+                
+                socket.on('error', function(error) {
+                    appendLog(`Erro no Socket.io: ${JSON.stringify(error)}`);
+                });
+                
+                socket.on('reconnect', function(attemptNumber) {
+                    appendLog(`Socket.io reconectado após ${attemptNumber} tentativas`);
+                });
+                
+                socket.on('reconnect_attempt', function(attemptNumber) {
+                    appendLog(`Tentativa de reconexão ${attemptNumber}...`);
+                });
+                
+                socket.on('reconnect_error', function(error) {
+                    appendLog(`Erro na reconexão: ${JSON.stringify(error)}`);
+                });
+                
+                // Eventos específicos da Evolution API
+                socket.on('MESSAGES_UPSERT', function(data) {
+                    appendLog(`Nova mensagem recebida: ${JSON.stringify(data)}`);
+                });
+                
+                socket.on('CONNECTION_UPDATE', function(data) {
+                    appendLog(`Atualização de conexão: ${JSON.stringify(data)}`);
+                });
+                
+                // Eventos adicionais
+                socket.onAny((event, ...args) => {
+                    appendLog(`Evento recebido: ${event}`);
+                    appendLog(`Dados do evento: ${JSON.stringify(args)}`);
+                });
+                
+            } catch (e) {
+                appendLog(`Erro ao criar conexão Socket.io: ${e.message}`);
+                updateStatus('disconnected', 'Erro na conexão');
+            }
+        });
+        
+        document.getElementById('disconnect').addEventListener('click', function() {
+            if (socket) {
+                socket.disconnect();
+                appendLog('Desconectando Socket.io...');
+                document.getElementById('connect').disabled = false;
+                document.getElementById('disconnect').disabled = true;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Settings as SettingsIcon, MessageCircle, Send, X, Search, MessageSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import axios from 'axios';
+import { io, Socket } from 'socket.io-client';
 
 interface Message {
   id: string;
@@ -60,8 +61,8 @@ export default function ChatNexo() {
     status: string;
   }>>([]);
   
-  // Referência para o WebSocket
-  const websocketRef = useRef<WebSocket | null>(null);
+  // Referência para a conexão Socket.io
+  const socketRef = useRef<Socket | null>(null);
   
   const [userInfo, setUserInfo] = useState({
     email: '',
@@ -247,8 +248,8 @@ export default function ChatNexo() {
             checkInstanceStatus(config.baseUrl, config.apikey, config.instanceName);
             // Buscar mensagens após verificar status
             fetchConversations(config.baseUrl, config.apikey);
-            // Iniciar conexão WebSocket
-            connectWebSocket(config.baseUrl, config.instanceName);
+            // Iniciar conexão Socket.io
+            connectSocketIO(config.baseUrl, config.instanceName, config.apikey);
           }, 500);
         }
       } catch (e) {
@@ -352,8 +353,8 @@ export default function ChatNexo() {
             await checkInstanceStatus(baseUrl, apikey, instanceName);
             // Após verificar o status, buscar mensagens
             fetchConversations(baseUrl, apikey);
-            // Iniciar conexão WebSocket
-            connectWebSocket(baseUrl, instanceName);
+            // Iniciar conexão Socket.io
+            connectSocketIO(baseUrl, instanceName, apikey);
           }, 500);
         } else {
           setError('Configuração da API não encontrada para esta revenda.');
@@ -439,132 +440,101 @@ export default function ChatNexo() {
     }
   };
 
-  // Implementação do WebSocket para comunicação em tempo real com a Evolution API
-  const connectWebSocket = (baseUrl: string, instanceName: string) => {
+  // Função para conectar ao Socket.io da Evolution API
+  const connectSocketIO = (baseUrl: string, instanceName: string, apikey: string) => {
     // Fechar conexão existente se houver
-    if (websocketRef.current && websocketRef.current.readyState !== WebSocket.CLOSED) {
-      websocketRef.current.close();
+    if (socketRef.current) {
+      console.log('Fechando conexão Socket.io existente');
+      socketRef.current.disconnect();
     }
     
-    // Converter URL HTTP para WebSocket (wss:// ou ws:// dependendo do protocolo original)
-    const wsProtocol = baseUrl.startsWith('https://') ? 'wss://' : 'ws://';
-    const baseUrlWithoutProtocol = baseUrl.replace(/^https?:\/\//, '');
-    const wsUrl = `${wsProtocol}${baseUrlWithoutProtocol}:8080`;
-    
-    console.log(`Conectando WebSocket para instância ${instanceName} em ${wsUrl}`);
-    
     try {
-      const socket = new WebSocket(wsUrl);
+      console.log(`Conectando Socket.io para instância ${instanceName} em ${baseUrl}`);
       
-      socket.onopen = (event) => {
-        console.log('Conectado ao WebSocket da Evolution API', event);
-      };
+      // Configurar opções do Socket.io
+      const socket = io(baseUrl, {
+        transports: ['websocket', 'polling'],
+        query: {
+          instance: instanceName
+        },
+        extraHeaders: {
+          'apikey': apikey
+        }
+      });
       
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('Dados recebidos via WebSocket:', data);
-          
-          // Filtrar por tipo de evento e instância
-          if (data.event === 'MESSAGES_UPSERT' && data.instance === instanceName) {
-            console.log('Nova mensagem recebida via WebSocket para a instância', instanceName);
-            
-            // Atualizar conversas em tempo real
-            // Simulamos o formato esperado pelo processConversationsResponse
-            if (data.data && Array.isArray(data.data)) {
-              const newMessage = {
-                data: {
-                  messages: {
-                    records: data.data
-                  }
-                }
-              };
-              
-              // Processar e adicionar às conversas existentes
-              const processedMessage = processConversationsResponse(newMessage);
-              if (processedMessage.length > 0) {
-                setConversations(prevConversations => {
-                  // Verificar se já temos esta conversa e atualizar
-                  const existingIndex = prevConversations.findIndex(
-                    conv => conv.id === processedMessage[0].id
-                  );
-                  
-                  if (existingIndex >= 0) {
-                    // Atualizar conversa existente
-                    const updatedConversations = [...prevConversations];
-                    // Garantir que as mensagens sejam unificadas
-                    const updatedMessages = [
-                      ...processedMessage[0].messages,
-                      ...prevConversations[existingIndex].messages
-                    ];
-                    
-                    // Remover duplicados e ordenar por data
-                    const uniqueMessages = Array.from(new Map(
-                      updatedMessages.map(msg => [msg.id, msg])
-                    ).values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-                    
-                    updatedConversations[existingIndex] = {
-                      ...prevConversations[existingIndex],
-                      messages: uniqueMessages,
-                      lastMessage: processedMessage[0].lastMessage
-                    };
-                    
-                    return updatedConversations;
-                  } else {
-                    // Adicionar nova conversa
-                    return [...processedMessage, ...prevConversations];
-                  }
-                });
+      // Evento de conexão
+      socket.on('connect', () => {
+        console.log(`Socket.io conectado! Socket ID: ${socket.id}`);
+        
+        // Enviar mensagem de inscrição em eventos
+        const subscribeMessage = {
+          action: 'subscribe',
+          instance: instanceName
+        };
+        console.log('Enviando mensagem de inscrição:', subscribeMessage);
+        socket.emit('subscribe', subscribeMessage);
+      });
+      
+      // Desconexão
+      socket.on('disconnect', (reason) => {
+        console.log(`Socket.io desconectado. Razão: ${reason}`);
+      });
+      
+      // Evento de erro
+      socket.on('error', (error) => {
+        console.error('Erro no Socket.io:', error);
+      });
+      
+      // Eventos específicos da Evolution API
+      socket.on('MESSAGES_UPSERT', (data) => {
+        console.log('Nova mensagem recebida via Socket.io:', data);
+        
+        // Converter para o formato que nossa aplicação espera
+        if (data && Array.isArray(data.data)) {
+          const newMessage = {
+            data: {
+              messages: {
+                records: data.data
               }
             }
-          } else if (data.event === 'CONNECTION_UPDATE' && data.instance === instanceName) {
-            // Atualizar status da conexão
-            console.log('Status da conexão atualizado:', data);
-            // Atualizar o status da instância nos whatsappInstances se necessário
-            if (data.state) {
-              setWhatsappInstances(prev => {
-                return prev.map(inst => {
-                  if (inst.instance_name === instanceName) {
-                    return { ...inst, status: data.state };
-                  }
-                  return inst;
-                });
-              });
-            }
-          }
-        } catch (error) {
-          console.error('Erro ao processar mensagem do WebSocket:', error);
+          };
+          
+          // Processar mensagens - a função processConversationsResponse já atualiza o estado
+          // então apenas precisamos chamar ela com os dados recebidos
+          console.log('Processando mensagem recebida via Socket.io');
+          fetchConversations(baseUrl, apikey);
         }
-      };
+      });
       
-      socket.onerror = (error) => {
-        console.error('Erro no WebSocket:', error);
-      };
+      socket.on('CONNECTION_UPDATE', (data) => {
+        console.log('Atualização de conexão via Socket.io:', data);
+        // Atualizar status da instância se necessário
+        if (data && data.state) {
+          setWhatsappInstances(prev => {
+            return prev.map(inst => {
+              if (inst.instance_name === instanceName) {
+                return { ...inst, status: data.state };
+              }
+              return inst;
+            });
+          });
+        }
+      });
       
-      socket.onclose = (event) => {
-        console.log('Conexão WebSocket fechada. Código:', event.code, 'Razão:', event.reason);
-        // Tentar reconectar após 5 segundos
-        setTimeout(() => {
-          if (whatsappInstances.length > 0) {
-            connectWebSocket(baseUrl, instanceName);
-          }
-        }, 5000);
-      };
+      // Armazenar referência à conexão
+      socketRef.current = socket;
       
-      websocketRef.current = socket;
-      return socket;
     } catch (error) {
-      console.error('Erro ao criar conexão WebSocket:', error);
-      return null;
+      console.error('Erro ao criar conexão Socket.io:', error);
     }
   };
   
-  // Garantir que o WebSocket seja fechado ao desmontar o componente
+  // Garantir que o Socket.io seja fechado ao desmontar o componente
   useEffect(() => {
     return () => {
-      if (websocketRef.current) {
-        console.log('Fechando conexão WebSocket ao desmontar componente');
-        websocketRef.current.close();
+      if (socketRef.current) {
+        console.log('Fechando conexão Socket.io ao desmontar componente');
+        socketRef.current.disconnect();
       }
     };
   }, []);
@@ -574,18 +544,29 @@ export default function ChatNexo() {
     // Se não temos configurações ou instâncias, não buscar mensagens
     if (!evolutionApiConfig.baseUrl || !evolutionApiConfig.apikey || whatsappInstances.length === 0) {
       console.log('Configuração incompleta para buscar mensagens');
+      setError('Configuração incompleta. Verifique a URL da API, API Key e nome da instância.');
       return;
     }
     
+    // Limpar erro anterior se existir
+    setError(null);
+    
     console.log('Configuração completa detectada, buscando mensagens...');
     
-    // Fazer uma busca inicial quando as configurações estiverem prontas
-    fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
+    const instanceName = whatsappInstances[0].instance_name;
     
-    // Iniciar a conexão WebSocket para a instância ativa
-    if (whatsappInstances.length > 0) {
-      connectWebSocket(evolutionApiConfig.baseUrl, whatsappInstances[0].instance_name);
-    }
+    // Primeiro verificar o status da instância
+    (async () => {
+      const statusOk = await checkInstanceStatus(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey, instanceName);
+      
+      if (statusOk) {
+        // Só buscar mensagens e conectar WebSocket se o status for OK
+        fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
+        
+        // Iniciar a conexão Socket.io para a instância ativa
+        connectSocketIO(evolutionApiConfig.baseUrl, instanceName, evolutionApiConfig.apikey);
+      }
+    })();
     
     // Limpeza do efeito
     return () => {

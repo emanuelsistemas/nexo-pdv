@@ -195,6 +195,7 @@ const AiChat = ({ isOpen, onClose, userName }: AiChatProps) => {
           headers: {
             'Authorization': `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
             'Content-Type': 'application/json',
+            'X-Debug-API-Key': import.meta.env.VITE_GROQ_API_KEY ? 'present' : 'missing'
           },
         }
       );
