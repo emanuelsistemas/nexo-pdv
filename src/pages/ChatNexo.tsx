@@ -70,8 +70,6 @@ export default function ChatNexo() {
   });
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // Referência para o intervalo de polling
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Verificar sessão ao carregar
   useEffect(() => {
@@ -215,7 +213,47 @@ export default function ChatNexo() {
     }
   };
 
-  // Buscar configurações da Evolution API
+  // Verifique se já temos configuração no localStorage para acelerar a inicialização
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('nexochat_config');
+    if (savedConfig) {
+      try {
+        const config = JSON.parse(savedConfig);
+        console.log('Usando configuração salva no localStorage:', {
+          baseUrl: config.baseUrl,
+          apikey: config.apikey ? '*****' : 'não configurada',
+          instanceName: config.instanceName
+        });
+        
+        setEvolutionApiConfig({
+          baseUrl: config.baseUrl,
+          apikey: config.apikey
+        });
+        
+        if (config.instanceName) {
+          setWhatsappInstances([{
+            id: config.instanceName,
+            instance_name: config.instanceName,
+            name: `WhatsApp ${config.instanceName}`,
+            phone: config.instanceName,
+            status: 'active'
+          }]);
+          
+          // Verificar status imediatamente ao carregar
+          setTimeout(() => {
+            checkInstanceStatus(config.baseUrl, config.apikey, config.instanceName);
+            // Buscar mensagens após verificar status
+            fetchConversations(config.baseUrl, config.apikey);
+          }, 500);
+        }
+      } catch (e) {
+        console.error('Erro ao carregar configuração do localStorage:', e);
+        // Se falhar em carregar do localStorage, continuar com fluxo normal
+      }
+    }
+  }, []);
+
+  // Buscar configurações da Evolution API do banco de dados
   useEffect(() => {
     // Somente buscar as configurações quando tivermos o ID da revenda
     if (!userInfo.resellerId) {
@@ -277,6 +315,13 @@ export default function ChatNexo() {
             instanceName 
           });
           
+          // Salvar no localStorage para carregamento rápido nas próximas vezes
+          localStorage.setItem('nexochat_config', JSON.stringify({
+            baseUrl,
+            apikey,
+            instanceName
+          }));
+          
           // Atualizar configuração
           setEvolutionApiConfig({
             baseUrl,
@@ -292,8 +337,17 @@ export default function ChatNexo() {
             status: 'active'
           }]);
           
-          // Agora que temos a instância configurada, buscar mensagens
-          fetchConversations(baseUrl, apikey);
+          // Agora que temos a instância configurada, buscar mensagens automaticamente
+          setTimeout(() => {
+            fetchConversations(baseUrl, apikey);
+          }, 1000);
+          
+          // Verificar status da instância em segundo plano e DEPOIS buscar mensagens
+          setTimeout(async () => {
+            await checkInstanceStatus(baseUrl, apikey, instanceName);
+            // Após verificar o status, buscar mensagens
+            fetchConversations(baseUrl, apikey);
+          }, 500);
         } else {
           setError('Configuração da API não encontrada para esta revenda.');
         }
@@ -310,6 +364,7 @@ export default function ChatNexo() {
   
   // Função para verificar o status da instância no servidor
   const checkInstanceStatus = async (baseUrl: string, apikey: string, instanceName: string) => {
+    console.log(`Verificando status para instância real: ${instanceName}`);
     try {
       setError(null);
       setIsLoading(true);
@@ -377,36 +432,24 @@ export default function ChatNexo() {
     }
   };
 
-  // Implementar polling para atualização de novas mensagens a cada 30 segundos
+  // Buscar mensagens quando as configurações estiverem prontas
   useEffect(() => {
-    // Se não temos configurações ou instâncias, não faz polling
+    // Se não temos configurações ou instâncias, não buscar mensagens
     if (!evolutionApiConfig.baseUrl || !evolutionApiConfig.apikey || whatsappInstances.length === 0) {
-      console.log('Configuração incompleta para polling');
+      console.log('Configuração incompleta para buscar mensagens');
       return;
     }
     
-    console.log('Configurando polling para novas mensagens...');
+    console.log('Configuração completa detectada, buscando mensagens...');
     
-    // Limpar intervalo existente se houver
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-    }
+    // Fazer uma busca inicial quando as configurações estiverem prontas
+    fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
     
-    // Configurar intervalo para buscar novas mensagens a cada 30 segundos
-    pollingIntervalRef.current = setInterval(() => {
-      console.log('Buscando novas mensagens via polling...');
-      fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
-    }, 30000); // 30 segundos
-    
-    // Limpar intervalo quando o componente for desmontado ou as configurações mudarem
+    // Limpeza do efeito (se necessário no futuro)
     return () => {
-      if (pollingIntervalRef.current) {
-        console.log('Limpando intervalo de polling...');
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
+      // Código de limpeza se necessário
     };
-  }, [evolutionApiConfig.baseUrl, evolutionApiConfig.apikey, whatsappInstances]);
+  }, [evolutionApiConfig.baseUrl, evolutionApiConfig.apikey, whatsappInstances.length]);
 
   // Buscar instâncias de WhatsApp associadas à revenda
   useEffect(() => {
@@ -959,20 +1002,31 @@ export default function ChatNexo() {
                 )}
               </div>
               
-              {/* Botão para verificar status da conexão */}
+              {/* Botão para verificar status e atualizar mensagens */}
               <button 
                 onClick={() => {
                   if (whatsappInstances.length > 0) {
-                    checkInstanceStatus(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey, whatsappInstances[0].instance_name);
+                    const instanceName = whatsappInstances[0].instance_name;
+                    console.log(`Verificando status e atualizando mensagens para instância: ${instanceName}`);
+                    
+                    // Primeiro verificar status e depois buscar mensagens
+                    checkInstanceStatus(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey, instanceName)
+                      .then(() => {
+                        // Após verificar status, buscar mensagens
+                        fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
+                      });
                   } else {
                     setError('Nenhuma instância configurada. Verifique as configurações da revenda.');
                   }
                 }}
                 disabled={isLoading || whatsappInstances.length === 0}
-                className={`w-full px-3 py-2 text-sm rounded-md flex items-center justify-center ${isLoading || whatsappInstances.length === 0 ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+                className={`w-full px-3 py-2 text-sm rounded-md flex items-center justify-center ${isLoading || whatsappInstances.length === 0 ? 'bg-gray-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'} text-white`}
               >
-                {isLoading ? 'Verificando...' : 'Verificar Status da Conexão'}
+                {isLoading ? 'Atualizando...' : 'Atualizar Mensagens'}
               </button>
+              
+              {/* Informação sobre atualização */}
+              <p className="text-xs text-gray-400 mt-1 text-center">Verificar status e atualizar mensagens</p>
               
               {whatsappInstances.length > 0 && (
                 <>
