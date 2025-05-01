@@ -69,6 +69,8 @@ export default function ChatNexo() {
   });
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Referência para o intervalo de polling
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Verificar sessão ao carregar
   useEffect(() => {
@@ -283,6 +285,37 @@ export default function ChatNexo() {
     fetchEvolutionApiConfig();
   }, [userInfo.resellerId]);
 
+  // Implementar polling para atualização de novas mensagens a cada 30 segundos
+  useEffect(() => {
+    // Se não temos configurações ou instâncias, não faz polling
+    if (!evolutionApiConfig.baseUrl || !evolutionApiConfig.apikey || whatsappInstances.length === 0) {
+      console.log('Configuração incompleta para polling');
+      return;
+    }
+    
+    console.log('Configurando polling para novas mensagens...');
+    
+    // Limpar intervalo existente se houver
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+    
+    // Configurar intervalo para buscar novas mensagens a cada 30 segundos
+    pollingIntervalRef.current = setInterval(() => {
+      console.log('Buscando novas mensagens via polling...');
+      fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
+    }, 30000); // 30 segundos
+    
+    // Limpar intervalo quando o componente for desmontado ou as configurações mudarem
+    return () => {
+      if (pollingIntervalRef.current) {
+        console.log('Limpando intervalo de polling...');
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [evolutionApiConfig.baseUrl, evolutionApiConfig.apikey, whatsappInstances]);
+
   // Buscar instâncias de WhatsApp associadas à revenda
   useEffect(() => {
     if (!userInfo.resellerId) return;
@@ -316,8 +349,8 @@ export default function ChatNexo() {
           // Se temos instâncias e configurações, podemos buscar as conversas
           if (evolutionApiConfig.baseUrl && evolutionApiConfig.apikey) {
             console.log('Buscando conversas para as instâncias...');
-            // Descomente abaixo quando a função fetchConversations estiver implementada
-            // fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
+            // Descomentar para buscar as conversas
+            fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
           }
         } else {
           console.log('Nenhuma instância de WhatsApp encontrada para esta revenda');
