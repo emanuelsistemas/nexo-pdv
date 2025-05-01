@@ -60,6 +60,9 @@ export default function ChatNexo() {
     status: string;
   }>>([]);
   
+  // Referência para o WebSocket
+  const websocketRef = useRef<WebSocket | null>(null);
+  
   const [userInfo, setUserInfo] = useState({
     email: '',
     companyName: '',
@@ -244,6 +247,8 @@ export default function ChatNexo() {
             checkInstanceStatus(config.baseUrl, config.apikey, config.instanceName);
             // Buscar mensagens após verificar status
             fetchConversations(config.baseUrl, config.apikey);
+            // Iniciar conexão WebSocket
+            connectWebSocket(config.baseUrl, config.instanceName);
           }, 500);
         }
       } catch (e) {
@@ -347,6 +352,8 @@ export default function ChatNexo() {
             await checkInstanceStatus(baseUrl, apikey, instanceName);
             // Após verificar o status, buscar mensagens
             fetchConversations(baseUrl, apikey);
+            // Iniciar conexão WebSocket
+            connectWebSocket(baseUrl, instanceName);
           }, 500);
         } else {
           setError('Configuração da API não encontrada para esta revenda.');
@@ -432,6 +439,136 @@ export default function ChatNexo() {
     }
   };
 
+  // Implementação do WebSocket para comunicação em tempo real com a Evolution API
+  const connectWebSocket = (baseUrl: string, instanceName: string) => {
+    // Fechar conexão existente se houver
+    if (websocketRef.current && websocketRef.current.readyState !== WebSocket.CLOSED) {
+      websocketRef.current.close();
+    }
+    
+    // Converter URL HTTP para WebSocket (wss:// ou ws:// dependendo do protocolo original)
+    const wsProtocol = baseUrl.startsWith('https://') ? 'wss://' : 'ws://';
+    const baseUrlWithoutProtocol = baseUrl.replace(/^https?:\/\//, '');
+    const wsUrl = `${wsProtocol}${baseUrlWithoutProtocol}:8080`;
+    
+    console.log(`Conectando WebSocket para instância ${instanceName} em ${wsUrl}`);
+    
+    try {
+      const socket = new WebSocket(wsUrl);
+      
+      socket.onopen = (event) => {
+        console.log('Conectado ao WebSocket da Evolution API', event);
+      };
+      
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Dados recebidos via WebSocket:', data);
+          
+          // Filtrar por tipo de evento e instância
+          if (data.event === 'MESSAGES_UPSERT' && data.instance === instanceName) {
+            console.log('Nova mensagem recebida via WebSocket para a instância', instanceName);
+            
+            // Atualizar conversas em tempo real
+            // Simulamos o formato esperado pelo processConversationsResponse
+            if (data.data && Array.isArray(data.data)) {
+              const newMessage = {
+                data: {
+                  messages: {
+                    records: data.data
+                  }
+                }
+              };
+              
+              // Processar e adicionar às conversas existentes
+              const processedMessage = processConversationsResponse(newMessage);
+              if (processedMessage.length > 0) {
+                setConversations(prevConversations => {
+                  // Verificar se já temos esta conversa e atualizar
+                  const existingIndex = prevConversations.findIndex(
+                    conv => conv.id === processedMessage[0].id
+                  );
+                  
+                  if (existingIndex >= 0) {
+                    // Atualizar conversa existente
+                    const updatedConversations = [...prevConversations];
+                    // Garantir que as mensagens sejam unificadas
+                    const updatedMessages = [
+                      ...processedMessage[0].messages,
+                      ...prevConversations[existingIndex].messages
+                    ];
+                    
+                    // Remover duplicados e ordenar por data
+                    const uniqueMessages = Array.from(new Map(
+                      updatedMessages.map(msg => [msg.id, msg])
+                    ).values()).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                    
+                    updatedConversations[existingIndex] = {
+                      ...prevConversations[existingIndex],
+                      messages: uniqueMessages,
+                      lastMessage: processedMessage[0].lastMessage
+                    };
+                    
+                    return updatedConversations;
+                  } else {
+                    // Adicionar nova conversa
+                    return [...processedMessage, ...prevConversations];
+                  }
+                });
+              }
+            }
+          } else if (data.event === 'CONNECTION_UPDATE' && data.instance === instanceName) {
+            // Atualizar status da conexão
+            console.log('Status da conexão atualizado:', data);
+            // Atualizar o status da instância nos whatsappInstances se necessário
+            if (data.state) {
+              setWhatsappInstances(prev => {
+                return prev.map(inst => {
+                  if (inst.instance_name === instanceName) {
+                    return { ...inst, status: data.state };
+                  }
+                  return inst;
+                });
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao processar mensagem do WebSocket:', error);
+        }
+      };
+      
+      socket.onerror = (error) => {
+        console.error('Erro no WebSocket:', error);
+      };
+      
+      socket.onclose = (event) => {
+        console.log('Conexão WebSocket fechada. Código:', event.code, 'Razão:', event.reason);
+        // Tentar reconectar após 5 segundos
+        setTimeout(() => {
+          if (whatsappInstances.length > 0) {
+            connectWebSocket(baseUrl, instanceName);
+          }
+        }, 5000);
+      };
+      
+      websocketRef.current = socket;
+      return socket;
+    } catch (error) {
+      console.error('Erro ao criar conexão WebSocket:', error);
+      return null;
+    }
+  };
+  
+  // Garantir que o WebSocket seja fechado ao desmontar o componente
+  useEffect(() => {
+    return () => {
+      if (websocketRef.current) {
+        console.log('Fechando conexão WebSocket ao desmontar componente');
+        websocketRef.current.close();
+      }
+    };
+  }, []);
+
   // Buscar mensagens quando as configurações estiverem prontas
   useEffect(() => {
     // Se não temos configurações ou instâncias, não buscar mensagens
@@ -445,7 +582,12 @@ export default function ChatNexo() {
     // Fazer uma busca inicial quando as configurações estiverem prontas
     fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey);
     
-    // Limpeza do efeito (se necessário no futuro)
+    // Iniciar a conexão WebSocket para a instância ativa
+    if (whatsappInstances.length > 0) {
+      connectWebSocket(evolutionApiConfig.baseUrl, whatsappInstances[0].instance_name);
+    }
+    
+    // Limpeza do efeito
     return () => {
       // Código de limpeza se necessário
     };
