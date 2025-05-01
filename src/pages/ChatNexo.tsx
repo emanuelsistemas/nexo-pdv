@@ -55,7 +55,8 @@ export default function ChatNexo() {
     companyName: '',
     id: '',
     nome: '',
-    dev: 'N'
+    dev: 'N',
+    resellerId: ''
   });
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -85,8 +86,11 @@ export default function ChatNexo() {
       companyName: session.companyName || '',
       id: session.id || '',
       nome: session.nome || session.email || '',
-      dev: session.dev || 'N'
+      dev: session.dev || 'N',
+      resellerId: session.reseller_id || ''
     });
+    
+    console.log('Informações da sessão:', session);
     
     // Inicializar conversas vazias
     initializeEmptyConversations();
@@ -201,41 +205,23 @@ export default function ChatNexo() {
 
   // Buscar configurações da Evolution API
   useEffect(() => {
-    // Somente buscar as configurações quando tivermos o ID do usuário
-    if (!userInfo.id) return;
+    // Somente buscar as configurações quando tivermos o ID da revenda
+    if (!userInfo.resellerId) {
+      console.log('Aguardando o ID da revenda ser carregado...');
+      return;
+    }
     
     const fetchEvolutionApiConfig = async () => {
       try {
         setIsLoading(true);
         
-        // Primeiro, buscar o reseller_id associado ao usuário logado
-        const { data: userData, error: userError } = await supabase
-          .from('profiles')
-          .select('reseller_id')
-          .eq('id', userInfo.id)
-          .single();
-          
-        if (userError) {
-          console.error('Erro ao buscar informações do usuário:', userError);
-          setError(`Erro ao obter informações do usuário: ${userError.message}`);
-          setIsLoading(false);
-          return;
-        }
+        console.log('Buscando configurações para a revenda ID:', userInfo.resellerId);
         
-        if (!userData || !userData.reseller_id) {
-          console.error('Usuário sem revenda associada');
-          setError('Sua conta não está associada a uma revenda. Contate o administrador.');
-          setIsLoading(false);
-          return;
-        }
-        
-        console.log('ID da revenda do usuário:', userData.reseller_id);
-        
-        // Agora buscar as configurações da revenda específica
+        // Buscar diretamente as configurações da revenda
         const { data, error: configError } = await supabase
           .from('nexochat_config')
           .select('*')
-          .eq('reseller_id', userData.reseller_id)
+          .eq('reseller_id', userInfo.resellerId)
           .single();
           
         // Configuração específica da revenda
@@ -286,7 +272,7 @@ export default function ChatNexo() {
     };
 
     fetchEvolutionApiConfig();
-  }, [userInfo.id]);
+  }, [userInfo.resellerId]);
 
   // Função para buscar conversas da Evolution API
   const fetchConversations = async (baseUrl: string, apikey: string) => {
