@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, MessageSquare, Search, ChevronLeft, ChevronRight, Send, Store, Users, LogOut, BarChart2, Settings as SettingsIcon, MessageCircle } from 'lucide-react';
+import { Database, MessageSquare, Search, ChevronLeft, ChevronRight, Send, Store, Users, LogOut, BarChart2, Settings as SettingsIcon, MessageCircle, Plus, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
@@ -138,11 +138,26 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const [showCompanyForm, setShowCompanyForm] = useState(false);
   // Estado para controlar o tipo de documento (CNPJ ou CPF)
   const [documentType, setDocumentType] = useState<'cnpj' | 'cpf'>('cnpj');
+  // Estado para controlar qual aba do formulário está ativa
+  const [activeFormTab, setActiveFormTab] = useState<'general' | 'system' | 'contacts'>('general');
   // Estado para os campos do formulário
   const [companyForm, setCompanyForm] = useState({
+    // Dados Gerais
     document: '',
     companyName: '',
     tradeName: '',
+    
+    // Inf. Sistema
+    username: '',
+    password: '',
+    apiKey: '',
+    accessLevel: 'user',
+    isActive: true,
+    
+    // Contatos
+    phone: '',
+    email: '',
+    address: '',
     responsibles: [{ name: '', id: Date.now().toString() }] // Array de responsáveis com id único
   });
   const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
@@ -2513,168 +2528,310 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                   </div>
                   
                   {/* Corpo do formulário com scrolling */}
-                  <div className="p-4 overflow-y-auto h-[calc(100%-64px)]">
-                    <form>
-                      {/* Tipo de documento (CNPJ ou CPF) */}
-                      <div className="mb-4">
-                        <label className="block text-gray-300 mb-2">Tipo de documento</label>
-                        <div className="flex space-x-4">
-                          <label className="inline-flex items-center">
-                            <input
-                              type="radio"
-                              name="documentType"
-                              checked={documentType === 'cnpj'}
-                              onChange={() => setDocumentType('cnpj')}
-                              className="form-radio h-4 w-4 text-emerald-600"
-                            />
-                            <span className="ml-2 text-white">CNPJ</span>
-                          </label>
-                          <label className="inline-flex items-center">
-                            <input
-                              type="radio"
-                              name="documentType"
-                              checked={documentType === 'cpf'}
-                              onChange={() => setDocumentType('cpf')}
-                              className="form-radio h-4 w-4 text-emerald-600"
-                            />
-                            <span className="ml-2 text-white">CPF</span>
-                          </label>
-                        </div>
-                      </div>
-                      
-                      {/* Campo CNPJ/CPF com máscara */}
-                      <div className="mb-4">
-                        <label className="block text-gray-300 mb-2">
-                          {documentType === 'cnpj' ? 'CNPJ' : 'CPF'}
-                        </label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={companyForm.document}
-                            onChange={(e) => {
-                              let value = e.target.value.replace(/\D/g, '');
-                              if (documentType === 'cnpj') {
-                                // Máscara para CNPJ: 00.000.000/0000-00
-                                if (value.length > 14) value = value.substring(0, 14);
-                                if (value.length > 12) {
-                                  value = value.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2}).*/, '$1.$2.$3/$4-$5');
-                                } else if (value.length > 8) {
-                                  value = value.replace(/^(\d{2})(\d{3})(\d{3})(\d*)/, '$1.$2.$3/$4');
-                                } else if (value.length > 5) {
-                                  value = value.replace(/^(\d{2})(\d{3})(\d*)/, '$1.$2.$3');
-                                } else if (value.length > 2) {
-                                  value = value.replace(/^(\d{2})(\d*)/, '$1.$2');
-                                }
-                              } else {
-                                // Máscara para CPF: 000.000.000-00
-                                if (value.length > 11) value = value.substring(0, 11);
-                                if (value.length > 9) {
-                                  value = value.replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, '$1.$2.$3-$4');
-                                } else if (value.length > 6) {
-                                  value = value.replace(/^(\d{3})(\d{3})(\d*)/, '$1.$2.$3');
-                                } else if (value.length > 3) {
-                                  value = value.replace(/^(\d{3})(\d*)/, '$1.$2');
-                                }
-                              }
-                              setCompanyForm({...companyForm, document: value});
-                            }}
-                            placeholder={documentType === 'cnpj' ? '00.000.000/0000-00' : '000.000.000-00'}
-                            className="w-full py-2 px-4 bg-[#2A2A2A] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
+                  <div className="overflow-y-auto h-[calc(100%-64px)]">
+                    {/* Sistema de abas */}
+                    <div className="flex border-b border-gray-800">
+                      <button
+                        type="button"
+                        className={`px-4 py-2 font-medium text-sm transition-colors ${activeFormTab === 'general' 
+                          ? 'text-emerald-500 border-b-2 border-emerald-500' 
+                          : 'text-gray-400 hover:text-gray-300'}`}
+                        onClick={() => setActiveFormTab('general')}
+                      >
+                        Dados Gerais
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-4 py-2 font-medium text-sm transition-colors ${activeFormTab === 'system' 
+                          ? 'text-emerald-500 border-b-2 border-emerald-500' 
+                          : 'text-gray-400 hover:text-gray-300'}`}
+                        onClick={() => setActiveFormTab('system')}
+                      >
+                        Inf. Sistema
+                      </button>
+                      <button
+                        type="button"
+                        className={`px-4 py-2 font-medium text-sm transition-colors ${activeFormTab === 'contacts' 
+                          ? 'text-emerald-500 border-b-2 border-emerald-500' 
+                          : 'text-gray-400 hover:text-gray-300'}`}
+                        onClick={() => setActiveFormTab('contacts')}
+                      >
+                        Contatos
+                      </button>
+                    </div>
+                    
+                    <form className="p-4">
+                      {/* Aba de Dados Gerais */}
+                      {activeFormTab === 'general' && (
+                        <>
+                          {/* Tipo de documento (CNPJ ou CPF) */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Tipo de documento</label>
+                            <div className="flex space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-emerald-500 h-4 w-4"
+                                  checked={documentType === 'cnpj'}
+                                  onChange={() => setDocumentType('cnpj')}
+                                />
+                                <span className="ml-2 text-gray-300">CNPJ</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-emerald-500 h-4 w-4"
+                                  checked={documentType === 'cpf'}
+                                  onChange={() => setDocumentType('cpf')}
+                                />
+                                <span className="ml-2 text-gray-300">CPF</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          {/* CNPJ ou CPF com máscara */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">
+                              {documentType === 'cnpj' ? 'CNPJ' : 'CPF'}
+                            </label>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                                placeholder={documentType === 'cnpj' ? '00.000.000/0000-00' : '000.000.000-00'}
+                                value={companyForm.document}
+                                onChange={(e) => {
+                                  const value = e.target.value.replace(/\D/g, '');
+                                  let maskedValue = '';
+                                  
+                                  if (documentType === 'cnpj') {
+                                    // Máscara para CNPJ: 00.000.000/0000-00
+                                    if (value.length <= 2) {
+                                      maskedValue = value;
+                                    } else if (value.length <= 5) {
+                                      maskedValue = `${value.slice(0, 2)}.${value.slice(2)}`;
+                                    } else if (value.length <= 8) {
+                                      maskedValue = `${value.slice(0, 2)}.${value.slice(2, 5)}.${value.slice(5)}`;
+                                    } else if (value.length <= 12) {
+                                      maskedValue = `${value.slice(0, 2)}.${value.slice(2, 5)}.${value.slice(5, 8)}/${value.slice(8)}`;
+                                    } else {
+                                      maskedValue = `${value.slice(0, 2)}.${value.slice(2, 5)}.${value.slice(5, 8)}/${value.slice(8, 12)}-${value.slice(12, 14)}`;
+                                    }
+                                  } else {
+                                    // Máscara para CPF: 000.000.000-00
+                                    if (value.length <= 3) {
+                                      maskedValue = value;
+                                    } else if (value.length <= 6) {
+                                      maskedValue = `${value.slice(0, 3)}.${value.slice(3)}`;
+                                    } else if (value.length <= 9) {
+                                      maskedValue = `${value.slice(0, 3)}.${value.slice(3, 6)}.${value.slice(6)}`;
+                                    } else {
+                                      maskedValue = `${value.slice(0, 3)}.${value.slice(3, 6)}.${value.slice(6, 9)}-${value.slice(9, 11)}`;
+                                    }
+                                  }
+                                  
+                                  setCompanyForm(prev => ({
+                                    ...prev,
+                                    document: maskedValue
+                                  }));
+                                }}
+                              />
+                              {documentType === 'cnpj' && (
+                                <button
+                                  type="button"
+                                  className="absolute right-2 top-2 text-gray-400 hover:text-emerald-500"
+                                  onClick={() => {
+                                    // Implementar busca de dados do CNPJ
+                                    console.log('Buscar dados do CNPJ:', companyForm.document);
+                                  }}
+                                >
+                                  <Search size={18} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Razão Social (apenas para CNPJ) */}
                           {documentType === 'cnpj' && (
-                            <button
-                              type="button"
-                              className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 bg-[#1A1A1A] rounded-full text-gray-300 hover:text-white"
-                              onClick={() => {
-                                // Lógica para buscar dados do CNPJ
-                                alert(`Buscar dados do CNPJ: ${companyForm.document}`);
-                              }}
-                            >
-                              <Search size={16} />
-                            </button>
+                            <div className="mb-4">
+                              <label className="block text-gray-300 mb-2">Razão Social</label>
+                              <input
+                                type="text"
+                                className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                                placeholder="Razão Social da empresa"
+                                value={companyForm.companyName}
+                                onChange={(e) => setCompanyForm(prev => ({
+                                  ...prev,
+                                  companyName: e.target.value
+                                }))}
+                              />
+                            </div>
                           )}
-                        </div>
-                      </div>
-                      
-                      {/* Razão Social (apenas para CNPJ) */}
-                      {documentType === 'cnpj' && (
-                        <div className="mb-4">
-                          <label className="block text-gray-300 mb-2">Razão Social</label>
-                          <input
-                            type="text"
-                            value={companyForm.companyName}
-                            onChange={(e) => setCompanyForm({...companyForm, companyName: e.target.value})}
-                            className="w-full py-2 px-4 bg-[#2A2A2A] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
-                        </div>
-                      )}
-                      
-                      {/* Nome Fantasia */}
-                      <div className="mb-4">
-                        <label className="block text-gray-300 mb-2">Nome Fantasia</label>
-                        <input
-                          type="text"
-                          value={companyForm.tradeName}
-                          onChange={(e) => setCompanyForm({...companyForm, tradeName: e.target.value})}
-                          className="w-full py-2 px-4 bg-[#2A2A2A] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        />
-                      </div>
-                      
-                      {/* Nome do Responsável (com botão para adicionar mais) */}
-                      <div className="mb-4">
-                        <div className="flex justify-between items-center mb-2">
-                          <label className="text-gray-300">Nome do Responsável</label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCompanyForm({
-                                ...companyForm,
-                                responsibles: [
-                                  ...companyForm.responsibles,
-                                  { name: '', id: Date.now().toString() }
-                                ]
-                              });
-                            }}
-                            className="p-1 bg-emerald-600 hover:bg-emerald-700 rounded-full text-white font-bold"
-                          >
-                            +
-                          </button>
-                        </div>
-                        
-                        {companyForm.responsibles.map((responsible, index) => (
-                          <div key={responsible.id} className="flex items-center mb-2">
+
+                          {/* Nome Fantasia */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Nome Fantasia</label>
                             <input
                               type="text"
-                              value={responsible.name}
-                              onChange={(e) => {
-                                const newResponsibles = [...companyForm.responsibles];
-                                newResponsibles[index].name = e.target.value;
-                                setCompanyForm({...companyForm, responsibles: newResponsibles});
-                              }}
-                              className="flex-1 py-2 px-4 bg-[#2A2A2A] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                              placeholder="Nome do responsável"
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              placeholder="Nome Fantasia"
+                              value={companyForm.tradeName}
+                              onChange={(e) => setCompanyForm(prev => ({
+                                ...prev,
+                                tradeName: e.target.value
+                              }))}
                             />
-                            {companyForm.responsibles.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setCompanyForm({
-                                    ...companyForm,
-                                    responsibles: companyForm.responsibles.filter((_, i) => i !== index)
-                                  });
-                                }}
-                                className="ml-2 p-1 text-red-500 hover:text-red-400"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <circle cx="12" cy="12" r="10"></circle>
-                                  <line x1="15" y1="9" x2="9" y2="15"></line>
-                                  <line x1="9" y1="9" x2="15" y2="15"></line>
-                                </svg>
-                              </button>
-                            )}
                           </div>
-                        ))}
-                      </div>
+                        </>
+                      )}
+                      
+                      {/* Aba de Informações do Sistema */}
+                      {activeFormTab === 'system' && (
+                        <>
+                          {/* Nome de Usuário */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Nome de Usuário</label>
+                            <input
+                              type="text"
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              placeholder="Nome de usuário para acesso ao sistema"
+                              value={companyForm.username}
+                              onChange={(e) => setCompanyForm(prev => ({
+                                ...prev,
+                                username: e.target.value
+                              }))}
+                            />
+                          </div>
+
+                          {/* Senha */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Senha</label>
+                            <input
+                              type="password"
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              placeholder="Senha para acesso ao sistema"
+                              value={companyForm.password}
+                              onChange={(e) => setCompanyForm(prev => ({
+                                ...prev,
+                                password: e.target.value
+                              }))}
+                            />
+                          </div>
+
+                          {/* API Key */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">API Key</label>
+                            <input
+                              type="text"
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              placeholder="Chave de API para integrações"
+                              value={companyForm.apiKey}
+                              onChange={(e) => setCompanyForm(prev => ({
+                                ...prev,
+                                apiKey: e.target.value
+                              }))}
+                            />
+                          </div>
+
+                          {/* Nível de Acesso */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Nível de Acesso</label>
+                            <select
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              value={companyForm.accessLevel}
+                              onChange={(e) => setCompanyForm(prev => ({
+                                ...prev,
+                                accessLevel: e.target.value
+                              }))}
+                            >
+                              <option value="user">Usuário</option>
+                              <option value="admin">Administrador</option>
+                              <option value="guest">Convidado</option>
+                            </select>
+                          </div>
+
+                          {/* Status de Ativação */}
+                          <div className="mb-4">
+                            <label className="flex items-center cursor-pointer">
+                              <div className="relative">
+                                <input
+                                  type="checkbox"
+                                  className="sr-only"
+                                  checked={companyForm.isActive}
+                                  onChange={(e) => setCompanyForm(prev => ({
+                                    ...prev,
+                                    isActive: e.target.checked
+                                  }))}
+                                />
+                                <div className={`block w-10 h-6 rounded-full ${companyForm.isActive ? 'bg-emerald-500' : 'bg-gray-600'} transition-colors`}></div>
+                                <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform transform ${companyForm.isActive ? 'translate-x-4' : ''}`}></div>
+                              </div>
+                              <div className="ml-3 text-gray-300">Empresa Ativa</div>
+                            </label>
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* Aba de Contatos */}
+                      {activeFormTab === 'contacts' && (
+                        <div>
+                          {/* Telefone - Versão simplificada */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Telefone</label>
+                            <input
+                              type="text"
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              placeholder="(00) 00000-0000"
+                              value={companyForm.phone || ''}
+                              onChange={(e) => setCompanyForm(prev => ({
+                                ...prev,
+                                phone: e.target.value
+                              }))}
+                            />
+                          </div>
+                          
+                          {/* Email - Versão simplificada */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Email</label>
+                            <input
+                              type="email"
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              placeholder="email@empresa.com"
+                              value={companyForm.email || ''}
+                              onChange={(e) => setCompanyForm(prev => ({
+                                ...prev,
+                                email: e.target.value
+                              }))}
+                            />
+                          </div>
+                          
+                          {/* Responsável - Versão simplificada sem adicionar múltiplos */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Nome do Responsável</label>
+                            <input
+                              type="text"
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              placeholder="Nome do responsável principal"
+                              value={companyForm.responsibles[0]?.name || ''}
+                              onChange={(e) => {
+                                const updatedResponsibles = [...companyForm.responsibles];
+                                if (updatedResponsibles.length === 0) {
+                                  updatedResponsibles.push({ name: e.target.value, id: Date.now().toString() });
+                                } else {
+                                  updatedResponsibles[0] = {
+                                    ...updatedResponsibles[0],
+                                    name: e.target.value
+                                  };
+                                }
+                                setCompanyForm(prev => ({
+                                  ...prev,
+                                  responsibles: updatedResponsibles
+                                }));
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Botões de Ação */}
                       <div className="flex justify-end space-x-2 mt-6">
@@ -2688,27 +2845,38 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                         <button
                           type="button"
                           onClick={() => {
-                            // Aqui será implementada a lógica de salvar
-                            console.log('Dados do formulário:', companyForm);
-                            // Adicionar empresa à lista
+                            // Aqui seria a lógica para salvar a empresa no backend
+                            // Por enquanto, apenas adicionamos à lista local
+                            
                             const newCompany = {
                               id: Date.now().toString(),
                               name: companyForm.tradeName || companyForm.companyName,
-                              phone: '',
-                              email: '',
-                              createdAt: new Date()
+                              phone: companyForm.phone || '(11) 98765-4321',
+                              email: companyForm.email || 'contato@empresa.com',
                             };
                             
                             setCompanies([newCompany, ...companies]);
+                            setFilteredCompanies([newCompany, ...filteredCompanies]);
                             setShowCompanyForm(false);
                             
-                            // Resetar formulário
+                            // Resetar o formulário
                             setCompanyForm({
                               document: '',
                               companyName: '',
                               tradeName: '',
+                              username: '',
+                              password: '',
+                              apiKey: '',
+                              accessLevel: 'user',
+                              isActive: true,
+                              phone: '',
+                              email: '',
+                              address: '',
                               responsibles: [{ name: '', id: Date.now().toString() }]
                             });
+                            
+                            // Voltar para a primeira aba ao fechar o formulário
+                            setActiveFormTab('general');
                             setDocumentType('cnpj');
                             
                             alert('Empresa cadastrada com sucesso!');
