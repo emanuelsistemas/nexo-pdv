@@ -48,6 +48,31 @@ export default function ChatNexo() {
   });
   const [error, setError] = useState<string | null>(null);
   
+  // Estado para controlar a abertura do dropdown do menu
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  
+  // Referência para o container do menu dropdown
+  const menuRef = useRef<HTMLDivElement>(null);
+  
+  // Fechar o menu dropdown quando clicar fora dele
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsActionMenuOpen(false);
+      }
+    }
+    
+    // Adicionar event listener quando o menu estiver aberto
+    if (isActionMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    // Limpar event listener
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isActionMenuOpen]);
+  
   const [isLoading, setIsLoading] = useState(false);
   // Configuração da Evolution API
   const [evolutionApiConfig, setEvolutionApiConfig] = useState({
@@ -1647,13 +1672,99 @@ export default function ChatNexo() {
             {currentConversation ? (
               <>
                 {/* Cabeçalho da Conversa */}
-                <div className="p-4 border-b border-gray-800 bg-[#2A2A2A] flex items-center">
-                  <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center mr-3">
-                    <span className="text-white">{currentConversation.contactName.substring(0, 2).toUpperCase()}</span>
+                <div className="p-4 border-b border-gray-800 bg-[#2A2A2A] flex items-center justify-between">
+                  {/* Informações do contato */}
+                  <div className="flex items-center">
+                    <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center mr-3">
+                      <span className="text-white">{currentConversation.contactName.substring(0, 2).toUpperCase()}</span>
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-white">{currentConversation.contactName}</h3>
+                      <p className="text-xs text-gray-400">Online</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-medium text-white">{currentConversation.contactName}</h3>
-                    <p className="text-xs text-gray-400">Online</p>
+                  
+                  {/* Botão Aceitar e Menu de Ações */}
+                  <div className="flex items-center relative" ref={menuRef}>
+                    <button 
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-l-md transition-colors"
+                      onClick={() => {
+                        // Lógica para aceitar a conversa
+                        setConversations(prevConversations => {
+                          return prevConversations.map(conv => {
+                            if (conv.id === currentConversation.id) {
+                              return {
+                                ...conv,
+                                status: 'attending'
+                              };
+                            }
+                            return conv;
+                          });
+                        });
+                      }}
+                    >
+                      Aceitar
+                    </button>
+                    <button 
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white py-2 px-2 rounded-r-md transition-colors relative"
+                      onClick={(e) => {
+                        e.stopPropagation(); // Evitar que o clique se propague
+                        setIsActionMenuOpen(!isActionMenuOpen);
+                      }}
+                    >
+                      <ChevronRight size={16} className={`transform transition-transform ${isActionMenuOpen ? 'rotate-90' : ''}`}/>
+                    </button>
+                    
+                    {/* Menu de ações dropdown */}
+                    {isActionMenuOpen && (
+                      <div className="absolute right-0 top-full mt-1 bg-[#2A2A2A] border border-gray-700 rounded-md shadow-lg overflow-hidden z-50 w-36">
+                        <button 
+                          className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
+                          onClick={() => {
+                            // Lógica para finalizar a conversa
+                            setConversations(prevConversations => {
+                              return prevConversations.map(conv => {
+                                if (conv.id === currentConversation.id) {
+                                  return {
+                                    ...conv,
+                                    status: 'finished'
+                                  };
+                                }
+                                return conv;
+                              });
+                            });
+                            setIsActionMenuOpen(false);
+                          }}
+                        >
+                          Finalizar
+                        </button>
+                        <button 
+                          className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
+                          onClick={() => {
+                            // Lógica para transferir a conversa (implementar depois)
+                            alert('Funcionalidade de transferência a ser implementada');
+                            setIsActionMenuOpen(false);
+                          }}
+                        >
+                          Transferir
+                        </button>
+                        <button 
+                          className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-red-400 text-sm transition-colors"
+                          onClick={() => {
+                            // Lógica para deletar a conversa
+                            if (window.confirm('Tem certeza que deseja deletar esta conversa?')) {
+                              setConversations(prevConversations => 
+                                prevConversations.filter(conv => conv.id !== currentConversation.id)
+                              );
+                              setSelectedConversation(null);
+                            }
+                            setIsActionMenuOpen(false);
+                          }}
+                        >
+                          Deletar
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
