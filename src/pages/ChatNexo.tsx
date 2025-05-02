@@ -74,6 +74,8 @@ export default function ChatNexo() {
   }, [isActionMenuOpen]);
   
   const [isLoading, setIsLoading] = useState(false);
+  // Flag para saber se os status já foram carregados do banco de dados
+  const [statusLoaded, setStatusLoaded] = useState(false);
   // Configuração da Evolution API
   const [evolutionApiConfig, setEvolutionApiConfig] = useState({
     baseUrl: 'https://apiwhatsapp.nexopdv.com',
@@ -143,12 +145,226 @@ export default function ChatNexo() {
     
     // Inicializar conversas vazias
     initializeEmptyConversations();
+    
+    // Carregar status salvos quando o componente montar
+    loadConversationStatuses();
+    
+    // Garantir que os status sejam respeitados após carregar as conversas também
+    return () => {
+      setStatusLoaded(false); // Reset para garantir carregamento na próxima montagem
+    };
   }, [navigate]);
   
   // Função para inicializar o estado de conversas vazio
   const initializeEmptyConversations = () => {
     // As conversas reais serão carregadas posteriormente
     setConversations([]);
+  };
+  
+  // Função para salvar o status e contador de não lidas da conversa no localStorage
+  const saveStatusToLocalStorage = (conversationId: string, status: ConversationStatus, unreadCount?: number) => {
+    try {
+      // Obter dados atuais
+      const savedStatuses = localStorage.getItem('nexochat_statuses');
+      let statusMap = savedStatuses ? JSON.parse(savedStatuses) : {};
+      
+      // Adicionar/atualizar status da conversa
+      const statusInfo: any = {
+        status,
+        updatedAt: new Date().toISOString(),
+        resellerId: userInfo.resellerId,
+        profileAdminId: userInfo.id
+      };
+      
+      // Adicionar contador de não lidas se fornecido
+      if (unreadCount !== undefined) {
+        statusInfo.unreadCount = unreadCount;
+      } else if (statusMap[conversationId]?.unreadCount !== undefined) {
+        // Manter o valor anterior se existir e não for fornecido um novo
+        statusInfo.unreadCount = statusMap[conversationId].unreadCount;
+      }
+      
+      // Atualizar no mapa
+      statusMap[conversationId] = statusInfo;
+      
+      // Salvar atualização
+      localStorage.setItem('nexochat_statuses', JSON.stringify(statusMap));
+      console.log(`Status da conversa ${conversationId} salvo no localStorage: ${status} (Não lidas: ${unreadCount !== undefined ? unreadCount : 'não alterado'})`);
+    } catch (error) {
+      console.error('Erro ao salvar status no localStorage:', error);
+    }
+  };
+  
+  // Função para salvar o status e contador de não lidas da conversa no banco de dados
+  const saveStatusToDatabase = async (conversationId: string, status: ConversationStatus, unreadCount?: number) => {
+    try {
+      // Verificar se tem informações do usuário
+      if (!userInfo.id || !userInfo.resellerId) {
+        console.error('Informações do usuário não disponíveis');
+        return;
+      }
+      
+      // Dados para inserção/atualização
+      const statusData: any = {
+        conversation_id: conversationId,
+        status,
+        reseller_id: userInfo.resellerId,
+        profile_admin_id: userInfo.id,
+        profile_admin_user_id: userInfo.email,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Adicionar contador de não lidas se fornecido
+      if (unreadCount !== undefined) {
+        statusData.unread_count = unreadCount;
+      }
+      
+      // Usar upsert para inserir ou atualizar o registro
+      const { error } = await supabase
+        .from('nexochat_status')
+        .upsert(statusData, { 
+          onConflict: 'conversation_id,profile_admin_id'
+        });
+      
+      if (error) {
+        throw error;
+      }
+      
+      console.log(`Status da conversa ${conversationId} salvo no banco de dados: ${status} (Não lidas: ${unreadCount !== undefined ? unreadCount : 'não alterado'})`);
+    } catch (error) {
+      console.error('Erro ao salvar status no banco de dados:', error);
+      // Se falhar, salvar no localStorage como backup
+      saveStatusToLocalStorage(conversationId, status, unreadCount);
+    }
+  };
+  
+  // Função para carregar os status das conversas
+  const loadConversationStatuses = async () => {
+    try {
+      // Evitar carregar múltiplas vezes
+      if (statusLoaded) return;
+      
+      // Verificar se tem informações do usuário
+      if (!userInfo.id || !userInfo.resellerId) {
+        console.error('Informações do usuário não disponíveis para carregar status');
+        return;
+      }
+      
+      console.log('Carregando status das conversas...');
+      
+      // Tentar carregar do banco de dados
+      const { data, error } = await supabase
+        .from('nexochat_status')
+        .select('conversation_id, status, unread_count')
+        .eq('profile_admin_id', userInfo.id)
+        .eq('reseller_id', userInfo.resellerId);
+      
+      if (error) {
+        throw error;
+      }
+      
+      // Mapear para armazenar os status e contagens mais recentes primeiro do DB, depois do localStorage
+      const statusMap: Record<string, {status: ConversationStatus, unreadCount?: number}> = {};
+      
+      // Se tiver dados no banco de dados
+      if (data && data.length > 0) {
+        console.log(`Carregados ${data.length} status de conversas do banco de dados`);
+        
+        data.forEach(item => {
+          statusMap[item.conversation_id] = {
+            status: item.status as ConversationStatus,
+            unreadCount: item.unread_count
+          };
+        });
+        console.log('Status e contagens carregados do DB:', statusMap);
+      }
+      
+      // Tentar também carregar do localStorage (prioridade menor que o banco)
+      try {
+        const savedStatuses = localStorage.getItem('nexochat_statuses');
+        if (savedStatuses) {
+          const localStatusMap = JSON.parse(savedStatuses);
+          
+          // Verificar se há status salvos
+          const savedConversations = Object.keys(localStatusMap);
+          if (savedConversations.length > 0) {
+            console.log(`Carregados ${savedConversations.length} status de conversas do localStorage`);
+            
+            // Adicionar ao mapa apenas se não existir no banco de dados
+            savedConversations.forEach(convId => {
+              if (!statusMap[convId]) {
+                const statusInfo = localStatusMap[convId];
+                if (statusInfo && statusInfo.resellerId === userInfo.resellerId) {
+                  statusMap[convId] = {
+                    status: statusInfo.status as ConversationStatus,
+                    unreadCount: statusInfo.unreadCount // Incluir a contagem de não lidas
+                  };
+                }
+              }
+            });
+          }
+        }
+      } catch (localStorageError) {
+        console.error('Erro ao carregar status do localStorage:', localStorageError);
+      }
+      
+      // Aplicar os status e contagens para as conversas
+      if (Object.keys(statusMap).length > 0) {
+        console.log('Aplicando status e contagens às conversas:', statusMap);
+        
+        setConversations(prevConversations => {
+          return prevConversations.map(conv => {
+            if (statusMap[conv.id]) {
+              const conversationData = statusMap[conv.id];
+              return {
+                ...conv,
+                status: conversationData.status,
+                unreadCount: conversationData.unreadCount !== undefined ? conversationData.unreadCount : conv.unreadCount || 0
+              };
+            }
+            return conv;
+          });
+        });
+      }
+      
+      // Marcar como carregado
+      setStatusLoaded(true);
+    } catch (error) {
+      console.error('Erro ao carregar status das conversas:', error);
+    }
+  };
+  
+  // Função para atualizar o status de uma conversa
+  const updateConversationStatus = (conversationId: string, newStatus: ConversationStatus) => {
+    // Obter contagem de mensagens não lidas atual
+    const conversation = conversations.find(c => c.id === conversationId);
+    const currentUnreadCount = conversation?.unreadCount || 0;
+    
+    // Se mudar para 'pending' ou 'attending', a contagem não muda
+    // Se mudar para 'finished', zeramos a contagem
+    const updatedUnreadCount = newStatus === 'finished' ? 0 : currentUnreadCount;
+    
+    // Atualizar estado local
+    setConversations(prevConversations => {
+      return prevConversations.map(conv => {
+        if (conv.id === conversationId) {
+          return {
+            ...conv,
+            status: newStatus,
+            unreadCount: updatedUnreadCount // Atualizar contagem se necessário
+          };
+        }
+        return conv;
+      });
+    });
+    
+    // Salvar no banco de dados
+    saveStatusToDatabase(conversationId, newStatus, updatedUnreadCount);
+    
+    // Salvar no localStorage como backup
+    saveStatusToLocalStorage(conversationId, newStatus, updatedUnreadCount);
+    
+    console.log(`Status da conversa ${conversationId} atualizado para: ${newStatus} (Não lidas: ${updatedUnreadCount})`);
   };
   
   // Rolar para o final da conversa quando receber novas mensagens
@@ -160,6 +376,10 @@ export default function ChatNexo() {
   
   // Função para filtrar as conversas com base nos filtros aplicados
   const filteredConversations = useMemo(() => {
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime();
+    
     return conversations.filter(conv => {
       // Filtro por status (aba selecionada)
       const statusMatch = conv.status === activeTab;
@@ -170,7 +390,19 @@ export default function ChatNexo() {
       // Filtro por pesquisa
       const searchMatch = conv.contactName.toLowerCase().includes(searchQuery.toLowerCase());
       
-      return statusMatch && sectorMatch && searchMatch;
+      // Para conversas finalizadas, verificar se são do dia atual
+      let dateMatch = true;
+      if (activeTab === 'finished') {
+        // Converter timestamp para objeto Date, lidar com string ou Date
+        const convTimestamp = typeof conv.timestamp === 'string' 
+          ? new Date(conv.timestamp).getTime() 
+          : conv.timestamp.getTime();
+          
+        // Verificar se a data está dentro do dia atual
+        dateMatch = convTimestamp >= startOfDay && convTimestamp <= endOfDay;
+      }
+      
+      return statusMatch && sectorMatch && searchMatch && dateMatch;
     });
   }, [conversations, activeTab, selectedSector, searchQuery]);
   
@@ -707,6 +939,10 @@ export default function ChatNexo() {
               matchFound = true;
               const newCount = (conv.unreadCount || 0) + 1;
               console.log(`✅ Contador atualizado: ${conv.contactName} - ${newCount} mensagens não lidas`);
+              
+              // Atualizar contador no banco de dados
+              saveStatusToDatabase(conv.id, conv.status, newCount);
+              
               return {
                 ...conv,
                 unreadCount: newCount
@@ -1134,6 +1370,14 @@ export default function ChatNexo() {
     }
   };
   
+  // Efeito para garantir carregamento de status quando mudar as conversas
+  useEffect(() => {
+    if (conversations.length > 0 && !statusLoaded) {
+      console.log('Carregando status após atualização das conversas');
+      loadConversationStatuses();
+    }
+  }, [conversations, statusLoaded]);
+  
   // Função para processar a resposta da API e converter para o formato do componente
   const processConversationsResponse = (response: any) => {
     console.log('Iniciando processConversationsResponse com:', response); // Log da entrada da função
@@ -1539,6 +1783,33 @@ export default function ChatNexo() {
                   onClick={() => setActiveTab('finished')}
                 >
                   Finalizados
+                  {/* Contador para conversas finalizadas do dia atual */}
+                  {(() => {
+                    // Filtrar conversas finalizadas do dia atual
+                    const today = new Date();
+                    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+                    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime();
+                    
+                    const finishedTodayCount = conversations.filter(conv => {
+                      // Verificar se é uma conversa finalizada
+                      if (conv.status !== 'finished') return false;
+                      
+                      // Converter timestamp para número
+                      const convTimestamp = typeof conv.timestamp === 'string' 
+                        ? new Date(conv.timestamp).getTime() 
+                        : conv.timestamp.getTime();
+                      
+                      // Verificar se é do dia atual
+                      return convTimestamp >= startOfDay && convTimestamp <= endOfDay;
+                    }).length;
+                    
+                    // Mostrar contador apenas se houver conversas finalizadas hoje
+                    return finishedTodayCount > 0 && (
+                      <span className="bg-gray-600 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                        {finishedTodayCount}
+                      </span>
+                    );
+                  })()} 
                 </button>
               </div>
               
@@ -1603,6 +1874,9 @@ export default function ChatNexo() {
                           return c;
                         });
                       });
+                      
+                      // Atualizar o contador no banco de dados também
+                      saveStatusToDatabase(conv.id, conv.status, 0);
                       
                       // Define a conversa selecionada
                       setSelectedConversation(conv.id);
@@ -1684,29 +1958,36 @@ export default function ChatNexo() {
                     </div>
                   </div>
                   
-                  {/* Botão Aceitar e Menu de Ações */}
+                  {/* Botão/Menu de Ações contextual baseado no status da conversa */}
                   <div className="flex items-center relative" ref={menuRef}>
+                    {/* Botão Aceitar apenas quando a conversa estiver pendente */}
+                    {currentConversation.status === 'pending' && (
+                      <button 
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-l-md transition-colors"
+                        onClick={() => {
+                          if (currentConversation) {
+                            // Atualizar status para atendendo
+                            updateConversationStatus(currentConversation.id, 'attending');
+                            
+                            // Mudar para a aba de Atendendo automaticamente
+                            setActiveTab('attending');
+                            // Forçar carregamento do status do banco novamente no próximo ciclo
+                            setStatusLoaded(false);
+                            
+                            // Fechar o menu dropdown caso esteja aberto
+                            setIsActionMenuOpen(false);
+                          }
+                        }}
+                      >
+                        Aceitar
+                      </button>
+                    )}
+                    
+                    {/* Botão do menu - classe adaptada se não houver botão Aceitar */}
                     <button 
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-l-md transition-colors"
-                      onClick={() => {
-                        // Lógica para aceitar a conversa
-                        setConversations(prevConversations => {
-                          return prevConversations.map(conv => {
-                            if (conv.id === currentConversation.id) {
-                              return {
-                                ...conv,
-                                status: 'attending'
-                              };
-                            }
-                            return conv;
-                          });
-                        });
-                      }}
-                    >
-                      Aceitar
-                    </button>
-                    <button 
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white py-2 px-2 rounded-r-md transition-colors relative"
+                      className={`bg-emerald-700 hover:bg-emerald-800 text-white py-2 px-2 
+                        ${currentConversation.status === 'pending' ? 'rounded-r-md' : 'rounded-md'} 
+                        transition-colors relative`}
                       onClick={(e) => {
                         e.stopPropagation(); // Evitar que o clique se propague
                         setIsActionMenuOpen(!isActionMenuOpen);
@@ -1715,29 +1996,101 @@ export default function ChatNexo() {
                       <ChevronRight size={16} className={`transform transition-transform ${isActionMenuOpen ? 'rotate-90' : ''}`}/>
                     </button>
                     
-                    {/* Menu de ações dropdown */}
+                    {/* Menu de ações dropdown - opções diferentes dependendo do status */}
                     {isActionMenuOpen && (
                       <div className="absolute right-0 top-full mt-1 bg-[#2A2A2A] border border-gray-700 rounded-md shadow-lg overflow-hidden z-50 w-36">
-                        <button 
-                          className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
-                          onClick={() => {
-                            // Lógica para finalizar a conversa
-                            setConversations(prevConversations => {
-                              return prevConversations.map(conv => {
-                                if (conv.id === currentConversation.id) {
-                                  return {
-                                    ...conv,
-                                    status: 'finished'
-                                  };
+                        {/* Opções para conversa em andamento */}
+                        {currentConversation.status === 'attending' && (
+                          <>
+                            <button 
+                              className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
+                              onClick={() => {
+                                if (currentConversation) {
+                                  // Voltar para Pendente
+                                  updateConversationStatus(currentConversation.id, 'pending');
+                                  setActiveTab('pending');
+                // Forçar carregamento do status do banco novamente no próximo ciclo
+                setStatusLoaded(false);
+                                  setIsActionMenuOpen(false);
                                 }
-                                return conv;
-                              });
-                            });
-                            setIsActionMenuOpen(false);
-                          }}
-                        >
-                          Finalizar
-                        </button>
+                              }}
+                            >
+                              Voltar para Pendente
+                            </button>
+                            <button 
+                              className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
+                              onClick={() => {
+                                if (currentConversation) {
+                                  // Finalizar conversa
+                                  updateConversationStatus(currentConversation.id, 'finished');
+                                  setActiveTab('finished');
+                                  // Forçar carregamento do status do banco novamente no próximo ciclo
+                                  setStatusLoaded(false);
+                                  setIsActionMenuOpen(false);
+                                }
+                              }}
+                            >
+                              Finalizar
+                            </button>
+                          </>
+                        )}
+                        
+                        {/* Opções para conversa pendente */}
+                        {currentConversation.status === 'pending' && (
+                          <button 
+                            className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
+                            onClick={() => {
+                              if (currentConversation) {
+                                // Finalizar direto
+                                updateConversationStatus(currentConversation.id, 'finished');
+                                setActiveTab('finished');
+                                // Forçar carregamento do status do banco novamente no próximo ciclo
+                                setStatusLoaded(false);
+                                setIsActionMenuOpen(false);
+                              }
+                            }}
+                          >
+                            Finalizar Direto
+                          </button>
+                        )}
+                        
+                        {/* Opções para conversa finalizada */}
+                        {currentConversation.status === 'finished' && (
+                          <>
+                            <button 
+                              className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
+                              onClick={() => {
+                                if (currentConversation) {
+                                  // Voltar para Pendente
+                                  updateConversationStatus(currentConversation.id, 'pending');
+                                  setActiveTab('pending');
+                // Forçar carregamento do status do banco novamente no próximo ciclo
+                setStatusLoaded(false);
+                                  setIsActionMenuOpen(false);
+                                }
+                              }}
+                            >
+                              Reabrir como Pendente
+                            </button>
+                            <button 
+                              className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
+                              onClick={() => {
+                                if (currentConversation) {
+                                  // Voltar para Atendendo
+                                  updateConversationStatus(currentConversation.id, 'attending');
+                                  setActiveTab('attending');
+                                  // Forçar carregamento do status do banco novamente no próximo ciclo
+                                  setStatusLoaded(false);
+                                  setIsActionMenuOpen(false);
+                                }
+                              }}
+                            >
+                              Reabrir em Atendimento
+                            </button>
+                          </>
+                        )}
+                        
+                        {/* Opção de transferir comum a todos os status */}
                         <button 
                           className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
                           onClick={() => {
@@ -1748,6 +2101,8 @@ export default function ChatNexo() {
                         >
                           Transferir
                         </button>
+                        
+                        {/* Opção de deletar comum a todos os status */}
                         <button 
                           className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-red-400 text-sm transition-colors"
                           onClick={() => {
