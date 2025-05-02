@@ -565,73 +565,56 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
             'apikey': evolutionApiConfig.apikey
           };
 
-          // Se já sabemos qual formato funciona, usar apenas ele
-          if (workingUrlFormat !== null) {
-            // Usar o formato armazenado sem tentar outros
-            let url, payload;
-            
-            switch (workingUrlFormat) {
-              case 2: // segundo formato - já sabemos que o formato 2 funciona
-                url = `${evolutionApiConfig.baseUrl}/message/sendText/${instanceName}`;
-                payload = { number: recipient, text: inputMessage.trim() };
-                break;
-              case 3: // terceiro formato
-                url = `${evolutionApiConfig.baseUrl}/api/sendMessage/${instanceName}`;
-                payload = { phone: recipient, message: inputMessage.trim(), isGroup: false };
-                break;
-              default: // Alterar o default para o formato 2 que sabemos que funciona
-                url = `${evolutionApiConfig.baseUrl}/message/sendText/${instanceName}`;
-                payload = { number: recipient, text: inputMessage.trim() };
-            }
-            
-            try {
-              await axios.post(url, payload, { headers });
-              console.log('Mensagem enviada com sucesso!');
-              return;
-            } catch (err) {
-              // Se falhar, resetamos para tentar o formato 2 diretamente
-              setWorkingUrlFormat(2);
-              localStorage.removeItem('evolution_api_format');
-            }
+          // Só adiciona apikey se ela não estiver vazia
+          if (evolutionApiConfig.apikey && evolutionApiConfig.apikey.trim() !== '') {
+            headers['apikey'] = evolutionApiConfig.apikey;
           }
           
-          // Vamos pular direto para o formato 2 que sabemos que funciona
+          console.log('Enviando requisição para verificar status com headers:', headers);
+          
+          // Tentar verificar o status da instância
           try {
-            const response = await axios.post(
-              `${evolutionApiConfig.baseUrl}/message/sendText/${instanceName}`,
-              { number: recipient, text: inputMessage.trim() },
-              { headers }
-            );
-            setWorkingUrlFormat(2);
-            localStorage.setItem('evolution_api_format', '2'); // Persistir formato que funciona
-            console.log('Mensagem enviada com sucesso! (Formato 2)');
-            return;
-          } catch (err2) {
-            // Se falhar, tentamos o próximo formato
-            console.log('Tentando próximo formato...');
+            // Verificar status da instância específica
+            const statusResponse = await axios.get(`${evolutionApiConfig.baseUrl}/instance/connectionState/${instanceName}`, {
+              headers: headers
+            });
+            
+            console.log(`Status da instância ${instanceName}:`, statusResponse.data);
+            
+            // Independente da resposta, vamos considerar a instância válida
+            setWhatsappInstances(prev => {
+              return prev.map(inst => {
+                if (inst.instance_name === instanceName) {
+                  return { ...inst, status: statusResponse.data?.state || 'active' };
+                }
+                return inst;
+              });
+            });
+            
+            console.log(`Instância ${instanceName} configurada com sucesso`);
+            setError(null);
+            return true;
+          } catch (err) {
+            console.error(`Erro ao verificar status da instância ${instanceName}:`, err);
+            
+            // Mesmo com erro, vamos tentar usar a instância configurada
+            setWhatsappInstances([{
+              id: instanceName,
+              instance_name: instanceName,
+              name: `WhatsApp ${instanceName}`,
+              phone: instanceName,
+              status: 'unknown'
+            }]);
+            
+            console.log(`Configurando instância ${instanceName} mesmo sem confirmação de status`);
+            return true;
           }
-          
-
-          
-          try {
-            // Tentativa 3
-            const response = await axios.post(
-              `${evolutionApiConfig.baseUrl}/api/sendMessage/${instanceName}`,
-              { phone: recipient, message: inputMessage.trim(), isGroup: false },
-              { headers }
-            );
-            setWorkingUrlFormat(3);
-            localStorage.setItem('evolution_api_format', '3'); // Persistir formato que funciona
-            console.log('Mensagem enviada com sucesso! (Formato 3)');
-            return;
-          } catch (err3) {
-            // Não logar erro para não poluir o console
-          }
-          
-          // Se chegou aqui, todas as tentativas falharam
-          throw new Error('Todas as tentativas de envio falharam');
-        } catch (apiError) {
-          throw apiError; // Repassa o erro para ser capturado no catch externo
+        } catch (err) {
+          console.error('Erro ao verificar status da instância:', err);
+          setError(`Falha ao verificar status da instância: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+          return false;
+        } finally {
+          setIsLoading(false);
         }
       }
     } catch (err: any) {
@@ -832,13 +815,14 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         console.log(`Status da instância ${instanceName}:`, statusResponse.data);
         
         // Independente da resposta, vamos considerar a instância válida
-        setWhatsappInstances([{
-          id: instanceName,
-          instance_name: instanceName,
-          name: `WhatsApp ${instanceName}`,
-          phone: instanceName,
-          status: statusResponse.data?.state || 'active'
-        }]);
+        setWhatsappInstances(prev => {
+          return prev.map(inst => {
+            if (inst.instance_name === instanceName) {
+              return { ...inst, status: statusResponse.data?.state || 'active' };
+            }
+            return inst;
+          });
+        });
         
         console.log(`Instância ${instanceName} configurada com sucesso`);
         setError(null);
@@ -2030,37 +2014,14 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                       
                       // Ao selecionar a conversa, zera a contagem de não lidas
                       setConversations(prevConversations => {
-                        // Log dos IDs existentes para debug
-                        console.log('IDs das conversas existentes:', 
-                          prevConversations.map(c => `${c.id} (${c.contactName}) - normalizado: ${normalizeContactId(c.id)}`))
-                          
-                        // Primeiro tentar pela ID exata
-                        let matchFound = false;
-                        const updatedConversations = prevConversations.map(conv => {
-                          // Verificar pelo ID exato ou pelo ID normalizado
-                          const convNormalizedId = normalizeContactId(conv.id);
-                          
-                          if (conv.id === conv.id || convNormalizedId === conv.id) {
-                            matchFound = true;
-                            const newCount = (conv.unreadCount || 0) + 1;
-                            console.log(`✅ Contador atualizado: ${conv.contactName} - ${newCount} mensagens não lidas`);
-                            
+                        return prevConversations.map(c => {
+                          if (c.id === conv.id) {
                             // Atualizar contador no banco de dados
                             saveStatusToDatabase(conv.id, conv.status, 0);
-                            
-                            return {
-                              ...conv,
-                              unreadCount: 0
-                            };
+                            return { ...c, unreadCount: 0 };
                           }
-                          return conv;
+                          return c;
                         });
-                        
-                        if (!matchFound) {
-                          console.warn(`⚠️ AVISO: Nenhuma conversa encontrada com ID ${conv.id} ou normalizado ${conv.id}`);
-                        }
-                        
-                        return updatedConversations;
                       });
                       
                       // Define a conversa selecionada
