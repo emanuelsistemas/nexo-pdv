@@ -131,8 +131,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const [inputMessage, setInputMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
-  // Estado para controlar qual subaba está ativa na aba Contatos
-  const [activeContactsSubtab, setActiveContactsSubtab] = useState<'contacts' | 'companies'>('contacts');
+  // Removido estado de subaba pois agora a aba Contatos já mostra diretamente a grid de empresas
   // Estado para armazenar a lista de empresas
   const [companies, setCompanies] = useState<Array<{
     id: string;
@@ -2202,32 +2201,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
               )}
             </div>
             
-            {/* Subabas de Contatos/Empresas (apenas na aba Contatos) */}
-            {activeTab === 'contacts' && (
-              <div className="p-3 pb-0">
-                {/* Subabes de Contatos/Empresas */}
-                <div className="flex space-x-1 mb-3">
-                  <button
-                    className={`flex-1 py-2 px-3 rounded-t-lg font-medium transition-colors ${activeContactsSubtab === 'contacts' 
-                      ? 'bg-emerald-600 text-white' 
-                      : 'bg-[#2A2A2A] text-gray-300 hover:bg-[#3A3A3A]'}`}
-                    onClick={() => setActiveContactsSubtab('contacts')}
-                  >
-                    Contatos
-                  </button>
-                  <button
-                    className={`flex-1 py-2 px-3 rounded-t-lg font-medium transition-colors ${activeContactsSubtab === 'companies' 
-                      ? 'bg-emerald-600 text-white' 
-                      : 'bg-[#2A2A2A] text-gray-300 hover:bg-[#3A3A3A]'}`}
-                    onClick={() => setActiveContactsSubtab('companies')}
-                  >
-                    Empresas
-                  </button>
-                </div>
-                
-                {/* Removido botão de cadastrar empresa daqui - vai aparecer na grid */}
-              </div>
-            )}
+            {/* Removido as subabas - Agora a aba Contatos já mostra diretamente a grid de empresas */}
             
             {/* Campo de Pesquisa */}
             <div className="p-3 border-b border-gray-800" data-component-name="ChatNexo">
@@ -2235,9 +2209,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                 <input
                   type="text"
-                  placeholder={activeTab === 'contacts' 
-                    ? (activeContactsSubtab === 'contacts' ? "Pesquisar contatos..." : "Pesquisar empresas...") 
-                    : "Pesquisar conversas..."}
+                  placeholder={activeTab === 'contacts' ? "Pesquisar empresas..." : "Pesquisar conversas..."}
                   className="w-full pl-10 pr-4 py-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -2412,8 +2384,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
               </div>
             )}
 
-            {/* Exibir a grid de empresas quando estiver na aba Contatos e subaba Empresas */}
-            {activeTab === 'contacts' && activeContactsSubtab === 'companies' ? (
+            {/* Exibir a grid de empresas quando estiver na aba Contatos */}
+            {activeTab === 'contacts' ? (
               <div className="flex flex-col h-full bg-[#1A1A1A]">
                 {/* Cabeçalho da grid de empresas */}
                 <div className="p-4 border-b border-gray-800 bg-[#2A2A2A] flex justify-between items-center">
