@@ -35,6 +35,31 @@ type Conversation = {
 }
 
 // Componente wrapper para garantir que o overlay de carregamento apareça imediatamente
+// Estilos para barra de rolagem personalizada
+const scrollbarStyles = `
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 5px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  }
+`;
+
 export default function ChatNexoWrapper() {
   // Este estado controla se o componente principal deve ser renderizado
   const [ready, setReady] = useState(false);
@@ -72,6 +97,8 @@ export default function ChatNexoWrapper() {
   return (
     // Garante que o wrapper e o conteúdo ocupem toda a altura e define um fundo
     <div className="relative h-screen flex flex-col bg-gray-100">
+      {/* Estilos CSS injetados para scrollbar personalizada */}
+      <style>{scrollbarStyles}</style>
       {/* Overlay de carregamento visível baseado no estado showOverlay */}
       {showOverlay && (
         <div className="absolute inset-0 bg-black flex items-center justify-center z-50">
@@ -1998,7 +2025,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
             )}
             
             {/* Lista de Conversas */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
               {filteredConversations.length === 0 ? (
                 <div className="p-4 text-center text-gray-400">
                   <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
@@ -2263,7 +2290,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 </div>
                 
                 {/* Mensagens */}
-                <div className="flex-1 overflow-y-auto p-4 bg-[#1A1A1A]">
+                <div className="flex-1 overflow-y-auto p-4 bg-[#1A1A1A] custom-scrollbar">
                   {currentConversation.messages.map(msg => (
                     <div 
                       key={msg.id} 
