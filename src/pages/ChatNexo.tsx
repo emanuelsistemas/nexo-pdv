@@ -134,6 +134,17 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const [companyFilterType, setCompanyFilterType] = useState<'name' | 'phone'>('name');
   // Estado para o texto de pesquisa de empresas
   const [companySearchQuery, setCompanySearchQuery] = useState('');
+  // Estado para controlar o formulário de cadastro de empresas
+  const [showCompanyForm, setShowCompanyForm] = useState(false);
+  // Estado para controlar o tipo de documento (CNPJ ou CPF)
+  const [documentType, setDocumentType] = useState<'cnpj' | 'cpf'>('cnpj');
+  // Estado para os campos do formulário
+  const [companyForm, setCompanyForm] = useState({
+    document: '',
+    companyName: '',
+    tradeName: '',
+    responsibles: [{ name: '', id: Date.now().toString() }] // Array de responsáveis com id único
+  });
   const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
   // Removido estado de subaba pois agora a aba Contatos já mostra diretamente a grid de empresas
   // Estado para armazenar a lista de empresas
@@ -2412,10 +2423,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                     <h2 className="text-xl font-semibold text-white">Gerenciamento de Empresas</h2>
                     <button 
                       className="py-2 px-4 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white font-medium flex items-center justify-center gap-2"
-                      onClick={() => {
-                        // Aqui você implementaria a lógica para abrir o modal de cadastro de empresa
-                        alert('Funcionalidade de cadastro de empresa a ser implementada');
-                      }}
+                      onClick={() => setShowCompanyForm(true)}
                     >
                       <Users size={16} />
                       Cadastrar Empresa
@@ -2486,6 +2494,232 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                       </div>
                     ))
                   )}
+                </div>
+                
+                {/* Formulário deslizante para cadastro de empresas */}
+                <div className={`fixed top-0 right-0 h-full w-96 bg-[#1A1A1A] border-l border-gray-800 shadow-lg transform transition-transform duration-300 ease-in-out z-50 ${showCompanyForm ? 'translate-x-0' : 'translate-x-full'}`}>
+                  {/* Cabeçalho do formulário */}
+                  <div className="p-4 border-b border-gray-800 bg-[#2A2A2A] flex justify-between items-center">
+                    <h2 className="text-xl font-semibold text-white">Cadastrar Empresa</h2>
+                    <button
+                      onClick={() => setShowCompanyForm(false)}
+                      className="text-gray-400 hover:text-white transition-colors focus:outline-none"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                  
+                  {/* Corpo do formulário com scrolling */}
+                  <div className="p-4 overflow-y-auto h-[calc(100%-64px)]">
+                    <form>
+                      {/* Tipo de documento (CNPJ ou CPF) */}
+                      <div className="mb-4">
+                        <label className="block text-gray-300 mb-2">Tipo de documento</label>
+                        <div className="flex space-x-4">
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name="documentType"
+                              checked={documentType === 'cnpj'}
+                              onChange={() => setDocumentType('cnpj')}
+                              className="form-radio h-4 w-4 text-emerald-600"
+                            />
+                            <span className="ml-2 text-white">CNPJ</span>
+                          </label>
+                          <label className="inline-flex items-center">
+                            <input
+                              type="radio"
+                              name="documentType"
+                              checked={documentType === 'cpf'}
+                              onChange={() => setDocumentType('cpf')}
+                              className="form-radio h-4 w-4 text-emerald-600"
+                            />
+                            <span className="ml-2 text-white">CPF</span>
+                          </label>
+                        </div>
+                      </div>
+                      
+                      {/* Campo CNPJ/CPF com máscara */}
+                      <div className="mb-4">
+                        <label className="block text-gray-300 mb-2">
+                          {documentType === 'cnpj' ? 'CNPJ' : 'CPF'}
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={companyForm.document}
+                            onChange={(e) => {
+                              let value = e.target.value.replace(/\D/g, '');
+                              if (documentType === 'cnpj') {
+                                // Máscara para CNPJ: 00.000.000/0000-00
+                                if (value.length > 14) value = value.substring(0, 14);
+                                if (value.length > 12) {
+                                  value = value.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2}).*/, '$1.$2.$3/$4-$5');
+                                } else if (value.length > 8) {
+                                  value = value.replace(/^(\d{2})(\d{3})(\d{3})(\d*)/, '$1.$2.$3/$4');
+                                } else if (value.length > 5) {
+                                  value = value.replace(/^(\d{2})(\d{3})(\d*)/, '$1.$2.$3');
+                                } else if (value.length > 2) {
+                                  value = value.replace(/^(\d{2})(\d*)/, '$1.$2');
+                                }
+                              } else {
+                                // Máscara para CPF: 000.000.000-00
+                                if (value.length > 11) value = value.substring(0, 11);
+                                if (value.length > 9) {
+                                  value = value.replace(/^(\d{3})(\d{3})(\d{3})(\d{2}).*/, '$1.$2.$3-$4');
+                                } else if (value.length > 6) {
+                                  value = value.replace(/^(\d{3})(\d{3})(\d*)/, '$1.$2.$3');
+                                } else if (value.length > 3) {
+                                  value = value.replace(/^(\d{3})(\d*)/, '$1.$2');
+                                }
+                              }
+                              setCompanyForm({...companyForm, document: value});
+                            }}
+                            placeholder={documentType === 'cnpj' ? '00.000.000/0000-00' : '000.000.000-00'}
+                            className="w-full py-2 px-4 bg-[#2A2A2A] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          {documentType === 'cnpj' && (
+                            <button
+                              type="button"
+                              className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 bg-[#1A1A1A] rounded-full text-gray-300 hover:text-white"
+                              onClick={() => {
+                                // Lógica para buscar dados do CNPJ
+                                alert(`Buscar dados do CNPJ: ${companyForm.document}`);
+                              }}
+                            >
+                              <Search size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Razão Social (apenas para CNPJ) */}
+                      {documentType === 'cnpj' && (
+                        <div className="mb-4">
+                          <label className="block text-gray-300 mb-2">Razão Social</label>
+                          <input
+                            type="text"
+                            value={companyForm.companyName}
+                            onChange={(e) => setCompanyForm({...companyForm, companyName: e.target.value})}
+                            className="w-full py-2 px-4 bg-[#2A2A2A] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Nome Fantasia */}
+                      <div className="mb-4">
+                        <label className="block text-gray-300 mb-2">Nome Fantasia</label>
+                        <input
+                          type="text"
+                          value={companyForm.tradeName}
+                          onChange={(e) => setCompanyForm({...companyForm, tradeName: e.target.value})}
+                          className="w-full py-2 px-4 bg-[#2A2A2A] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                      </div>
+                      
+                      {/* Nome do Responsável (com botão para adicionar mais) */}
+                      <div className="mb-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="text-gray-300">Nome do Responsável</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCompanyForm({
+                                ...companyForm,
+                                responsibles: [
+                                  ...companyForm.responsibles,
+                                  { name: '', id: Date.now().toString() }
+                                ]
+                              });
+                            }}
+                            className="p-1 bg-emerald-600 hover:bg-emerald-700 rounded-full text-white font-bold"
+                          >
+                            +
+                          </button>
+                        </div>
+                        
+                        {companyForm.responsibles.map((responsible, index) => (
+                          <div key={responsible.id} className="flex items-center mb-2">
+                            <input
+                              type="text"
+                              value={responsible.name}
+                              onChange={(e) => {
+                                const newResponsibles = [...companyForm.responsibles];
+                                newResponsibles[index].name = e.target.value;
+                                setCompanyForm({...companyForm, responsibles: newResponsibles});
+                              }}
+                              className="flex-1 py-2 px-4 bg-[#2A2A2A] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              placeholder="Nome do responsável"
+                            />
+                            {companyForm.responsibles.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCompanyForm({
+                                    ...companyForm,
+                                    responsibles: companyForm.responsibles.filter((_, i) => i !== index)
+                                  });
+                                }}
+                                className="ml-2 p-1 text-red-500 hover:text-red-400"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <circle cx="12" cy="12" r="10"></circle>
+                                  <line x1="15" y1="9" x2="9" y2="15"></line>
+                                  <line x1="9" y1="9" x2="15" y2="15"></line>
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {/* Botões de Ação */}
+                      <div className="flex justify-end space-x-2 mt-6">
+                        <button
+                          type="button"
+                          onClick={() => setShowCompanyForm(false)}
+                          className="py-2 px-4 bg-gray-700 hover:bg-gray-600 transition-colors rounded-lg text-white"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Aqui será implementada a lógica de salvar
+                            console.log('Dados do formulário:', companyForm);
+                            // Adicionar empresa à lista
+                            const newCompany = {
+                              id: Date.now().toString(),
+                              name: companyForm.tradeName || companyForm.companyName,
+                              phone: '',
+                              email: '',
+                              createdAt: new Date()
+                            };
+                            
+                            setCompanies([newCompany, ...companies]);
+                            setShowCompanyForm(false);
+                            
+                            // Resetar formulário
+                            setCompanyForm({
+                              document: '',
+                              companyName: '',
+                              tradeName: '',
+                              responsibles: [{ name: '', id: Date.now().toString() }]
+                            });
+                            setDocumentType('cnpj');
+                            
+                            alert('Empresa cadastrada com sucesso!');
+                          }}
+                          className="py-2 px-4 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white"
+                        >
+                          Salvar
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
               </div>
             ) : currentConversation ? (
