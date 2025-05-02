@@ -12,16 +12,26 @@ interface Message {
   timestamp: Date;
 }
 
-interface Conversation {
+interface ChatMessage {
+  id: string;
+  content: string;
+  sender: 'user' | 'contact';
+  timestamp: Date;
+}
+
+type ConversationStatus = 'pending' | 'attending' | 'finished';
+
+// Tipo para uma conversa
+type Conversation = {
   id: string;
   contactName: string;
   lastMessage: string;
-  timestamp: Date;
+  timestamp: Date | string;
+  status: ConversationStatus;
+  messages: ChatMessage[];
+  sector: string | null;
   unreadCount: number;
-  messages: Message[];
   avatarUrl?: string;
-  status: 'pending' | 'attending' | 'finished';
-  sector?: 'suporte' | 'comercial' | 'administrativo' | null;
 }
 
 export default function ChatNexo() {
@@ -30,7 +40,7 @@ export default function ChatNexo() {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [inputMessage, setInputMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'pending' | 'attending' | 'finished'>('pending');
+  const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
   const [selectedSector, setSelectedSector] = useState<'all' | 'suporte' | 'comercial' | 'administrativo'>('all');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const savedState = localStorage.getItem('sidebar_collapsed');
@@ -143,9 +153,9 @@ export default function ChatNexo() {
   const currentConversation = conversations.find(conv => conv.id === selectedConversation);
   
   // Formatar data para exibição
-  const formatTimestamp = (timestamp: Date) => {
+  const formatTimestamp = (timestamp: Date | string) => {
     const now = new Date();
-    const date = new Date(timestamp);
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
     
     const diff = now.getTime() - date.getTime();
     const isToday = date.getDate() === now.getDate() && 
@@ -171,7 +181,7 @@ export default function ChatNexo() {
       if (!conversation) return;
       
       // Adicionando mensagem otimisticamente à UI
-      const newMessage: Message = {
+      const newMessage: ChatMessage = {
         id: Date.now().toString(),
         content: inputMessage.trim(),
         sender: 'user',
@@ -529,6 +539,165 @@ export default function ChatNexo() {
         console.error('Erro no Socket.io:', error);
       });
       
+            // Função para verificar se a mensagem é recebida (de um contato)
+      const isMessageFromContact = (data: any): boolean => {
+        if (!data) return false;
+        
+        // Verificar formato direto da mensagem
+        if (data.key && data.key.fromMe === false) {
+          return true;
+        }
+        
+        // Verificar se é um array de mensagens
+        if (Array.isArray(data)) {
+          return data.some((msg: any) => msg.key && msg.key.fromMe === false);
+        }
+        
+        // Verificar dentro da estrutura aninhada
+        if (data.data && Array.isArray(data.data)) {
+          return data.data.some((msg: any) => msg.key && msg.key.fromMe === false);
+        }
+        
+        // Verificar formato message.upsert comum
+        if (data.type === 'notify' && data.messages && Array.isArray(data.messages)) {
+          return data.messages.some((msg: any) => msg.key && msg.key.fromMe === false);
+        }
+        
+        // Verificar no formato messages.records
+        if (data.messages && data.messages.records && Array.isArray(data.messages.records)) {
+          return data.messages.records.some((msg: any) => msg.key && msg.key.fromMe === false);
+        }
+        
+        return false;
+      };
+      
+      // Função para normalizar o ID do contato (remover sufixos e formatar consistentemente)
+      const normalizeContactId = (contactId: string): string => {
+        // Remover sufixos como @s.whatsapp.net, @c.us, etc.
+        let normalizedId = contactId;
+        
+        // Remover o trecho após o : para IDs como 123456789:12@s.whatsapp.net
+        if (normalizedId.includes(':')) {
+          normalizedId = normalizedId.split(':')[0] + '@' + normalizedId.split('@')[1];
+        }
+        
+        // Manter apenas a parte do número/identificador
+        if (normalizedId.includes('@')) {
+          normalizedId = normalizedId.split('@')[0];
+        }
+        
+        console.log(`ID normalizado: ${contactId} -> ${normalizedId}`);
+        return normalizedId;
+      };
+      
+      // Função para extrair o ID do contato (remoteJid) da mensagem
+      const extractContactId = (data: any): string | null => {
+        if (!data) return null;
+        
+        // Logar estrutura para debug
+        //console.log('Evento recebido:', JSON.stringify(data, null, 2));
+        
+        try {
+          // CASO 1: messages.upsert (formato mais comum na Evolution API)
+          if (data.type === 'notify' && data.messages && Array.isArray(data.messages)) {
+            for (const msg of data.messages) {
+              if (msg.key && msg.key.remoteJid && msg.key.fromMe === false) {
+                console.log(`ID encontrado no formato notify: ${msg.key.remoteJid}`);
+                return normalizeContactId(msg.key.remoteJid);
+              }
+            }
+          }
+          
+          // CASO 2: formato direto (key.remoteJid)
+          if (data.key && data.key.remoteJid) {
+            console.log(`ID encontrado direto: ${data.key.remoteJid}`);
+            return normalizeContactId(data.key.remoteJid);
+          }
+          
+          // CASO 3: array de mensagens
+          if (Array.isArray(data)) {
+            const msg = data.find((msg: any) => msg.key && msg.key.remoteJid && msg.key.fromMe === false);
+            if (msg?.key?.remoteJid) {
+              console.log(`ID encontrado em array: ${msg.key.remoteJid}`);
+              return normalizeContactId(msg.key.remoteJid);
+            }
+          }
+          
+          // CASO 4: aninhado em data.data
+          if (data.data && Array.isArray(data.data)) {
+            const msg = data.data.find((msg: any) => msg.key && msg.key.remoteJid && msg.key.fromMe === false);
+            if (msg?.key?.remoteJid) {
+              console.log(`ID encontrado em data.data: ${msg.key.remoteJid}`);
+              return normalizeContactId(msg.key.remoteJid);
+            }
+          }
+          
+          // CASO 5: aninhado em messages (sem ser notify)
+          if (data.messages && Array.isArray(data.messages)) {
+            const msg = data.messages.find((msg: any) => msg.key && msg.key.remoteJid && msg.key.fromMe === false);
+            if (msg?.key?.remoteJid) {
+              console.log(`ID encontrado em messages: ${msg.key.remoteJid}`);
+              return normalizeContactId(msg.key.remoteJid);
+            }
+          }
+          
+          // CASO 6: aninhado em messages.records
+          if (data.messages && data.messages.records && Array.isArray(data.messages.records)) {
+            const msg = data.messages.records.find((msg: any) => msg.key && msg.key.remoteJid && msg.key.fromMe === false);
+            if (msg?.key?.remoteJid) {
+              console.log(`ID encontrado em records: ${msg.key.remoteJid}`);
+              return normalizeContactId(msg.key.remoteJid);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao extrair ID do contato:', error);
+        }
+        
+        console.log('Não foi possível encontrar o ID do contato no evento!');
+        return null;
+      };
+      
+      // Função para incrementar o contador de mensagens não lidas
+      const incrementUnreadCount = (contactId: string): void => {
+        console.log(`❌❌❌ INCREMENTANDO CONTADOR para: ${contactId} ❌❌❌`);
+        
+        // Primeiro normalizar o contactId para garantir correspondência
+        const normalizedId = normalizeContactId(contactId);
+        
+        // Verificar se o ID normalizado está no formato esperado
+        console.log(`ID normalizado para incremento: ${normalizedId}`);
+        
+        setConversations(prevConversations => {
+          // Log dos IDs existentes para debug
+          console.log('IDs das conversas existentes:', 
+            prevConversations.map(c => `${c.id} (${c.contactName}) - normalizado: ${normalizeContactId(c.id)}`))
+            
+          // Primeiro tentar pela ID exata
+          let matchFound = false;
+          const updatedConversations = prevConversations.map(conv => {
+            // Verificar pelo ID exato ou pelo ID normalizado
+            const convNormalizedId = normalizeContactId(conv.id);
+            
+            if (conv.id === contactId || convNormalizedId === normalizedId) {
+              matchFound = true;
+              const newCount = (conv.unreadCount || 0) + 1;
+              console.log(`✅ Contador atualizado: ${conv.contactName} - ${newCount} mensagens não lidas`);
+              return {
+                ...conv,
+                unreadCount: newCount
+              };
+            }
+            return conv;
+          });
+          
+          if (!matchFound) {
+            console.warn(`⚠️ AVISO: Nenhuma conversa encontrada com ID ${contactId} ou normalizado ${normalizedId}`);
+          }
+          
+          return updatedConversations;
+        });
+      };
+      
       // Função para processar mensagens recebidas via Socket.io e atualizar o estado
       const processSocketMessages = (data: any): void => {
         console.log('Processando mensagens recebidas via Socket.io:', data);
@@ -615,24 +784,102 @@ export default function ChatNexo() {
         return result;
       };
       
+      // Adicionar evento para qualquer mensagem (debug)
+      socket.onAny((eventName, ...args) => {
+        console.log(`Evento Socket.io recebido: ${eventName}`, args);
+      });
+      
+      // Log para facilitar debug
+      console.log('Contagem atual de não lidas:', conversations.map(c => `${c.contactName}: ${c.unreadCount}`));
+      
       // Eventos específicos da Evolution API - usando registro direto para todos os formatos possíveis
       socket.on('MESSAGES_UPSERT', (data) => {
-        console.log('Evento MESSAGES_UPSERT recebido:', data);
+        console.log('⚫⚫⚫ Evento MESSAGES_UPSERT recebido ⚫⚫⚫');
+        
+        // Extrair o remoteJid (ID do contato) da mensagem e verificar se é mensagem recebida
+        const contactId = extractContactId(data);
+        
+        // Se tiver um ID de contato, é porque é uma mensagem recebida válida
+        if (contactId) {
+          console.log(`Mensagem recebida de: ${contactId}`);
+          
+          // Normalizar o ID selecionado também para comparação
+          const normalizedSelected = selectedConversation ? normalizeContactId(selectedConversation) : null;
+          const normalizedContact = normalizeContactId(contactId);
+          
+          // Verificar se é o chat atual ou não
+          if (normalizedContact !== normalizedSelected) {
+            console.log(`💬 Nova mensagem para conversa não selecionada: ${contactId}`);
+            console.log(`Chat atual: ${selectedConversation}, normalizado: ${normalizedSelected}`);
+            incrementUnreadCount(contactId);
+          } else {
+            console.log(`Mensagem para o chat atual: ${contactId} == ${selectedConversation}. Não incrementando.`);
+          }
+        } else {
+          console.log('Dados recebidos não contêm ID de contato válido ou não é mensagem recebida.');
+        }
+        
+        // Processar as mensagens normalmente para atualizar a UI
         processSocketMessages(data);
       });
       
       socket.on('messages.upsert', (data) => {
         console.log('Evento messages.upsert recebido:', data);
+        
+        // Verificar se a mensagem é recebida (não enviada por nós)
+        const isIncomingMessage = isMessageFromContact(data);
+        
+        // Se for mensagem recebida e não estiver com o chat aberto, incrementar contador
+        if (isIncomingMessage) {
+          // Extrair o remoteJid (ID do contato) da mensagem
+          const contactId = extractContactId(data);
+          
+          if (contactId && contactId !== selectedConversation) {
+            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
+            incrementUnreadCount(contactId);
+          }
+        }
+        
         processSocketMessages(data);
       });
       
       socket.on('message', (data) => {
         console.log('Evento message recebido:', data);
+        
+        // Verificar se a mensagem é recebida (não enviada por nós)
+        const isIncomingMessage = isMessageFromContact(data);
+        
+        // Se for mensagem recebida e não estiver com o chat aberto, incrementar contador
+        if (isIncomingMessage) {
+          // Extrair o remoteJid (ID do contato) da mensagem
+          const contactId = extractContactId(data);
+          
+          if (contactId && contactId !== selectedConversation) {
+            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
+            incrementUnreadCount(contactId);
+          }
+        }
+        
         processSocketMessages(data);
       });
       
       socket.on('messages', (data) => {
         console.log('Evento messages recebido:', data);
+        
+        // Verificar se a mensagem é recebida (não enviada por nós)
+        const isIncomingMessage = isMessageFromContact(data);
+        
+        // Se for mensagem recebida e não estiver com o chat aberto, incrementar contador
+        if (isIncomingMessage) {
+          // Extrair o remoteJid (ID do contato) da mensagem
+          const contactId = extractContactId(data);
+          
+          if (contactId && contactId !== selectedConversation) {
+            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
+            incrementUnreadCount(contactId);
+          }
+        }
+        
         processSocketMessages(data);
       });
       
@@ -956,7 +1203,7 @@ export default function ChatNexo() {
           contactName: contactName,
           lastMessage: lastMessageContent,
           timestamp: new Date(lastMsg.messageTimestamp * 1000),
-          unreadCount: 0, // Implementar contagem de não lidas depois
+          unreadCount: 0, // Inicializar contador de não lidas
           messages: formattedMessages,
           status: 'pending', // Status padrão para novas conversas
           sector: null // A definir com base em regras de negócio
@@ -992,14 +1239,45 @@ export default function ChatNexo() {
                 : 0
             );
             
+            // Verificar se a última mensagem mudou e é uma mensagem de contato (não do usuário)
+            const lastMessageChanged = existingConv.lastMessage !== newConv.lastMessage;
+            
+            // Verificar se a mensagem veio do contato (não foi enviada pelo usuário)
+            const isNewMessageFromContact = newConv.messages.length > 0 && 
+                                           newConv.messages[newConv.messages.length - 1].sender === 'contact';
+            
+            // Calcular novo contador - se é mensagem nova, do contato, e conversa não está selecionada
+            let newUnreadCount = existingConv.unreadCount || 0;
+            if (lastMessageChanged && isNewMessageFromContact && newConv.id !== selectedConversation) {
+              // Incrementar o contador de não lidas
+              newUnreadCount += 1;
+              console.log(`Nova mensagem detectada: ${newConv.lastMessage}`);
+              console.log(`Incrementando contador para ${newConv.contactName}: ${newUnreadCount}`);
+            }
+            
             conversationMap.set(newConv.id, {
               ...newConv,
               status: existingConv.status,
               sector: existingConv.sector,
-              messages: sortedMessages // Usar as mensagens mescladas
+              messages: sortedMessages, // Usar as mensagens mescladas
+              unreadCount: newUnreadCount // Usar contador atualizado
             });
           } else {
-            conversationMap.set(newConv.id, newConv);
+            // Nova conversa - garantir que tenha o contador de não lidas inicializado
+            // Verificar se é uma nova conversa iniciada pelo contato
+            const isContactInitiatedConversation = newConv.messages.some(msg => msg.sender === 'contact');
+            
+            // Se for uma nova conversa iniciada pelo contato e não estiver selecionada, iniciar com contador 1
+            let initialUnreadCount = 0;
+            if (isContactInitiatedConversation && newConv.id !== selectedConversation) {
+              initialUnreadCount = 1;
+              console.log(`Nova conversa recebida: ${newConv.contactName}`);
+            }
+            
+            conversationMap.set(newConv.id, {
+              ...newConv,
+              unreadCount: initialUnreadCount
+            });
           }
         });
         
@@ -1288,8 +1566,25 @@ export default function ChatNexo() {
                 filteredConversations.map(conv => (
                   <div
                     key={conv.id}
-                    onClick={() => setSelectedConversation(conv.id)}
+                    onClick={() => {
+                      console.log(`Selecionando conversa: ${conv.id} (${conv.contactName})`);
+                      console.log(`Não lidas antes: ${conv.unreadCount || 0}`);
+                      
+                      // Ao selecionar a conversa, zera a contagem de não lidas
+                      setConversations(prevConversations => {
+                        return prevConversations.map(c => {
+                          if (c.id === conv.id) {
+                            return { ...c, unreadCount: 0 };
+                          }
+                          return c;
+                        });
+                      });
+                      
+                      // Define a conversa selecionada
+                      setSelectedConversation(conv.id);
+                    }}
                     className={`cursor-pointer p-3 border-b border-gray-800 hover:bg-[#2A2A2A] transition-colors ${selectedConversation === conv.id ? 'bg-[#2A2A2A]' : ''}`}
+                    data-component-name="ChatNexo"
                   >
                     <div className="flex items-center gap-3">
                       {/* Avatar */}
@@ -1299,17 +1594,22 @@ export default function ChatNexo() {
                       
                       {/* Info */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center">
+                        <div className="flex justify-between items-center" data-component-name="ChatNexo">
                           <h3 className="font-medium text-white truncate">{conv.contactName}</h3>
-                          <span className="text-xs text-gray-400">{formatTimestamp(conv.timestamp)}</span>
+                          <div className="flex flex-col items-end">
+                            <span className="text-xs text-gray-400" data-component-name="ChatNexo">{formatTimestamp(conv.timestamp)}</span>
+                            {(conv.unreadCount || 0) > 0 && (
+                              <span 
+                                className="mt-1 bg-green-500 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center"
+                                title={`${conv.unreadCount} mensagens não lidas`}
+                              >
+                                {conv.unreadCount}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex justify-between items-center mt-1">
+                        <div className="flex justify-between items-center mt-1" data-component-name="ChatNexo">
                           <p className="text-sm text-gray-400 truncate">{conv.lastMessage}</p>
-                          {conv.unreadCount > 0 && (
-                            <div className="ml-2 bg-emerald-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-xs">
-                              {conv.unreadCount}
-                            </div>
-                          )}
                         </div>
                       </div>
                     </div>
