@@ -130,6 +130,10 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [inputMessage, setInputMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  // Estado para o tipo de filtro de empresa (nome ou telefone)
+  const [companyFilterType, setCompanyFilterType] = useState<'name' | 'phone'>('name');
+  // Estado para o texto de pesquisa de empresas
+  const [companySearchQuery, setCompanySearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
   // Removido estado de subaba pois agora a aba Contatos já mostra diretamente a grid de empresas
   // Estado para armazenar a lista de empresas
@@ -588,6 +592,21 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
     }
   }, [conversations]);
   
+  // Função para filtrar as empresas com base no tipo de filtro e texto de busca
+  const filteredCompanies = useMemo(() => {
+    return companies.filter(company => {
+      if (!companySearchQuery) return true;
+      
+      const searchLower = companySearchQuery.toLowerCase();
+      if (companyFilterType === 'name') {
+        return company.name.toLowerCase().includes(searchLower);
+      } else if (companyFilterType === 'phone') {
+        return company.phone.toLowerCase().includes(searchLower);
+      }
+      return true;
+    });
+  }, [companies, companySearchQuery, companyFilterType]);
+
   // Função para filtrar as conversas com base nos filtros aplicados
   const filteredConversations = useMemo(() => {
     const today = new Date();
@@ -2209,7 +2228,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                 <input
                   type="text"
-                  placeholder={activeTab === 'contacts' ? "Pesquisar empresas..." : "Pesquisar conversas..."}
+                  placeholder="Pesquisar contatos..."
                   className="w-full pl-10 pr-4 py-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -2388,18 +2407,49 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
             {activeTab === 'contacts' ? (
               <div className="flex flex-col h-full bg-[#1A1A1A]">
                 {/* Cabeçalho da grid de empresas */}
-                <div className="p-4 border-b border-gray-800 bg-[#2A2A2A] flex justify-between items-center">
-                  <h2 className="text-xl font-semibold text-white">Gerenciamento de Empresas</h2>
-                  <button 
-                    className="py-2 px-4 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white font-medium flex items-center justify-center gap-2"
-                    onClick={() => {
-                      // Aqui você implementaria a lógica para abrir o modal de cadastro de empresa
-                      alert('Funcionalidade de cadastro de empresa a ser implementada');
-                    }}
-                  >
-                    <Users size={16} />
-                    Cadastrar Empresa
-                  </button>
+                <div className="p-4 border-b border-gray-800 bg-[#2A2A2A]">
+                  <div className="flex justify-between items-center mb-3">
+                    <h2 className="text-xl font-semibold text-white">Gerenciamento de Empresas</h2>
+                    <button 
+                      className="py-2 px-4 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white font-medium flex items-center justify-center gap-2"
+                      onClick={() => {
+                        // Aqui você implementaria a lógica para abrir o modal de cadastro de empresa
+                        alert('Funcionalidade de cadastro de empresa a ser implementada');
+                      }}
+                    >
+                      <Users size={16} />
+                      Cadastrar Empresa
+                    </button>
+                  </div>
+                  
+                  {/* Filtros de pesquisa para empresas */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                      <input
+                        type="text"
+                        placeholder={`Pesquisar por ${companyFilterType === 'name' ? 'nome' : 'telefone'}...`}
+                        className="w-full pl-10 pr-4 py-2 bg-[#1A1A1A] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        value={companySearchQuery}
+                        onChange={(e) => setCompanySearchQuery(e.target.value)}
+                      />
+                    </div>
+                    <div className="relative">
+                      <select
+                        className="appearance-none bg-[#1A1A1A] border border-gray-800 text-white py-2 px-4 pr-8 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        value={companyFilterType}
+                        onChange={(e) => setCompanyFilterType(e.target.value as 'name' | 'phone')}
+                      >
+                        <option value="name">Nome</option>
+                        <option value="phone">Telefone</option>
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-white">
+                        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                          <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
                 {/* Área da grid de empresas */}
@@ -2409,23 +2459,23 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                     <div>Nome da Empresa</div>
                     <div>Telefone</div>
                     <div>E-mail</div>
-                    <div>Ações</div>
+                    <div className="text-right">Ações</div>
                   </div>
                   
-                  {/* Linhas da tabela - se não tiver dados, mostrar mensagem */}
-                  {companies.length === 0 ? (
+                  {/* Linhas da tabela filtradas e se não tiver dados, mostrar mensagem */}
+                  {filteredCompanies.length === 0 ? (
                     <div className="text-center py-8 text-gray-400">
                       <Store size={48} className="mx-auto mb-4 opacity-30" />
                       <p className="text-lg mb-2">Nenhuma empresa cadastrada</p>
                       <p className="text-sm">Clique no botão "Cadastrar Empresa" para adicionar</p>
                     </div>
                   ) : (
-                    companies.map(company => (
+                    filteredCompanies.map(company => (
                       <div key={company.id} className="grid grid-cols-4 gap-4 px-4 py-3 border-b border-gray-800 hover:bg-[#2A2A2A] transition-colors">
                         <div className="text-white font-medium">{company.name}</div>
                         <div className="text-gray-300">{company.phone}</div>
-                        <div className="text-gray-300">{company.email || '-'}</div>
-                        <div className="flex space-x-2">
+                        <div className="text-gray-300 pr-4 truncate">{company.email || '-'}</div>
+                        <div className="flex justify-end space-x-4">
                           <button className="p-1 text-emerald-500 hover:text-emerald-400 transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                           </button>
