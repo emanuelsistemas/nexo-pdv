@@ -19,7 +19,7 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-type ConversationStatus = 'pending' | 'attending' | 'finished';
+type ConversationStatus = 'pending' | 'attending' | 'finished' | 'contacts';
 
 // Tipo para uma conversa
 type Conversation = {
@@ -131,6 +131,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const [inputMessage, setInputMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
+  // Estado para armazenar a lista de contatos separada das conversas
+  const [contacts, setContacts] = useState<Conversation[]>([]);
   const [selectedSector, setSelectedSector] = useState<'all' | 'suporte' | 'comercial' | 'administrativo'>('all');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const savedState = localStorage.getItem('sidebar_collapsed');
@@ -1985,22 +1987,48 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                     );
                   })()} 
                 </button>
+                <button
+                  className={`flex-1 px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'contacts' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                  onClick={() => {
+                    setActiveTab('contacts');
+                    // Ao selecionar a aba Contatos, popular a lista de contatos a partir das conversas existentes
+                    if (contacts.length === 0) {
+                      // Criar lista única de contatos a partir das conversas existentes
+                      const uniqueContacts = Array.from(
+                        new Map(
+                          conversations.map(conv => [conv.id, conv])
+                        ).values()
+                      );
+                      setContacts(uniqueContacts);
+                    }
+                  }}
+                >
+                  Contatos
+                  {/* Contador de contatos (opcional) */}
+                  {contacts.length > 0 && (
+                    <span className="bg-blue-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                      {contacts.length}
+                    </span>
+                  )}
+                </button>
               </div>
               
-              {/* Filtro de Setor */}
-              <div className="px-4 py-2">
-                <select
-                  id="sector"
-                  value={selectedSector}
-                  onChange={(e) => setSelectedSector(e.target.value as any)}
-                  className="w-full p-2.5 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="all">Todos os setores</option>
-                  {enabledSectors.suporte && <option value="suporte">Suporte Técnico</option>}
-                  {enabledSectors.comercial && <option value="comercial">Comercial</option>}
-                  {enabledSectors.administrativo && <option value="administrativo">Administrativo</option>}
-                </select>
-              </div>
+              {/* Filtro de Setor - Mostrado apenas quando não estiver na aba Contatos */}
+              {activeTab !== 'contacts' && (
+                <div className="px-4 py-2">
+                  <select
+                    id="sector"
+                    value={selectedSector}
+                    onChange={(e) => setSelectedSector(e.target.value as any)}
+                    className="w-full p-2.5 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="all">Todos os setores</option>
+                    {enabledSectors.suporte && <option value="suporte">Suporte Técnico</option>}
+                    {enabledSectors.comercial && <option value="comercial">Comercial</option>}
+                    {enabledSectors.administrativo && <option value="administrativo">Administrativo</option>}
+                  </select>
+                </div>
+              )}
             </div>
             
             {/* Campo de Pesquisa */}
@@ -2009,7 +2037,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                 <input
                   type="text"
-                  placeholder="Pesquisar conversas..."
+                  placeholder={activeTab === 'contacts' ? "Pesquisar contatos..." : "Pesquisar conversas..."}
                   className="w-full pl-10 pr-4 py-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -2024,9 +2052,84 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
               </div>
             )}
             
-            {/* Lista de Conversas */}
+            {/* Lista de Conversas ou Contatos dependendo da aba ativa */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              {filteredConversations.length === 0 ? (
+              {activeTab === 'contacts' ? (
+                // Lista de Contatos
+                contacts.filter(contact => 
+                  contact.contactName.toLowerCase().includes(searchQuery.toLowerCase())
+                ).length === 0 ? (
+                  // Mensagem quando não há contatos correspondentes à pesquisa
+                  <div className="p-4 text-center text-gray-400">
+                    <Users size={32} className="mx-auto mb-2 opacity-50" />
+                    <p>Nenhum contato encontrado.</p>
+                    <p className="text-xs">Tente outro termo de busca.</p>
+                  </div>
+                ) : (
+                  // Lista de contatos filtrados pela pesquisa
+                  contacts
+                    .filter(contact => contact.contactName.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map(contact => (
+                      <div
+                        key={contact.id}
+                        className="cursor-pointer p-3 border-b border-gray-800 hover:bg-[#2A2A2A] transition-colors"
+                        onClick={() => {
+                          // Procurar se existe uma conversa ativa com esse contato
+                          const existingConversation = conversations.find(conv => conv.id === contact.id);
+                          if (existingConversation) {
+                            // Se existe conversa, seleciona e vai para a aba apropriada
+                            setSelectedConversation(existingConversation.id);
+                            setActiveTab(existingConversation.status);
+                          } else {
+                            // Se não existe conversa, iniciar uma nova conversa pendente
+                            const newConversation: Conversation = {
+                              ...contact,
+                              status: 'pending',
+                              messages: [],
+                              unreadCount: 0
+                            };
+                            setConversations(prev => [...prev, newConversation]);
+                            setSelectedConversation(contact.id);
+                            setActiveTab('pending');
+                          }
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* Avatar */}
+                          <div className="w-12 h-12 rounded-full bg-emerald-600 flex items-center justify-center flex-shrink-0">
+                            <span className="text-white font-medium">
+                              {contact.contactName.substring(0, 2).toUpperCase()}
+                            </span>
+                          </div>
+                          
+                          {/* Informações do Contato */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-col">
+                              {/* Nome e Status do Contato */}
+                              <div className="flex items-center w-full justify-between">
+                                <h3 className="font-medium text-white truncate max-w-[70%]">
+                                  {contact.contactName}
+                                </h3>
+                                <span className="text-xs text-gray-400">
+                                  {formatTimestamp(contact.timestamp)}
+                                </span>
+                              </div>
+                              
+                              {/* Número do Contato */}
+                              <div className="flex justify-between items-center mt-1">
+                                <p className="text-sm text-gray-400 truncate max-w-[80%]">
+                                  {contact.id.split('@')[0]}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                )
+              ) : (
+                // Lista de Conversas Original (para as outras abas)
+                filteredConversations.length === 0 ? (
                 <div className="p-4 text-center text-gray-400">
                   <MessageSquare size={32} className="mx-auto mb-2 opacity-50" />
                   <p>Nenhuma conversa encontrada</p>
@@ -2089,7 +2192,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                     </div>
                   </div>
                 ))
-              )}
+              ))}
             </div>
           </div>
           
