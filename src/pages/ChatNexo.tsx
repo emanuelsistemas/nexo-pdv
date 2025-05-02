@@ -1923,7 +1923,7 @@ export default function ChatNexo() {
           {/* Área de Chat */}
           <div className="flex-1 flex flex-col">
             {isLoading && (
-              <div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+              <div className="absolute inset-0 bg-black flex items-center justify-center z-50">
                 <div className="text-white text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500 mx-auto mb-4"></div>
                   <p>Carregando conversas...</p>
