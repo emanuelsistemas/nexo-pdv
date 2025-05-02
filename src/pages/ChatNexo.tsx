@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Settings as SettingsIcon, MessageCircle, Send, Search, MessageSquare } from 'lucide-react';
+import { Database, MessageSquare, Search, ChevronLeft, ChevronRight, Send, Store, Users, LogOut, BarChart2, Settings as SettingsIcon, MessageCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
@@ -1930,87 +1930,154 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 </div>
               </div>
 
-              {/* Abas Pendentes/Atendendo */}
-              <div className="flex border-b border-gray-700 w-full">
-                <button
-                  className={`flex-1 px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'pending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
-                  onClick={() => setActiveTab('pending')}
-                >
-                  Pendentes
-                  {filteredConversations.filter(conv => conv.status === 'pending').length > 0 && (
-                    <span className="bg-red-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
-                      {filteredConversations.filter(conv => conv.status === 'pending').length}
-                    </span>
-                  )}
-                </button>
-                <button
-                  className={`flex-1 px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'attending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
-                  onClick={() => setActiveTab('attending')}
-                >
-                  Atendendo
-                  {filteredConversations.filter(conv => conv.status === 'attending').length > 0 && (
-                    <span className="bg-yellow-500 text-gray-900 text-xs font-semibold px-2 py-0.5 rounded-full">
-                      {filteredConversations.filter(conv => conv.status === 'attending').length}
-                    </span>
-                  )}
-                </button>
-                <button
-                  className={`flex-1 px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'finished' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
-                  onClick={() => setActiveTab('finished')}
-                >
-                  Finalizados
-                  {/* Contador para conversas finalizadas do dia atual */}
-                  {(() => {
-                    // Filtrar conversas finalizadas do dia atual
-                    const today = new Date();
-                    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
-                    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime();
+              {/* Sistema de Navegação de Abas com Paginação */}
+              <div className="relative border-b border-gray-700 w-full">
+                {/* Container para animação e setas */}
+                <div className="flex items-center">
+                  {/* Botão seta esquerda */}
+                  <button 
+                    className="px-2 py-3 text-gray-400 hover:text-white focus:outline-none transition-colors"
+                    onClick={() => {
+                      // Obter todos os elementos de aba
+                      const tabContainer = document.getElementById('tabs-container');
+                      if (tabContainer) {
+                        // Rolar para a esquerda
+                        tabContainer.scrollBy({ left: -150, behavior: 'smooth' });
+                      }
+                    }}
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  
+                  {/* Container escrolável de abas */}
+                  <div 
+                    id="tabs-container"
+                    className="flex-1 flex overflow-x-auto scrollbar-hide" 
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} // Firefox e IE
+                  >
+                    {/* Aba Pendentes */}
+                    <button
+                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'pending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      onClick={() => setActiveTab('pending')}
+                    >
+                      Pendentes
+                      {filteredConversations.filter(conv => conv.status === 'pending').length > 0 && (
+                        <span className="bg-red-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                          {filteredConversations.filter(conv => conv.status === 'pending').length}
+                        </span>
+                      )}
+                    </button>
                     
-                    const finishedTodayCount = conversations.filter(conv => {
-                      // Verificar se é uma conversa finalizada
-                      if (conv.status !== 'finished') return false;
-                      
-                      // Converter timestamp para número
-                      const convTimestamp = typeof conv.timestamp === 'string' 
-                        ? new Date(conv.timestamp).getTime() 
-                        : conv.timestamp.getTime();
-                      
-                      // Verificar se é do dia atual
-                      return convTimestamp >= startOfDay && convTimestamp <= endOfDay;
-                    }).length;
+                    {/* Aba Atendendo */}
+                    <button
+                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'attending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      onClick={() => setActiveTab('attending')}
+                    >
+                      Atendendo
+                      {filteredConversations.filter(conv => conv.status === 'attending').length > 0 && (
+                        <span className="bg-yellow-500 text-gray-900 text-xs font-semibold px-2 py-0.5 rounded-full">
+                          {filteredConversations.filter(conv => conv.status === 'attending').length}
+                        </span>
+                      )}
+                    </button>
                     
-                    // Mostrar contador apenas se houver conversas finalizadas hoje
-                    return finishedTodayCount > 0 && (
-                      <span className="bg-gray-600 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
-                        {finishedTodayCount}
-                      </span>
-                    );
-                  })()} 
-                </button>
-                <button
-                  className={`flex-1 px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'contacts' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
-                  onClick={() => {
-                    setActiveTab('contacts');
-                    // Ao selecionar a aba Contatos, popular a lista de contatos a partir das conversas existentes
-                    if (contacts.length === 0) {
-                      // Criar lista única de contatos a partir das conversas existentes
-                      const uniqueContacts = Array.from(
-                        new Map(
-                          conversations.map(conv => [conv.id, conv])
-                        ).values()
-                      );
-                      setContacts(uniqueContacts);
-                    }
-                  }}
-                >
-                  Contatos
-                  {/* Contador de contatos (opcional) */}
-                  {contacts.length > 0 && (
-                    <span className="bg-blue-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
-                      {contacts.length}
-                    </span>
-                  )}
-                </button>
+                    {/* Aba Finalizados */}
+                    <button
+                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'finished' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      onClick={() => setActiveTab('finished')}
+                    >
+                      Finalizados
+                      {/* Contador para conversas finalizadas do dia atual */}
+                      {(() => {
+                        // Filtrar conversas finalizadas do dia atual
+                        const today = new Date();
+                        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+                        const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime();
+                        
+                        const finishedTodayCount = conversations.filter(conv => {
+                          // Verificar se é uma conversa finalizada
+                          if (conv.status !== 'finished') return false;
+                          
+                          // Converter timestamp para número
+                          const convTimestamp = typeof conv.timestamp === 'string' 
+                            ? new Date(conv.timestamp).getTime() 
+                            : conv.timestamp.getTime();
+                          
+                          // Verificar se é do dia atual
+                          return convTimestamp >= startOfDay && convTimestamp <= endOfDay;
+                        }).length;
+                        
+                        // Mostrar contador apenas se houver conversas finalizadas hoje
+                        return finishedTodayCount > 0 && (
+                          <span className="bg-gray-600 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                            {finishedTodayCount}
+                          </span>
+                        );
+                      })()} 
+                    </button>
+                    
+                    {/* Aba Contatos */}
+                    <button
+                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'contacts' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      onClick={() => {
+                        setActiveTab('contacts');
+                        // Ao selecionar a aba Contatos, popular a lista de contatos a partir das conversas existentes
+                        if (contacts.length === 0) {
+                          // Criar lista única de contatos a partir das conversas existentes
+                          const uniqueContacts = Array.from(
+                            new Map(
+                              conversations.map(conv => [conv.id, conv])
+                            ).values()
+                          );
+                          setContacts(uniqueContacts);
+                        }
+                      }}
+                    >
+                      Contatos
+                      {/* Contador de contatos (opcional) */}
+                      {contacts.length > 0 && (
+                        <span className="bg-blue-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                          {contacts.length}
+                        </span>
+                      )}
+                    </button>
+                    
+                    {/* Espaço para abas adicionais no futuro */}
+                  </div>
+                  
+                  {/* Botão seta direita */}
+                  <button 
+                    className="px-2 py-3 text-gray-400 hover:text-white focus:outline-none transition-colors"
+                    onClick={() => {
+                      // Obter todos os elementos de aba
+                      const tabContainer = document.getElementById('tabs-container');
+                      if (tabContainer) {
+                        // Rolar para a direita
+                        tabContainer.scrollBy({ left: 150, behavior: 'smooth' });
+                      }
+                    }}
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+                
+                {/* Adicionar estilo para ocultar scrollbar */}
+                <style jsx>{`
+                  /* Para Chrome, Safari e Opera */
+                  #tabs-container::-webkit-scrollbar {
+                    display: none;
+                  }
+                  
+                  /* Para Firefox */
+                  #tabs-container {
+                    scrollbar-width: none;
+                  }
+                  
+                  /* Para IE e Edge */
+                  #tabs-container {
+                    -ms-overflow-style: none;
+                  }
+                `}</style>
               </div>
               
               {/* Filtro de Setor - Mostrado apenas quando não estiver na aba Contatos */}
