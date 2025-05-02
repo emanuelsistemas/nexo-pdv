@@ -143,38 +143,49 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   // Estado para os campos do formulário
   const [companyForm, setCompanyForm] = useState({
     // Dados Gerais
+    status: 'Ativo',
     document: '',
     companyName: '',
     tradeName: '',
     
     // Inf. Sistema
-    username: '',
-    password: '',
-    apiKey: '',
-    accessLevel: 'user',
-    isActive: true,
+    systemCode: '',
+    systemNotes: '',
     
     // Contatos
-    phone: '',
     email: '',
     address: '',
-    responsibles: [{ name: '', id: Date.now().toString() }] // Array de responsáveis com id único
+    contacts: [{ 
+      id: Date.now().toString(),
+      name: '', 
+      phone: '', 
+      position: 'Proprietário'
+    }] // Array de contatos com nome, telefone e cargo
   });
   const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
   // Removido estado de subaba pois agora a aba Contatos já mostra diretamente a grid de empresas
   // Estado para armazenar a lista de empresas
   const [companies, setCompanies] = useState<Array<{
     id: string;
+    status?: string;
     name: string;
     phone: string;
+    whatsappPhone?: string;
     email?: string;
     address?: string;
+    contacts?: Array<{
+      id: string;
+      name: string;
+      phone: string;
+      position: string;
+    }>;
     createdAt: Date;
   }>>([    
     {
       id: '1',
       name: 'Nexo Sistemas Ltda',
       phone: '(12) 3456-7890',
+      whatsappPhone: '(12) 98765-4321',
       email: 'contato@nexosistemas.com.br',
       address: 'Av. Principal, 1000',
       createdAt: new Date(2023, 5, 10)
@@ -182,10 +193,9 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
     {
       id: '2',
       name: 'Tech Solutions SA',
-      phone: '(11) 2345-6789',
-      email: 'contato@techsolutions.com',
-      address: 'Rua das Flores, 500',
-      createdAt: new Date(2023, 8, 15)
+      phone: '(11) 98765-4321',
+      email: 'atendimento@techsolutions.com.br',
+      createdAt: new Date(2024, 0, 15)
     },
     {
       id: '3',
@@ -2512,7 +2522,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 </div>
                 
                 {/* Formulário deslizante para cadastro de empresas */}
-                <div className={`fixed top-0 right-0 h-full w-96 bg-[#1A1A1A] border-l border-gray-800 shadow-lg transform transition-transform duration-300 ease-in-out z-50 ${showCompanyForm ? 'translate-x-0' : 'translate-x-full'}`}>
+                <div className={`fixed top-0 right-0 h-full w-[500px] bg-[#1A1A1A] border-l border-gray-800 shadow-lg transform transition-transform duration-300 ease-in-out z-50 ${showCompanyForm ? 'translate-x-0' : 'translate-x-full'}`}>
                   {/* Cabeçalho do formulário */}
                   <div className="p-4 border-b border-gray-800 bg-[#2A2A2A] flex justify-between items-center">
                     <h2 className="text-xl font-semibold text-white">Cadastrar Empresa</h2>
@@ -2564,6 +2574,25 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                       {/* Aba de Dados Gerais */}
                       {activeFormTab === 'general' && (
                         <>
+                          {/* Status */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Status</label>
+                            <select
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              value={companyForm.status}
+                              onChange={(e) => {
+                                setCompanyForm(prev => ({
+                                  ...prev,
+                                  status: e.target.value
+                                }));
+                              }}
+                            >
+                              <option value="Ativo">Ativo</option>
+                              <option value="Bloqueado">Bloqueado</option>
+                              <option value="Cancelado">Cancelado</option>
+                            </select>
+                          </div>
+                        
                           {/* Tipo de documento (CNPJ ou CPF) */}
                           <div className="mb-4">
                             <label className="block text-gray-300 mb-2">Tipo de documento</label>
@@ -2682,117 +2711,10 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                               }))}
                             />
                           </div>
-                        </>
-                      )}
-                      
-                      {/* Aba de Informações do Sistema */}
-                      {activeFormTab === 'system' && (
-                        <>
-                          {/* Nome de Usuário */}
-                          <div className="mb-4">
-                            <label className="block text-gray-300 mb-2">Nome de Usuário</label>
-                            <input
-                              type="text"
-                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
-                              placeholder="Nome de usuário para acesso ao sistema"
-                              value={companyForm.username}
-                              onChange={(e) => setCompanyForm(prev => ({
-                                ...prev,
-                                username: e.target.value
-                              }))}
-                            />
-                          </div>
-
-                          {/* Senha */}
-                          <div className="mb-4">
-                            <label className="block text-gray-300 mb-2">Senha</label>
-                            <input
-                              type="password"
-                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
-                              placeholder="Senha para acesso ao sistema"
-                              value={companyForm.password}
-                              onChange={(e) => setCompanyForm(prev => ({
-                                ...prev,
-                                password: e.target.value
-                              }))}
-                            />
-                          </div>
-
-                          {/* API Key */}
-                          <div className="mb-4">
-                            <label className="block text-gray-300 mb-2">API Key</label>
-                            <input
-                              type="text"
-                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
-                              placeholder="Chave de API para integrações"
-                              value={companyForm.apiKey}
-                              onChange={(e) => setCompanyForm(prev => ({
-                                ...prev,
-                                apiKey: e.target.value
-                              }))}
-                            />
-                          </div>
-
-                          {/* Nível de Acesso */}
-                          <div className="mb-4">
-                            <label className="block text-gray-300 mb-2">Nível de Acesso</label>
-                            <select
-                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
-                              value={companyForm.accessLevel}
-                              onChange={(e) => setCompanyForm(prev => ({
-                                ...prev,
-                                accessLevel: e.target.value
-                              }))}
-                            >
-                              <option value="user">Usuário</option>
-                              <option value="admin">Administrador</option>
-                              <option value="guest">Convidado</option>
-                            </select>
-                          </div>
-
-                          {/* Status de Ativação */}
-                          <div className="mb-4">
-                            <label className="flex items-center cursor-pointer">
-                              <div className="relative">
-                                <input
-                                  type="checkbox"
-                                  className="sr-only"
-                                  checked={companyForm.isActive}
-                                  onChange={(e) => setCompanyForm(prev => ({
-                                    ...prev,
-                                    isActive: e.target.checked
-                                  }))}
-                                />
-                                <div className={`block w-10 h-6 rounded-full ${companyForm.isActive ? 'bg-emerald-500' : 'bg-gray-600'} transition-colors`}></div>
-                                <div className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform transform ${companyForm.isActive ? 'translate-x-4' : ''}`}></div>
-                              </div>
-                              <div className="ml-3 text-gray-300">Empresa Ativa</div>
-                            </label>
-                          </div>
-                        </>
-                      )}
-                      
-                      {/* Aba de Contatos */}
-                      {activeFormTab === 'contacts' && (
-                        <div>
-                          {/* Telefone - Versão simplificada */}
-                          <div className="mb-4">
-                            <label className="block text-gray-300 mb-2">Telefone</label>
-                            <input
-                              type="text"
-                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
-                              placeholder="(00) 00000-0000"
-                              value={companyForm.phone || ''}
-                              onChange={(e) => setCompanyForm(prev => ({
-                                ...prev,
-                                phone: e.target.value
-                              }))}
-                            />
-                          </div>
                           
-                          {/* Email - Versão simplificada */}
+                          {/* Email da empresa */}
                           <div className="mb-4">
-                            <label className="block text-gray-300 mb-2">Email</label>
+                            <label className="block text-gray-300 mb-2">Email da Empresa</label>
                             <input
                               type="email"
                               className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
@@ -2805,30 +2727,204 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                             />
                           </div>
                           
-                          {/* Responsável - Versão simplificada sem adicionar múltiplos */}
+                          {/* Endereço */}
                           <div className="mb-4">
-                            <label className="block text-gray-300 mb-2">Nome do Responsável</label>
+                            <label className="block text-gray-300 mb-2">Endereço</label>
+                            <textarea
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              placeholder="Endereço completo da empresa"
+                              rows={3}
+                              value={companyForm.address || ''}
+                              onChange={(e) => setCompanyForm(prev => ({
+                                ...prev,
+                                address: e.target.value
+                              }))}
+                            />
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* Aba de Informações do Sistema */}
+                      {activeFormTab === 'system' && (
+                        <>
+                          {/* Código do Sistema */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Código do Sistema</label>
                             <input
                               type="text"
                               className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
-                              placeholder="Nome do responsável principal"
-                              value={companyForm.responsibles[0]?.name || ''}
-                              onChange={(e) => {
-                                const updatedResponsibles = [...companyForm.responsibles];
-                                if (updatedResponsibles.length === 0) {
-                                  updatedResponsibles.push({ name: e.target.value, id: Date.now().toString() });
-                                } else {
-                                  updatedResponsibles[0] = {
-                                    ...updatedResponsibles[0],
-                                    name: e.target.value
-                                  };
-                                }
-                                setCompanyForm(prev => ({
-                                  ...prev,
-                                  responsibles: updatedResponsibles
-                                }));
-                              }}
+                              placeholder="Informe o código do sistema utilizado"
+                              value={companyForm.systemCode || ''}
+                              onChange={(e) => setCompanyForm(prev => ({
+                                ...prev,
+                                systemCode: e.target.value
+                              }))}
                             />
+                          </div>
+
+                          {/* Observações */}
+                          <div className="mb-4">
+                            <label className="block text-gray-300 mb-2">Observações</label>
+                            <textarea
+                              className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                              placeholder="Informações detalhadas sobre o sistema utilizado pelo cliente"
+                              rows={10}
+                              value={companyForm.systemNotes || ''}
+                              onChange={(e) => setCompanyForm(prev => ({
+                                ...prev,
+                                systemNotes: e.target.value
+                              }))}
+                            />
+                          </div>
+                        </>
+                      )}
+                      
+                      {/* Aba de Contatos */}
+                      {activeFormTab === 'contacts' && (
+                        <div>
+                          {/* Lista de contatos */}
+                          <div className="mb-4">
+                            <div className="flex justify-between items-center mb-3">
+                              <label className="block text-gray-300 font-medium">Contatos</label>
+                              <button
+                                type="button"
+                                className="text-emerald-500 hover:text-emerald-400 flex items-center gap-1"
+                                onClick={() => {
+                                  setCompanyForm(prev => ({
+                                    ...prev,
+                                    contacts: [
+                                      ...prev.contacts,
+                                      { 
+                                        id: Date.now().toString(),
+                                        name: '', 
+                                        phone: '', 
+                                        position: 'Funcionário'
+                                      }
+                                    ]
+                                  }));
+                                }}
+                              >
+                                <Plus size={16} />
+                                <span>Adicionar contato</span>
+                              </button>
+                            </div>
+                            
+                            {/* Cabeçalho da lista de contatos */}
+                            <div className="grid grid-cols-12 gap-3 mb-2 px-2 text-xs text-gray-400">
+                              <div className="col-span-5">Nome</div>
+                              <div className="col-span-4">WhatsApp</div>
+                              <div className="col-span-2">Cargo</div>
+                              <div className="col-span-1"></div>
+                            </div>
+                            
+                            {/* Lista de contatos */}
+                            <div className="max-h-[300px] overflow-y-auto pr-1">
+                              {companyForm.contacts.map((contact, index) => (
+                                <div key={contact.id} className="grid grid-cols-12 gap-3 mb-3 items-center">
+                                  {/* Nome do contato */}
+                                  <div className="col-span-5">
+                                    <input
+                                      type="text"
+                                      className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                                      placeholder="Nome do contato"
+                                      value={contact.name}
+                                      onChange={(e) => {
+                                        const updatedContacts = [...companyForm.contacts];
+                                        updatedContacts[index] = {
+                                          ...updatedContacts[index],
+                                          name: e.target.value
+                                        };
+                                        setCompanyForm(prev => ({
+                                          ...prev,
+                                          contacts: updatedContacts
+                                        }));
+                                      }}
+                                    />
+                                  </div>
+                                  
+                                  {/* Telefone do contato com máscara */}
+                                  <div className="col-span-4">
+                                    <input
+                                      type="text"
+                                      className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                                      placeholder="(00) 00000-0000"
+                                      value={contact.phone}
+                                      onChange={(e) => {
+                                        const value = e.target.value.replace(/\D/g, '');
+                                        let maskedValue = '';
+                                        
+                                        if (value.length <= 2) {
+                                          maskedValue = value.length > 0 ? `(${value}` : '';
+                                        } else if (value.length <= 6) {
+                                          maskedValue = `(${value.slice(0, 2)}) ${value.slice(2)}`;
+                                        } else if (value.length <= 10) {
+                                          maskedValue = `(${value.slice(0, 2)}) ${value.slice(2, 6)}-${value.slice(6)}`;
+                                        } else {
+                                          maskedValue = `(${value.slice(0, 2)}) ${value.slice(2, 7)}-${value.slice(7, 11)}`;
+                                        }
+                                        
+                                        const updatedContacts = [...companyForm.contacts];
+                                        updatedContacts[index] = {
+                                          ...updatedContacts[index],
+                                          phone: maskedValue
+                                        };
+                                        setCompanyForm(prev => ({
+                                          ...prev,
+                                          contacts: updatedContacts
+                                        }));
+                                      }}
+                                    />
+                                  </div>
+                                  
+                                  {/* Cargo do contato */}
+                                  <div className="col-span-2">
+                                    <select
+                                      className="w-full bg-gray-800 text-gray-300 border border-gray-700 rounded-md p-2 focus:outline-none focus:border-emerald-500"
+                                      value={contact.position}
+                                      onChange={(e) => {
+                                        const updatedContacts = [...companyForm.contacts];
+                                        updatedContacts[index] = {
+                                          ...updatedContacts[index],
+                                          position: e.target.value
+                                        };
+                                        setCompanyForm(prev => ({
+                                          ...prev,
+                                          contacts: updatedContacts
+                                        }));
+                                      }}
+                                    >
+                                      <option value="Proprietário">Proprietário</option>
+                                      <option value="Gerente">Gerente</option>
+                                      <option value="Funcionário">Funcionário</option>
+                                    </select>
+                                  </div>
+                                  
+                                  {/* Botão para remover contato */}
+                                  <div className="col-span-1 text-center">
+                                    {companyForm.contacts.length > 1 && (
+                                      <button
+                                        type="button"
+                                        className="text-gray-400 hover:text-red-500 transition-colors"
+                                        onClick={() => {
+                                          const updatedContacts = companyForm.contacts.filter((_, i) => i !== index);
+                                          setCompanyForm(prev => ({
+                                            ...prev,
+                                            contacts: updatedContacts
+                                          }));
+                                        }}
+                                      >
+                                        <X size={18} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            
+                            {/* Nota sobre contatos */}
+                            <p className="text-xs text-gray-400 mt-2 italic">
+                              Os contatos cadastrados estarão disponíveis para identificação no chat quando entrarem em contato via WhatsApp.
+                            </p>
                           </div>
                         </div>
                       )}
@@ -2848,31 +2944,45 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                             // Aqui seria a lógica para salvar a empresa no backend
                             // Por enquanto, apenas adicionamos à lista local
                             
+                            // Formatar o telefone do contato principal para exibir na lista
+                            const mainContact = companyForm.contacts[0];
+                            const displayPhone = mainContact ? mainContact.phone : '';
+                            
+                            // Formatar o telefone no padrão WhatsApp para armazenar
+                            const whatsappPhone = mainContact ? mainContact.phone.replace(/\D/g, '') : '';
+                            
                             const newCompany = {
                               id: Date.now().toString(),
+                              status: companyForm.status, // Adicionar o status da empresa
                               name: companyForm.tradeName || companyForm.companyName,
-                              phone: companyForm.phone || '(11) 98765-4321',
-                              email: companyForm.email || 'contato@empresa.com',
+                              phone: displayPhone, // Telefone formatado para exibição
+                              whatsappPhone: whatsappPhone, // Telefone sem formatação para WhatsApp
+                              email: companyForm.email || '',
+                              address: companyForm.address || '',
+                              contacts: companyForm.contacts,
+                              createdAt: new Date()
                             };
                             
+                            // Atualizar a lista de empresas - filteredCompanies é derivado automaticamente de companies
                             setCompanies([newCompany, ...companies]);
-                            setFilteredCompanies([newCompany, ...filteredCompanies]);
                             setShowCompanyForm(false);
                             
                             // Resetar o formulário
                             setCompanyForm({
+                              status: 'Ativo',
                               document: '',
                               companyName: '',
                               tradeName: '',
-                              username: '',
-                              password: '',
-                              apiKey: '',
-                              accessLevel: 'user',
-                              isActive: true,
-                              phone: '',
+                              systemCode: '',
+                              systemNotes: '',
                               email: '',
                               address: '',
-                              responsibles: [{ name: '', id: Date.now().toString() }]
+                              contacts: [{ 
+                                id: Date.now().toString(),
+                                name: '', 
+                                phone: '', 
+                                position: 'Proprietário'
+                              }]
                             });
                             
                             // Voltar para a primeira aba ao fechar o formulário
