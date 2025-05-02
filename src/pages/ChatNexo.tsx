@@ -131,6 +131,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const [inputMessage, setInputMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
+  // Estado para controlar qual subaba está ativa na aba Contatos
+  const [activeContactsSubtab, setActiveContactsSubtab] = useState<'contacts' | 'companies'>('contacts');
   // Estado para armazenar a lista de contatos separada das conversas
   const [contacts, setContacts] = useState<Conversation[]>([]);
   const [selectedSector, setSelectedSector] = useState<'all' | 'suporte' | 'comercial' | 'administrativo'>('all');
@@ -2167,19 +2169,42 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
               )}
             </div>
             
-            {/* Botão Cadastrar Empresa (apenas na aba Contatos) */}
+            {/* Subabas de Contatos/Empresas (apenas na aba Contatos) */}
             {activeTab === 'contacts' && (
               <div className="p-3 pb-0">
-                <button 
-                  className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white font-medium flex items-center justify-center gap-2"
-                  onClick={() => {
-                    // Aqui você implementaria a lógica para abrir o modal de cadastro de empresa
-                    alert('Funcionalidade de cadastro de empresa a ser implementada');
-                  }}
-                >
-                  <Users size={16} />
-                  Cadastrar Empresa
-                </button>
+                {/* Subabes de Contatos/Empresas */}
+                <div className="flex space-x-1 mb-3">
+                  <button
+                    className={`flex-1 py-2 px-3 rounded-t-lg font-medium transition-colors ${activeContactsSubtab === 'contacts' 
+                      ? 'bg-emerald-600 text-white' 
+                      : 'bg-[#2A2A2A] text-gray-300 hover:bg-[#3A3A3A]'}`}
+                    onClick={() => setActiveContactsSubtab('contacts')}
+                  >
+                    Contatos
+                  </button>
+                  <button
+                    className={`flex-1 py-2 px-3 rounded-t-lg font-medium transition-colors ${activeContactsSubtab === 'companies' 
+                      ? 'bg-emerald-600 text-white' 
+                      : 'bg-[#2A2A2A] text-gray-300 hover:bg-[#3A3A3A]'}`}
+                    onClick={() => setActiveContactsSubtab('companies')}
+                  >
+                    Empresas
+                  </button>
+                </div>
+                
+                {/* Botão Cadastrar Empresa (apenas na subaba Empresas) */}
+                {activeContactsSubtab === 'companies' && (
+                  <button 
+                    className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white font-medium flex items-center justify-center gap-2"
+                    onClick={() => {
+                      // Aqui você implementaria a lógica para abrir o modal de cadastro de empresa
+                      alert('Funcionalidade de cadastro de empresa a ser implementada');
+                    }}
+                  >
+                    <Users size={16} />
+                    Cadastrar Empresa
+                  </button>
+                )}
               </div>
             )}
             
@@ -2189,7 +2214,9 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                 <input
                   type="text"
-                  placeholder={activeTab === 'contacts' ? "Pesquisar contatos..." : "Pesquisar conversas..."}
+                  placeholder={activeTab === 'contacts' 
+                    ? (activeContactsSubtab === 'contacts' ? "Pesquisar contatos..." : "Pesquisar empresas...") 
+                    : "Pesquisar conversas..."}
                   className="w-full pl-10 pr-4 py-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
