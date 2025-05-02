@@ -976,11 +976,27 @@ export default function ChatNexo() {
         mappedConversations.forEach(newConv => {
           const existingConv = conversationMap.get(newConv.id);
           if (existingConv) {
-            // Se já existir, mantém o status e setor, mas atualiza o restante
+            // Se já existir, mantém o status, setor e mescla as mensagens
+            // Primeiro, juntar todas as mensagens (novas e existentes)
+            const allMessages = [...newConv.messages, ...existingConv.messages];
+            
+            // Remover mensagens duplicadas usando um Map com o ID como chave
+            const uniqueMessages = Array.from(
+              new Map(allMessages.map(msg => [msg.id, msg])).values()
+            );
+            
+            // Ordenar mensagens por timestamp (mais antigas primeiro, mais recentes por último)
+            const sortedMessages = uniqueMessages.sort((a, b) => 
+              a.timestamp instanceof Date && b.timestamp instanceof Date
+                ? a.timestamp.getTime() - b.timestamp.getTime() // Ordem crescente (antigas → recentes)
+                : 0
+            );
+            
             conversationMap.set(newConv.id, {
               ...newConv,
               status: existingConv.status,
-              sector: existingConv.sector
+              sector: existingConv.sector,
+              messages: sortedMessages // Usar as mensagens mescladas
             });
           } else {
             conversationMap.set(newConv.id, newConv);
