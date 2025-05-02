@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Som Sintético para Notificações</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #4caf50;
+            text-align: center;
+        }
+        button {
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+            width: 180px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 14px;
+            margin-top: 20px;
+        }
+        .status {
+            text-align: center;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Som Sintético para Notificações de Chat</h1>
+        
+        <p>Esta página gera sons sintetizados que funcionam em qualquer navegador sem depender de arquivos externos.</p>
+        
+        <div class="buttons">
+            <button id="sound1">Som Simples</button>
+            <button id="sound2">Ding Suave</button>
+            <button id="sound3">Notificação Dupla</button>
+            <button id="sound4">Sino Agudo</button>
+            <button id="sound5">Toque Padrão</button>
+            <button id="sound6">Estilo MSN</button>
+        </div>
+        
+        <div id="status" class="status hidden"></div>
+        
+        <h3>Implementação no ChatNexo:</h3>
+        <pre id="codeSnippet">// Selecione um som para ver a implementação</pre>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const statusDiv = document.getElementById('status');
+            const codeSnippet = document.getElementById('codeSnippet');
+            
+            // Objeto de contexto de áudio global
+            let audioContext = null;
+            
+            // Função para inicializar o contexto de áudio (deve ser chamada a partir de um evento de usuário)
+            function initAudioContext() {
+                if (!audioContext) {
+                    try {
+                        // Criar contexto de áudio (funciona em todos os navegadores modernos)
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        return true;
+                    } catch (e) {
+                        console.error('Falha ao criar contexto de áudio:', e);
+                        showStatus('Erro: Seu navegador não suporta Web Audio API', 'error');
+                        return false;
+                    }
+                }
+                return true;
+            }
+            
+            // Som 1: Som simples - bipe curto
+            function playSound1() {
+                if (!initAudioContext()) return;
+                
+                try {
+                    // Criar um oscilador (gerador de onda)
+                    const oscillator = audioContext.createOscillator();
+                    oscillator.type = 'sine'; // onda senoidal (suave)
+                    oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // Nota A5
+                    
+                    // Criar um amplificador com envelope para controlar o volume
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.01);
+                    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
+                    
+                    // Conectar o oscilador ao amplificador e à saída
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    // Tocar o som
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.3);
+                    
+                    showStatus('Som reproduzido com sucesso!', 'success');
+                    updateCodeSnippet(1);
+                } catch (e) {
+                    console.error('Erro ao tocar som:', e);
+                    showStatus('Erro ao tocar som: ' + e.message, 'error');
+                }
+            }
+            
+            // Som 2: Ding suave - som mais melódico
+            function playSound2() {
+                if (!initAudioContext()) return;
+                
+                try {
+                    // Criar um oscilador para a nota principal
+                    const oscillator = audioContext.createOscillator();
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(587.33, audioContext.currentTime); // D5
+                    oscillator.frequency.linearRampToValueAtTime(784, audioContext.currentTime + 0.1); // G5
+                    
+                    // Criar ganho para controlar a envoltória de amplitude
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.05);
+                    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.5);
+                    
+                    // Conectar
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    // Tocar
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.5);
+                    
+                    showStatus('Som reproduzido com sucesso!', 'success');
+                    updateCodeSnippet(2);
+                } catch (e) {
+                    console.error('Erro ao tocar som:', e);
+                    showStatus('Erro ao tocar som: ' + e.message, 'error');
+                }
+            }
+            
+            // Som 3: Notificação Dupla - dois tons em sequência
+            function playSound3() {
+                if (!initAudioContext()) return;
+                
+                try {
+                    // Primeiro tom
+                    const osc1 = audioContext.createOscillator();
+                    osc1.type = 'sine';
+                    osc1.frequency.setValueAtTime(659.25, audioContext.currentTime); // E5
+                    
+                    const gain1 = audioContext.createGain();
+                    gain1.gain.setValueAtTime(0, audioContext.currentTime);
+                    gain1.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.03);
+                    gain1.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2);
+                    
+                    osc1.connect(gain1);
+                    gain1.connect(audioContext.destination);
+                    
+                    osc1.start();
+                    osc1.stop(audioContext.currentTime + 0.2);
+                    
+                    // Segundo tom (começa depois)
+                    const osc2 = audioContext.createOscillator();
+                    osc2.type = 'sine';
+                    osc2.frequency.setValueAtTime(880, audioContext.currentTime + 0.25); // A5
+                    
+                    const gain2 = audioContext.createGain();
+                    gain2.gain.setValueAtTime(0, audioContext.currentTime + 0.25);
+                    gain2.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.28);
+                    gain2.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.45);
+                    
+                    osc2.connect(gain2);
+                    gain2.connect(audioContext.destination);
+                    
+                    osc2.start(audioContext.currentTime + 0.25);
+                    osc2.stop(audioContext.currentTime + 0.45);
+                    
+                    showStatus('Som reproduzido com sucesso!', 'success');
+                    updateCodeSnippet(3);
+                } catch (e) {
+                    console.error('Erro ao tocar som:', e);
+                    showStatus('Erro ao tocar som: ' + e.message, 'error');
+                }
+            }
+            
+            // Som 4: Sino Agudo - som tipo campainha
+            function playSound4() {
+                if (!initAudioContext()) return;
+                
+                try {
+                    // Oscilador principal
+                    const oscillator = audioContext.createOscillator();
+                    oscillator.type = 'triangle'; // onda triangular para som mais metálico
+                    oscillator.frequency.setValueAtTime(1046.50, audioContext.currentTime); // C6 (alto)
+                    
+                    // Modulação para som tipo sino
+                    const modulator = audioContext.createOscillator();
+                    modulator.type = 'sine';
+                    modulator.frequency.setValueAtTime(10, audioContext.currentTime);
+                    
+                    const modulatorGain = audioContext.createGain();
+                    modulatorGain.gain.setValueAtTime(20, audioContext.currentTime);
+                    
+                    // Ganho principal
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+                    
+                    // Conectar tudo
+                    modulator.connect(modulatorGain);
+                    modulatorGain.connect(oscillator.frequency);
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    // Tocar
+                    modulator.start();
+                    oscillator.start();
+                    
+                    modulator.stop(audioContext.currentTime + 0.5);
+                    oscillator.stop(audioContext.currentTime + 0.5);
+                    
+                    showStatus('Som reproduzido com sucesso!', 'success');
+                    updateCodeSnippet(4);
+                } catch (e) {
+                    console.error('Erro ao tocar som:', e);
+                    showStatus('Erro ao tocar som: ' + e.message, 'error');
+                }
+            }
+            
+            // Som 5: Toque Padrão - um clássico toque de notificação
+            function playSound5() {
+                if (!initAudioContext()) return;
+                
+                try {
+                    // Notas da melodia
+                    const notes = [392, 523.25, 659.25]; // G4, C5, E5
+                    const startTimes = [0, 0.15, 0.3];
+                    const durations = [0.15, 0.15, 0.3];
+                    
+                    // Criar um oscilador para cada nota
+                    for (let i = 0; i < notes.length; i++) {
+                        const oscillator = audioContext.createOscillator();
+                        oscillator.type = 'sine';
+                        oscillator.frequency.setValueAtTime(notes[i], audioContext.currentTime + startTimes[i]);
+                        
+                        const gainNode = audioContext.createGain();
+                        gainNode.gain.setValueAtTime(0, audioContext.currentTime + startTimes[i]);
+                        gainNode.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + startTimes[i] + 0.01);
+                        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + startTimes[i] + durations[i]);
+                        
+                        oscillator.connect(gainNode);
+                        gainNode.connect(audioContext.destination);
+                        
+                        oscillator.start(audioContext.currentTime + startTimes[i]);
+                        oscillator.stop(audioContext.currentTime + startTimes[i] + durations[i]);
+                    }
+                    
+                    showStatus('Som reproduzido com sucesso!', 'success');
+                    updateCodeSnippet(5);
+                } catch (e) {
+                    console.error('Erro ao tocar som:', e);
+                    showStatus('Erro ao tocar som: ' + e.message, 'error');
+                }
+            }
+            
+            // Som 6: Estilo MSN - similar ao som do MSN Messenger
+            function playSound6() {
+                if (!initAudioContext()) return;
+                
+                try {
+                    // Notas similar ao MSN
+                    const oscillator = audioContext.createOscillator();
+                    oscillator.type = 'sine';
+                    
+                    // Frequências que lembram o som do MSN
+                    oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5
+                    oscillator.frequency.setValueAtTime(1100, audioContext.currentTime + 0.05); // Aproximadamente C#6
+                    
+                    // Ganho para controle de volume
+                    const gainNode = audioContext.createGain();
+                    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0.35, audioContext.currentTime + 0.02);
+                    gainNode.gain.linearRampToValueAtTime(0.25, audioContext.currentTime + 0.05);
+                    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
+                    
+                    // Conectar e tocar
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.3);
+                    
+                    showStatus('Som reproduzido com sucesso!', 'success');
+                    updateCodeSnippet(6);
+                } catch (e) {
+                    console.error('Erro ao tocar som:', e);
+                    showStatus('Erro ao tocar som: ' + e.message, 'error');
+                }
+            }
+            
+            // Função para mostrar status
+            function showStatus(message, type) {
+                statusDiv.textContent = message;
+                statusDiv.className = 'status ' + type;
+                statusDiv.classList.remove('hidden');
+                
+                // Esconder após 3 segundos
+                setTimeout(() => {
+                    statusDiv.classList.add('hidden');
+                }, 3000);
+            }
+            
+            // Função para atualizar o snippet de código
+            function updateCodeSnippet(soundNumber) {
+                let functionCode = '';
+                
+                switch(soundNumber) {
+                    case 1:
+                        functionCode = `// Função para tocar som simples
+const playNotificationSound = () => {
+  try {
+    // Criar contexto de áudio (deve ser chamado a partir de uma interação do usuário)
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Criar oscilador (gerador de onda)
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = 'sine'; // onda senoidal (suave)
+    oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // Nota A5
+    
+    // Criar controle de volume com envelope
+    const gainNode = audioContext.createGain();
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.01);
+    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
+    
+    // Conectar e tocar
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.3);
+  } catch (error) {
+    console.error('Erro ao tocar som de notificação:', error);
+  }
+};`;
+                        break;
+                    case 2:
+                        functionCode = `// Função para tocar ding suave
+const playNotificationSound = () => {
+  try {
+    // Criar contexto de áudio (deve ser chamado a partir de uma interação do usuário)
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Criar oscilador para a nota principal
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(587.33, audioContext.currentTime); // D5
+    oscillator.frequency.linearRampToValueAtTime(784, audioContext.currentTime + 0.1); // G5
+    
+    // Criar ganho para controlar a envoltória de amplitude
+    const gainNode = audioContext.createGain();
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.05);
+    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.5);
+    
+    // Conectar e tocar
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.5);
+  } catch (error) {
+    console.error('Erro ao tocar som de notificação:', error);
+  }
+};`;
+                        break;
+                    case 3:
+                        functionCode = `// Função para tocar notificação dupla
+const playNotificationSound = () => {
+  try {
+    // Criar contexto de áudio (deve ser chamado a partir de uma interação do usuário)
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Primeiro tom
+    const osc1 = audioContext.createOscillator();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(659.25, audioContext.currentTime); // E5
+    
+    const gain1 = audioContext.createGain();
+    gain1.gain.setValueAtTime(0, audioContext.currentTime);
+    gain1.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.03);
+    gain1.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2);
+    
+    osc1.connect(gain1);
+    gain1.connect(audioContext.destination);
+    
+    osc1.start();
+    osc1.stop(audioContext.currentTime + 0.2);
+    
+    // Segundo tom (começa depois)
+    const osc2 = audioContext.createOscillator();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, audioContext.currentTime + 0.25); // A5
+    
+    const gain2 = audioContext.createGain();
+    gain2.gain.setValueAtTime(0, audioContext.currentTime + 0.25);
+    gain2.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + 0.28);
+    gain2.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.45);
+    
+    osc2.connect(gain2);
+    gain2.connect(audioContext.destination);
+    
+    osc2.start(audioContext.currentTime + 0.25);
+    osc2.stop(audioContext.currentTime + 0.45);
+  } catch (error) {
+    console.error('Erro ao tocar som de notificação:', error);
+  }
+};`;
+                        break;
+                    case 4:
+                        functionCode = `// Função para tocar sino agudo
+const playNotificationSound = () => {
+  try {
+    // Criar contexto de áudio (deve ser chamado a partir de uma interação do usuário)
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Oscilador principal
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = 'triangle'; // onda triangular para som mais metálico
+    oscillator.frequency.setValueAtTime(1046.50, audioContext.currentTime); // C6 (alto)
+    
+    // Modulação para som tipo sino
+    const modulator = audioContext.createOscillator();
+    modulator.type = 'sine';
+    modulator.frequency.setValueAtTime(10, audioContext.currentTime);
+    
+    const modulatorGain = audioContext.createGain();
+    modulatorGain.gain.setValueAtTime(20, audioContext.currentTime);
+    
+    // Ganho principal
+    const gainNode = audioContext.createGain();
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+    
+    // Conectar tudo
+    modulator.connect(modulatorGain);
+    modulatorGain.connect(oscillator.frequency);
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    // Tocar
+    modulator.start();
+    oscillator.start();
+    
+    modulator.stop(audioContext.currentTime + 0.5);
+    oscillator.stop(audioContext.currentTime + 0.5);
+  } catch (error) {
+    console.error('Erro ao tocar som de notificação:', error);
+  }
+};`;
+                        break;
+                    case 5:
+                        functionCode = `// Função para tocar som padrão de notificação
+const playNotificationSound = () => {
+  try {
+    // Criar contexto de áudio (deve ser chamado a partir de uma interação do usuário)
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Notas da melodia
+    const notes = [392, 523.25, 659.25]; // G4, C5, E5
+    const startTimes = [0, 0.15, 0.3];
+    const durations = [0.15, 0.15, 0.3];
+    
+    // Criar um oscilador para cada nota
+    for (let i = 0; i < notes.length; i++) {
+      const oscillator = audioContext.createOscillator();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(notes[i], audioContext.currentTime + startTimes[i]);
+      
+      const gainNode = audioContext.createGain();
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime + startTimes[i]);
+      gainNode.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + startTimes[i] + 0.01);
+      gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + startTimes[i] + durations[i]);
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.start(audioContext.currentTime + startTimes[i]);
+      oscillator.stop(audioContext.currentTime + startTimes[i] + durations[i]);
+    }
+  } catch (error) {
+    console.error('Erro ao tocar som de notificação:', error);
+  }
+};`;
+                        break;
+                    case 6:
+                        functionCode = `// Função para tocar som estilo MSN
+const playNotificationSound = () => {
+  try {
+    // Criar contexto de áudio (deve ser chamado a partir de uma interação do usuário)
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Notas similar ao MSN
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = 'sine';
+    
+    // Frequências que lembram o som do MSN
+    oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5
+    oscillator.frequency.setValueAtTime(1100, audioContext.currentTime + 0.05); // Aproximadamente C#6
+    
+    // Ganho para controle de volume
+    const gainNode = audioContext.createGain();
+    gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.35, audioContext.currentTime + 0.02);
+    gainNode.gain.linearRampToValueAtTime(0.25, audioContext.currentTime + 0.05);
+    gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
+    
+    // Conectar e tocar
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.3);
+  } catch (error) {
+    console.error('Erro ao tocar som de notificação:', error);
+  }
+};`;
+                        break;
+                }
+                
+                codeSnippet.textContent = functionCode;
+            }
+            
+            // Adicionar eventos aos botões
+            document.getElementById('sound1').addEventListener('click', playSound1);
+            document.getElementById('sound2').addEventListener('click', playSound2);
+            document.getElementById('sound3').addEventListener('click', playSound3);
+            document.getElementById('sound4').addEventListener('click', playSound4);
+            document.getElementById('sound5').addEventListener('click', playSound5);
+            document.getElementById('sound6').addEventListener('click', playSound6);
+        });
+    </script>
+</body>
+</html>

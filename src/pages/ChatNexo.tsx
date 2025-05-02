@@ -223,6 +223,11 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   // Referência para o container de mensagens para controlar o scroll
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   
+  // Referência para o contexto de áudio (Web Audio API)
+  const audioContextRef = useRef<AudioContext | null>(null);
+  
+
+
   // Definir isLoading como true por padrão para mostrar o overlay imediatamente
   const [isLoading, setIsLoading] = useState(true);
   
@@ -1055,6 +1060,49 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
 
   // Função para conectar ao Socket.io da Evolution API
   const connectSocketIO = (baseUrl: string, instanceName: string, apikey: string) => {
+    // Função para tocar som padrão de notificação usando Web Audio API
+    const playNotificationSound = () => {
+      try {
+        // Criar contexto de áudio se ainda não existir
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        
+        // Se temos o contexto de áudio
+        if (audioContextRef.current) {
+          const audioContext = audioContextRef.current;
+          
+          // Notas da melodia (Som de notificação padrão)
+          const notes = [392, 523.25, 659.25]; // G4, C5, E5
+          const startTimes = [0, 0.15, 0.3];
+          const durations = [0.15, 0.15, 0.3];
+          
+          // Criar um oscilador para cada nota
+          for (let i = 0; i < notes.length; i++) {
+            const oscillator = audioContext.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(notes[i], audioContext.currentTime + startTimes[i]);
+            
+            const gainNode = audioContext.createGain();
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime + startTimes[i]);
+            gainNode.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + startTimes[i] + 0.01);
+            gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + startTimes[i] + durations[i]);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.start(audioContext.currentTime + startTimes[i]);
+            oscillator.stop(audioContext.currentTime + startTimes[i] + durations[i]);
+          }
+          
+          console.log('Som de notificação tocado com sucesso');
+        } else {
+          console.error('Contexto de áudio não disponível');
+        }
+      } catch (error) {
+        console.error('Erro ao tocar som de notificação:', error);
+      }
+    };
     // Fechar conexão existente se houver
     if (socketRef.current) {
       console.log('Fechando conexão Socket.io existente');
@@ -1262,7 +1310,10 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       
       // Função para incrementar o contador de mensagens não lidas
       const incrementUnreadCount = (contactId: string): void => {
-        console.log(`❌❌❌ INCREMENTANDO CONTADOR para: ${contactId} ❌❌❌`);
+        console.log(`❤️❤️❤️ INCREMENTANDO CONTADOR para: ${contactId} ❤️❤️❤️`);
+        
+        // Tocar som de notificação quando incrementar o contador
+        playNotificationSound();
         
         // Primeiro normalizar o contactId para garantir correspondência
         const normalizedId = normalizeContactId(contactId);
@@ -1274,7 +1325,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
           // Log dos IDs existentes para debug
           console.log('IDs das conversas existentes:', 
             prevConversations.map(c => `${c.id} (${c.contactName}) - normalizado: ${normalizeContactId(c.id)}`))
-            
+              
           // Primeiro tentar pela ID exata
           let matchFound = false;
           const updatedConversations = prevConversations.map(conv => {
@@ -1436,8 +1487,11 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         // Verificar se a mensagem é recebida (não enviada por nós)
         const isIncomingMessage = isMessageFromContact(data);
         
-        // Se for mensagem recebida e não estiver com o chat aberto, incrementar contador
+        // Se for mensagem recebida, tocar som de notificação e atualizar contadores
         if (isIncomingMessage) {
+          // Tocar som de notificação para avisar sobre nova mensagem
+          playNotificationSound();
+          
           // Extrair o remoteJid (ID do contato) da mensagem
           const contactId = extractContactId(data);
           
@@ -1473,12 +1527,10 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       socket.on('messages', (data) => {
         console.log('Evento messages recebido:', data);
         
-        // Verificar se a mensagem é recebida (não enviada por nós)
+        // Verificar se há mensagens novas recebidas e tocar som
         const isIncomingMessage = isMessageFromContact(data);
-        
-        // Se for mensagem recebida e não estiver com o chat aberto, incrementar contador
         if (isIncomingMessage) {
-          // Extrair o remoteJid (ID do contato) da mensagem
+          playNotificationSound();
           const contactId = extractContactId(data);
           
           if (contactId && contactId !== selectedConversation) {
