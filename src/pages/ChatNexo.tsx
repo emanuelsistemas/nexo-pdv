@@ -44,8 +44,8 @@ export default function ChatNexoWrapper() {
   
   // Função para ser chamada pelo Content quando o carregamento terminar
   const handleLoadingComplete = () => {
-    // Adiciona um delay de 1 segundo antes de esconder o overlay para suavizar a transição
-    setTimeout(() => setShowOverlay(false), 1000);
+    // Adiciona um delay de 2 segundos antes de esconder o overlay para suavizar a transição
+    setTimeout(() => setShowOverlay(false), 2000);
   };
   
   // Renderizamos primeiro apenas o overlay de carregamento
