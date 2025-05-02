@@ -1518,8 +1518,7 @@ export default function ChatNexo() {
               </div>
               
               {/* Filtro de Setor */}
-              <div className="px-4 pt-6 pb-4">  {/* Aumentei o padding-top e adicionei padding-bottom */}
-                <label htmlFor="sector" className="block text-sm font-medium text-gray-400 mb-2">Setor</label>  {/* Aumentei a margem inferior */}
+              <div className="px-4 py-2">
                 <select
                   id="sector"
                   value={selectedSector}
@@ -1594,22 +1593,25 @@ export default function ChatNexo() {
                       
                       {/* Info */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-center" data-component-name="ChatNexo">
-                          <h3 className="font-medium text-white truncate">{conv.contactName}</h3>
-                          <div className="flex flex-col items-end">
+                        <div className="flex flex-col" data-component-name="ChatNexo">
+                          {/* Nome do usuário e hora na mesma linha */}
+                          <div className="flex items-center w-full justify-between">
+                            <h3 className="font-medium text-white truncate max-w-[70%]">{conv.contactName}</h3>
                             <span className="text-xs text-gray-400" data-component-name="ChatNexo">{formatTimestamp(conv.timestamp)}</span>
+                          </div>
+                          
+                          {/* Última mensagem e contador em linha - contador abaixo da hora */}
+                          <div className="flex justify-between items-center mt-1">
+                            <p className="text-sm text-gray-400 truncate max-w-[80%]">{conv.lastMessage}</p>
                             {(conv.unreadCount || 0) > 0 && (
                               <span 
-                                className="mt-1 bg-green-500 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center"
+                                className="bg-green-500 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center flex-shrink-0"
                                 title={`${conv.unreadCount} mensagens não lidas`}
                               >
                                 {conv.unreadCount}
                               </span>
                             )}
                           </div>
-                        </div>
-                        <div className="flex justify-between items-center mt-1" data-component-name="ChatNexo">
-                          <p className="text-sm text-gray-400 truncate">{conv.lastMessage}</p>
                         </div>
                       </div>
                     </div>
