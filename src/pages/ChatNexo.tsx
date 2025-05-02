@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Settings as SettingsIcon, MessageCircle, Send, X, Search, MessageSquare } from 'lucide-react';
+import { Database, Users, LogOut, BarChart2, Store, ChevronLeft, ChevronRight, Settings as SettingsIcon, MessageCircle, Send, Search, MessageSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
@@ -429,6 +429,13 @@ export default function ChatNexo() {
     }
   };
 
+  // Variável para armazenar o formato de URL que funciona
+  const [workingUrlFormat, setWorkingUrlFormat] = useState<number | null>(() => {
+    // Tentar recuperar do localStorage para evitar erros 404 desnecessários
+    const savedFormat = localStorage.getItem('evolution_api_format');
+    return savedFormat ? parseInt(savedFormat) : null;
+  });
+  
   // Função para enviar mensagem
   const sendMessage = async () => {
     if (!selectedConversation || !inputMessage.trim()) return;
@@ -464,23 +471,108 @@ export default function ChatNexo() {
       // Limpar o input
       setInputMessage('');
       
+      // Resetar flag para cada nova mensagem
+      (window as any).lastMessageSent = false;
+      
       // Enviar para a Evolution API se configurada
       if (evolutionApiConfig.baseUrl && evolutionApiConfig.apikey) {
-        // Formatando o número do destinatário (removendo @c.us se presente)
-        const recipient = conversation.id.replace('@c.us', '');
-        
-        await axios.post(`${evolutionApiConfig.baseUrl}/message/sendText/${recipient}`, {
-          value: inputMessage.trim()
-        }, {
-          headers: {
+        try {
+          // Verificar se temos instâncias disponíveis
+          if (whatsappInstances.length === 0) {
+            throw new Error('Nenhuma instância do WhatsApp disponível');
+          }
+          
+          // Usar a primeira instância ativa
+          const activeInstance = whatsappInstances.find(inst => inst.status === 'connected') || whatsappInstances[0];
+          const instanceName = activeInstance.instance_name;
+          
+          // Formatando o número do destinatário (removendo qualquer sufixo)
+          let recipient = conversation.id;
+          if (recipient.includes('@')) {
+            recipient = recipient.split('@')[0];
+          }
+          
+          // Preparar headers comuns para todas as tentativas
+          const headers = {
             'Content-Type': 'application/json',
             'apikey': evolutionApiConfig.apikey
+          };
+
+          // Se já sabemos qual formato funciona, usar apenas ele
+          if (workingUrlFormat !== null) {
+            // Usar o formato armazenado sem tentar outros
+            let url, payload;
+            
+            switch (workingUrlFormat) {
+              case 2: // segundo formato - já sabemos que o formato 2 funciona
+                url = `${evolutionApiConfig.baseUrl}/message/sendText/${instanceName}`;
+                payload = { number: recipient, text: inputMessage.trim() };
+                break;
+              case 3: // terceiro formato
+                url = `${evolutionApiConfig.baseUrl}/api/sendMessage/${instanceName}`;
+                payload = { phone: recipient, message: inputMessage.trim(), isGroup: false };
+                break;
+              default: // Alterar o default para o formato 2 que sabemos que funciona
+                url = `${evolutionApiConfig.baseUrl}/message/sendText/${instanceName}`;
+                payload = { number: recipient, text: inputMessage.trim() };
+            }
+            
+            try {
+              await axios.post(url, payload, { headers });
+              console.log('Mensagem enviada com sucesso!');
+              return;
+            } catch (err) {
+              // Se falhar, resetamos para tentar o formato 2 diretamente
+              setWorkingUrlFormat(2);
+              localStorage.removeItem('evolution_api_format');
+            }
           }
-        });
+          
+          // Vamos pular direto para o formato 2 que sabemos que funciona
+          try {
+            const response = await axios.post(
+              `${evolutionApiConfig.baseUrl}/message/sendText/${instanceName}`,
+              { number: recipient, text: inputMessage.trim() },
+              { headers }
+            );
+            setWorkingUrlFormat(2);
+            localStorage.setItem('evolution_api_format', '2'); // Persistir formato que funciona
+            console.log('Mensagem enviada com sucesso! (Formato 2)');
+            return;
+          } catch (err2) {
+            // Se falhar, tentamos o próximo formato
+            console.log('Tentando próximo formato...');
+          }
+          
+
+          
+          try {
+            // Tentativa 3
+            const response = await axios.post(
+              `${evolutionApiConfig.baseUrl}/api/sendMessage/${instanceName}`,
+              { phone: recipient, message: inputMessage.trim(), isGroup: false },
+              { headers }
+            );
+            setWorkingUrlFormat(3);
+            localStorage.setItem('evolution_api_format', '3'); // Persistir formato que funciona
+            console.log('Mensagem enviada com sucesso! (Formato 3)');
+            return;
+          } catch (err3) {
+            // Não logar erro para não poluir o console
+          }
+          
+          // Se chegou aqui, todas as tentativas falharam
+          throw new Error('Todas as tentativas de envio falharam');
+        } catch (apiError) {
+          throw apiError; // Repassa o erro para ser capturado no catch externo
+        }
       }
-    } catch (err) {
-      console.error('Erro ao enviar mensagem:', err);
-      setError('Falha ao enviar mensagem. Tente novamente.');
+    } catch (err: any) {
+      let errorMessage = 'Falha ao enviar mensagem. Tente novamente.';
+      
+      // Definir mensagem genérica de erro sem detalhes para não poluir o console
+      console.error('Erro ao enviar mensagem:', err.message || errorMessage);
+      setError(errorMessage);
     }
   };
 
