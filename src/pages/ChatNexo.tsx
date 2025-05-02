@@ -1737,7 +1737,7 @@ export default function ChatNexo() {
         {/* Chat Interface */}
         <div className="flex flex-1 overflow-hidden">
           {/* Lista de Conversas (WhatsApp Style) */}
-          <div className="w-80 h-full border-r border-gray-800 flex flex-col">
+          <div className="w-96 h-full border-r border-gray-800 flex flex-col">
             {/* Abas e Filtros */}
             <div className="border-b border-gray-800">
               {/* Indicador de status do Socket.io agora no topo */}
@@ -1755,9 +1755,9 @@ export default function ChatNexo() {
               </div>
 
               {/* Abas Pendentes/Atendendo */}
-              <div className="flex border-b border-gray-700">
+              <div className="flex border-b border-gray-700 w-full">
                 <button
-                  className={`px-4 py-3 text-sm font-medium flex items-center gap-2 ${activeTab === 'pending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                  className={`flex-1 px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'pending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                   onClick={() => setActiveTab('pending')}
                 >
                   Pendentes
@@ -1768,7 +1768,7 @@ export default function ChatNexo() {
                   )}
                 </button>
                 <button
-                  className={`px-4 py-3 text-sm font-medium flex items-center gap-2 ${activeTab === 'attending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                  className={`flex-1 px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'attending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                   onClick={() => setActiveTab('attending')}
                 >
                   Atendendo
@@ -1779,7 +1779,7 @@ export default function ChatNexo() {
                   )}
                 </button>
                 <button
-                  className={`px-4 py-3 text-sm font-medium flex items-center gap-2 ${activeTab === 'finished' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                  className={`flex-1 px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'finished' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                   onClick={() => setActiveTab('finished')}
                 >
                   Finalizados
