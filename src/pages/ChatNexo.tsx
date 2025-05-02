@@ -146,6 +146,9 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   // Referência para o container do menu dropdown
   const menuRef = useRef<HTMLDivElement>(null);
   
+  // Referência para o container de mensagens para controlar o scroll
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  
   // Definir isLoading como true por padrão para mostrar o overlay imediatamente
   const [isLoading, setIsLoading] = useState(true);
   
@@ -258,7 +261,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   };
   
   // Função para salvar o status e contador de não lidas da conversa no localStorage
-  const saveStatusToLocalStorage = (conversationId: string, status: ConversationStatus, unreadCount?: number) => {
+  const saveStatusToLocalStorage = (conversationId: string, status: ConversationStatus, unreadCount?: number, scrollPosition?: number) => {
     try {
       // Obter dados atuais
       const savedStatuses = localStorage.getItem('nexochat_statuses');
@@ -280,6 +283,14 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         statusInfo.unreadCount = statusMap[conversationId].unreadCount;
       }
       
+      // Adicionar posição de rolagem se fornecida
+      if (scrollPosition !== undefined) {
+        statusInfo.scrollPosition = scrollPosition;
+      } else if (statusMap[conversationId]?.scrollPosition !== undefined) {
+        // Manter o valor anterior se existir e não for fornecido um novo
+        statusInfo.scrollPosition = statusMap[conversationId].scrollPosition;
+      }
+      
       // Atualizar no mapa
       statusMap[conversationId] = statusInfo;
       
@@ -292,7 +303,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   };
   
   // Função para salvar o status e contador de não lidas da conversa no banco de dados
-  const saveStatusToDatabase = async (conversationId: string, status: ConversationStatus, unreadCount?: number) => {
+  const saveStatusToDatabase = async (conversationId: string, status: ConversationStatus, unreadCount?: number, scrollPosition?: number) => {
     try {
       // Verificar se tem informações do usuário
       if (!userInfo.id || !userInfo.resellerId) {
@@ -315,6 +326,11 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         statusData.unread_count = unreadCount;
       }
       
+      // Adicionar posição de rolagem se fornecida
+      if (scrollPosition !== undefined) {
+        statusData.scroll_position = scrollPosition;
+      }
+      
       // Usar upsert para inserir ou atualizar o registro
       const { error } = await supabase
         .from('nexochat_status')
@@ -330,7 +346,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
     } catch (error) {
       console.error('Erro ao salvar status no banco de dados:', error);
       // Se falhar, salvar no localStorage como backup
-      saveStatusToLocalStorage(conversationId, status, unreadCount);
+      saveStatusToLocalStorage(conversationId, status, unreadCount, scrollPosition);
     }
   };
   
@@ -351,7 +367,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       // Tentar carregar do banco de dados
       const { data, error } = await supabase
         .from('nexochat_status')
-        .select('conversation_id, status, unread_count')
+        .select('conversation_id, status, unread_count, scroll_position')
         .eq('profile_admin_id', userInfo.id)
         .eq('reseller_id', userInfo.resellerId);
       
@@ -360,7 +376,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       }
       
       // Mapear para armazenar os status e contagens mais recentes primeiro do DB, depois do localStorage
-      const statusMap: Record<string, {status: ConversationStatus, unreadCount?: number}> = {};
+      const statusMap: Record<string, {status: ConversationStatus, unreadCount?: number, scrollPosition?: number}> = {};
       
       // Se tiver dados no banco de dados
       if (data && data.length > 0) {
@@ -369,7 +385,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         data.forEach(item => {
           statusMap[item.conversation_id] = {
             status: item.status as ConversationStatus,
-            unreadCount: item.unread_count
+            unreadCount: item.unread_count,
+            scrollPosition: item.scroll_position
           };
         });
         console.log('Status e contagens carregados do DB:', statusMap);
@@ -393,7 +410,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 if (statusInfo && statusInfo.resellerId === userInfo.resellerId) {
                   statusMap[convId] = {
                     status: statusInfo.status as ConversationStatus,
-                    unreadCount: statusInfo.unreadCount // Incluir a contagem de não lidas
+                    unreadCount: statusInfo.unreadCount, // Incluir a contagem de não lidas
+                    scrollPosition: statusInfo.scrollPosition
                   };
                 }
               }
@@ -415,7 +433,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
               return {
                 ...conv,
                 status: conversationData.status,
-                unreadCount: conversationData.unreadCount !== undefined ? conversationData.unreadCount : conv.unreadCount || 0
+                unreadCount: conversationData.unreadCount !== undefined ? conversationData.unreadCount : conv.unreadCount || 0,
+                scrollPosition: conversationData.scrollPosition
               };
             }
             return conv;
@@ -464,11 +483,76 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   };
   
   // Rolar para o final da conversa quando receber novas mensagens
+  // Função para salvar a posição de rolagem da conversa atual
+  const saveCurrentScrollPosition = () => {
+    if (selectedConversation && messagesContainerRef.current) {
+      const currentPosition = messagesContainerRef.current.scrollTop;
+      console.log(`Salvando posição de rolagem para conversa ${selectedConversation}: ${currentPosition}`);
+      
+      // Obter o status atual da conversa
+      const conversation = conversations.find(c => c.id === selectedConversation);
+      if (conversation) {
+        // Não alteramos o unreadCount, apenas mantemos o valor atual
+        saveStatusToDatabase(selectedConversation, conversation.status, undefined, currentPosition);
+        saveStatusToLocalStorage(selectedConversation, conversation.status, undefined, currentPosition);
+      }
+    }
+  };
+  
   useEffect(() => {
-    if (messagesEndRef.current) {
+    // Função para rolar para o final da conversa
+    const scrollToBottom = () => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+    };
+    
+    if (selectedConversation && messagesContainerRef.current) {
+      // Primeiro obter do localStorage (mais rápido)
+      const savedStatuses = localStorage.getItem('nexochat_statuses');
+      let savedScrollPosition: number | undefined = undefined;
+      
+      if (savedStatuses) {
+        try {
+          const statusMap = JSON.parse(savedStatuses);
+          savedScrollPosition = statusMap[selectedConversation]?.scrollPosition;
+          console.log(`Posição salva encontrada para ${selectedConversation}:`, savedScrollPosition);
+        } catch (error) {
+          console.error('Erro ao analisar status salvos:', error);
+        }
+      }
+      
+      // Pequeno delay para garantir que as mensagens foram renderizadas
+      setTimeout(() => {
+        // Verificar se o ref ainda é válido
+        if (!messagesContainerRef.current) return;
+        
+        // Verificar se esta é a primeira vez que a conversa é aberta
+        // Se não houver posição salva, ou se a posição salva for zero, rolar para o final
+        if (savedScrollPosition === undefined || savedScrollPosition === 0) {
+          console.log('Rolando para o final da conversa (primeira vez ou sem posição salva)');
+          scrollToBottom();
+        } else {
+          // Usar a posição salva anteriormente
+          console.log(`Restaurando posição salva: ${savedScrollPosition}`);
+          messagesContainerRef.current.scrollTop = savedScrollPosition;
+        }
+      }, 150);
+    }
+    
+    // Limpar função para salvar a posição quando a conversa mudar
+    return () => {
+      saveCurrentScrollPosition();
+    };
+  }, [selectedConversation]);
+  
+  // Atualizar a posição salva quando as mensagens mudarem
+  useEffect(() => {
+    if (messagesEndRef.current && selectedConversation) {
+      // Se chegarem novas mensagens, rolar para o final automaticamente
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [selectedConversation, conversations]);
+  }, [conversations]);
   
   // Função para filtrar as conversas com base nos filtros aplicados
   const filteredConversations = useMemo(() => {
@@ -2061,23 +2145,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                   </button>
                 </div>
                 
-                {/* Adicionar estilo para ocultar scrollbar */}
-                <style jsx>{`
-                  /* Para Chrome, Safari e Opera */
-                  #tabs-container::-webkit-scrollbar {
-                    display: none;
-                  }
-                  
-                  /* Para Firefox */
-                  #tabs-container {
-                    scrollbar-width: none;
-                  }
-                  
-                  /* Para IE e Edge */
-                  #tabs-container {
-                    -ms-overflow-style: none;
-                  }
-                `}</style>
+                {/* Estilos aplicados diretamente via style e className */}
+                {/* Os estilos para ocultar a scrollbar já estão aplicados via className="scrollbar-hide" e style inline */}
               </div>
               
               {/* Filtro de Setor - Mostrado apenas quando não estiver na aba Contatos */}
@@ -2097,6 +2166,22 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 </div>
               )}
             </div>
+            
+            {/* Botão Cadastrar Empresa (apenas na aba Contatos) */}
+            {activeTab === 'contacts' && (
+              <div className="p-3 pb-0">
+                <button 
+                  className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white font-medium flex items-center justify-center gap-2"
+                  onClick={() => {
+                    // Aqui você implementaria a lógica para abrir o modal de cadastro de empresa
+                    alert('Funcionalidade de cadastro de empresa a ser implementada');
+                  }}
+                >
+                  <Users size={16} />
+                  Cadastrar Empresa
+                </button>
+              </div>
+            )}
             
             {/* Campo de Pesquisa */}
             <div className="p-3 border-b border-gray-800" data-component-name="ChatNexo">
@@ -2460,7 +2545,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 </div>
                 
                 {/* Mensagens */}
-                <div className="flex-1 overflow-y-auto p-4 bg-[#1A1A1A] custom-scrollbar">
+                <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 bg-[#1A1A1A] custom-scrollbar">
                   {currentConversation.messages.map(msg => (
                     <div 
                       key={msg.id} 
