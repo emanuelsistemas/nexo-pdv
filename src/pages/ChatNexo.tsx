@@ -500,7 +500,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   };
   
   useEffect(() => {
-    // Função para rolar para o final da conversa
+    // Função para rolar para o final da conversa (sem animação)
     const scrollToBottom = () => {
       if (messagesContainerRef.current) {
         messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
@@ -523,21 +523,21 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       }
       
       // Pequeno delay para garantir que as mensagens foram renderizadas
-      setTimeout(() => {
-        // Verificar se o ref ainda é válido
-        if (!messagesContainerRef.current) return;
-        
-        // Verificar se esta é a primeira vez que a conversa é aberta
-        // Se não houver posição salva, ou se a posição salva for zero, rolar para o final
-        if (savedScrollPosition === undefined || savedScrollPosition === 0) {
-          console.log('Rolando para o final da conversa (primeira vez ou sem posição salva)');
-          scrollToBottom();
-        } else {
-          // Usar a posição salva anteriormente
-          console.log(`Restaurando posição salva: ${savedScrollPosition}`);
-          messagesContainerRef.current.scrollTop = savedScrollPosition;
-        }
-      }, 150);
+      // Executar imediatamente, sem delay
+      // Verificar se o ref ainda é válido
+      if (!messagesContainerRef.current) return;
+      
+      // Verificar se esta é a primeira vez que a conversa é aberta
+      // Se não houver posição salva, ou se a posição salva for zero, rolar para o final
+      if (savedScrollPosition === undefined || savedScrollPosition === 0) {
+        console.log('Rolando para o final da conversa (primeira vez ou sem posição salva)');
+        // Aplicar a rolagem imediatamente
+        scrollToBottom();
+      } else {
+        // Usar a posição salva anteriormente
+        console.log(`Restaurando posição salva: ${savedScrollPosition}`);
+        messagesContainerRef.current.scrollTop = savedScrollPosition;
+      }
     }
     
     // Limpar função para salvar a posição quando a conversa mudar
@@ -548,9 +548,9 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   
   // Atualizar a posição salva quando as mensagens mudarem
   useEffect(() => {
-    if (messagesEndRef.current && selectedConversation) {
-      // Se chegarem novas mensagens, rolar para o final automaticamente
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (messagesContainerRef.current && selectedConversation) {
+      // Se chegarem novas mensagens, rolar para o final automaticamente sem animação
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
     }
   }, [conversations]);
   
