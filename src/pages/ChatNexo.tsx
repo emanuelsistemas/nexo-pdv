@@ -1193,6 +1193,20 @@ export default function ChatNexo() {
           <div className="w-80 h-full border-r border-gray-800 flex flex-col">
             {/* Abas e Filtros */}
             <div className="border-b border-gray-800">
+              {/* Indicador de status do Socket.io agora no topo */}
+              <div className="flex justify-end p-2 bg-[#1E1E1E]">
+                <div className="flex items-center text-xs text-gray-400">
+                  <span className="mr-1">Status:</span>
+                  <span className={socketRef.current ? "text-green-400" : "text-red-400"}>
+                    {socketRef.current ? "Conectado" : "Desconectado"}
+                  </span>
+                  <div 
+                    className={`ml-2 h-2 w-2 rounded-full ${socketRef.current ? "bg-green-500" : "bg-red-500"}`}
+                    title={socketRef.current ? "Socket.io conectado" : "Socket.io desconectado"}
+                  />
+                </div>
+              </div>
+
               {/* Abas Pendentes/Atendendo */}
               <div className="flex border-b border-gray-700">
                 <button
@@ -1226,13 +1240,13 @@ export default function ChatNexo() {
               </div>
               
               {/* Filtro de Setor */}
-              <div className="px-4 pt-4">
-                <label htmlFor="sector" className="block text-sm font-medium text-gray-400 mb-1">Setor</label>
+              <div className="px-4 pt-6 pb-4">  {/* Aumentei o padding-top e adicionei padding-bottom */}
+                <label htmlFor="sector" className="block text-sm font-medium text-gray-400 mb-2">Setor</label>  {/* Aumentei a margem inferior */}
                 <select
                   id="sector"
                   value={selectedSector}
                   onChange={(e) => setSelectedSector(e.target.value as any)}
-                  className="w-full p-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full p-2.5 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="all">Todos os setores</option>
                   {enabledSectors.suporte && <option value="suporte">Suporte Técnico</option>}
@@ -1255,89 +1269,13 @@ export default function ChatNexo() {
                 />
               </div>
             </div>
-                        {/* Configuração Manual da Evolution API */}
-            <div className="px-4 mt-2 mb-3 border-b border-gray-700 pb-3">
-              <p className="text-sm font-semibold text-white mb-2">Status da Conexão</p>
-              
-              {/* Status da conexão */}
-              <div className="p-2 bg-gray-800 rounded-md mb-3">
-                <div className="text-xs text-gray-400 flex justify-between mb-1">
-                  <span>URL API:</span>
-                  <span className="text-green-400 truncate max-w-[180px]">{evolutionApiConfig.baseUrl}</span>
-                </div>
-                <div className="text-xs text-gray-400 flex justify-between mb-1">
-                  <span>API Key:</span>
-                  <span className="text-gray-300">*************</span>
-                </div>
-                {whatsappInstances.length > 0 && (
-                  <div className="text-xs text-gray-400 flex justify-between mb-1">
-                    <span>Instância:</span>
-                    <span className="text-green-400">{whatsappInstances[0].instance_name}</span>
-                  </div>
-                )}
-                <div className="text-xs text-gray-400 flex justify-between mb-1">
-                  <span>Socket.io:</span>
-                  <span className={socketRef.current ? "text-green-400" : "text-red-400"}>
-                    {socketRef.current ? "Conectado" : "Desconectado"}
-                  </span>
-                </div>
+            
+            {/* Mensagem de erro (se houver) */}
+            {error && (
+              <div className="px-4 py-2 bg-red-900/30 border-y border-red-800">
+                <p className="text-xs text-red-300">{error}</p>
               </div>
-              
-              {/* Botão para testar Socket.io */}
-              <button 
-                onClick={() => {
-                  if (socketRef.current && socketRef.current.connected) {
-                    alert('Socket.io está conectado! ID: ' + socketRef.current.id);
-                    console.log('Socket.io está conectado! ID:', socketRef.current.id);
-                    
-                    // Tentar enviar uma mensagem para testar
-                    socketRef.current.emit('ping');
-                    alert('Mensagem de teste enviada. Verifique o console!');
-                  } else {
-                    alert('Socket.io não está conectado! Tentando reconectar...');
-                    console.error('Socket.io não está conectado! Tentando reconectar...');
-                    
-                    // Tentar reconectar
-                    if (evolutionApiConfig.baseUrl && whatsappInstances.length > 0 && evolutionApiConfig.apikey) {
-                      connectSocketIO(evolutionApiConfig.baseUrl, whatsappInstances[0].instance_name, evolutionApiConfig.apikey);
-                    } else {
-                      alert('Dados de conexão inválidos!');
-                    }
-                  }
-                }}
-                className="w-full px-3 py-2 text-sm rounded-md flex items-center justify-center mb-2 bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                Verificar Socket.io
-              </button>
-              
-              {/* Botão para atualizar mensagens */}
-              <button 
-                onClick={() => fetchConversations(evolutionApiConfig.baseUrl, evolutionApiConfig.apikey)}
-                disabled={isLoading || whatsappInstances.length === 0}
-                className={`w-full px-3 py-2 text-sm rounded-md flex items-center justify-center ${isLoading || whatsappInstances.length === 0 ? 'bg-gray-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'} text-white`}
-              >
-                {isLoading ? 'Atualizando...' : 'Atualizar Mensagens'}
-              </button>
-              
-              {/* Informação sobre instâncias */}
-              {whatsappInstances.length > 0 && (
-                <div className="mt-3 p-2 bg-gray-800 rounded-md">
-                  <p className="text-xs text-gray-400 mb-1">Instâncias disponíveis:</p>
-                  {whatsappInstances.map((instance) => (
-                    <div key={instance.id || instance.instance_name} className="text-xs text-gray-300 flex justify-between">
-                      <span>{instance.name || instance.instance_name}</span>
-                      <span className={instance.status === 'open' || instance.status === 'active' ? "text-green-500" : "text-red-400"}>{instance.status}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              
-              {error && (
-                <div className="mt-2 p-2 bg-red-900/30 border border-red-800 rounded-md">
-                  <p className="text-xs text-red-300">{error}</p>
-                </div>
-              )}
-            </div>
+            )}
             
             {/* Lista de Conversas */}
             <div className="flex-1 overflow-y-auto">
