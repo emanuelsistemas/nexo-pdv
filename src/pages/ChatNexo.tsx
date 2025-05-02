@@ -133,6 +133,39 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
   // Estado para controlar qual subaba está ativa na aba Contatos
   const [activeContactsSubtab, setActiveContactsSubtab] = useState<'contacts' | 'companies'>('contacts');
+  // Estado para armazenar a lista de empresas
+  const [companies, setCompanies] = useState<Array<{
+    id: string;
+    name: string;
+    phone: string;
+    email?: string;
+    address?: string;
+    createdAt: Date;
+  }>>([    
+    {
+      id: '1',
+      name: 'Nexo Sistemas Ltda',
+      phone: '(12) 3456-7890',
+      email: 'contato@nexosistemas.com.br',
+      address: 'Av. Principal, 1000',
+      createdAt: new Date(2023, 5, 10)
+    },
+    {
+      id: '2',
+      name: 'Tech Solutions SA',
+      phone: '(11) 2345-6789',
+      email: 'contato@techsolutions.com',
+      address: 'Rua das Flores, 500',
+      createdAt: new Date(2023, 8, 15)
+    },
+    {
+      id: '3',
+      name: 'Inovação Digital ME',
+      phone: '(13) 3344-5566',
+      email: 'contato@inovacaodigital.com.br',
+      createdAt: new Date(2024, 1, 20)
+    }
+  ]);
   // Estado para armazenar a lista de contatos separada das conversas
   const [contacts, setContacts] = useState<Conversation[]>([]);
   const [selectedSector, setSelectedSector] = useState<'all' | 'suporte' | 'comercial' | 'administrativo'>('all');
@@ -2192,19 +2225,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                   </button>
                 </div>
                 
-                {/* Botão Cadastrar Empresa (apenas na subaba Empresas) */}
-                {activeContactsSubtab === 'companies' && (
-                  <button 
-                    className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white font-medium flex items-center justify-center gap-2"
-                    onClick={() => {
-                      // Aqui você implementaria a lógica para abrir o modal de cadastro de empresa
-                      alert('Funcionalidade de cadastro de empresa a ser implementada');
-                    }}
-                  >
-                    <Users size={16} />
-                    Cadastrar Empresa
-                  </button>
-                )}
+                {/* Removido botão de cadastrar empresa daqui - vai aparecer na grid */}
               </div>
             )}
             
@@ -2375,7 +2396,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
             </div>
           </div>
           
-          {/* Área de Chat */}
+          {/* Área de Chat ou Grid de Empresas */}
           <div className="flex-1 flex flex-col">
             {/* O overlay principal agora está no componente wrapper */}
             
@@ -2390,8 +2411,62 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                 </button>
               </div>
             )}
-            
-            {currentConversation ? (
+
+            {/* Exibir a grid de empresas quando estiver na aba Contatos e subaba Empresas */}
+            {activeTab === 'contacts' && activeContactsSubtab === 'companies' ? (
+              <div className="flex flex-col h-full bg-[#1A1A1A]">
+                {/* Cabeçalho da grid de empresas */}
+                <div className="p-4 border-b border-gray-800 bg-[#2A2A2A] flex justify-between items-center">
+                  <h2 className="text-xl font-semibold text-white">Gerenciamento de Empresas</h2>
+                  <button 
+                    className="py-2 px-4 bg-emerald-600 hover:bg-emerald-700 transition-colors rounded-lg text-white font-medium flex items-center justify-center gap-2"
+                    onClick={() => {
+                      // Aqui você implementaria a lógica para abrir o modal de cadastro de empresa
+                      alert('Funcionalidade de cadastro de empresa a ser implementada');
+                    }}
+                  >
+                    <Users size={16} />
+                    Cadastrar Empresa
+                  </button>
+                </div>
+                
+                {/* Área da grid de empresas */}
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                  {/* Cabeçalho da tabela */}
+                  <div className="grid grid-cols-4 gap-4 mb-3 px-4 py-2 bg-[#2A2A2A] rounded-lg text-gray-400 text-sm font-medium">
+                    <div>Nome da Empresa</div>
+                    <div>Telefone</div>
+                    <div>E-mail</div>
+                    <div>Ações</div>
+                  </div>
+                  
+                  {/* Linhas da tabela - se não tiver dados, mostrar mensagem */}
+                  {companies.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400">
+                      <Store size={48} className="mx-auto mb-4 opacity-30" />
+                      <p className="text-lg mb-2">Nenhuma empresa cadastrada</p>
+                      <p className="text-sm">Clique no botão "Cadastrar Empresa" para adicionar</p>
+                    </div>
+                  ) : (
+                    companies.map(company => (
+                      <div key={company.id} className="grid grid-cols-4 gap-4 px-4 py-3 border-b border-gray-800 hover:bg-[#2A2A2A] transition-colors">
+                        <div className="text-white font-medium">{company.name}</div>
+                        <div className="text-gray-300">{company.phone}</div>
+                        <div className="text-gray-300">{company.email || '-'}</div>
+                        <div className="flex space-x-2">
+                          <button className="p-1 text-emerald-500 hover:text-emerald-400 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                          </button>
+                          <button className="p-1 text-red-500 hover:text-red-400 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : currentConversation ? (
               <>
                 {/* Cabeçalho da Conversa */}
                 <div className="p-4 border-b border-gray-800 bg-[#2A2A2A] flex items-center justify-between">
