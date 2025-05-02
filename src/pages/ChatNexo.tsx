@@ -529,29 +529,111 @@ export default function ChatNexo() {
         console.error('Erro no Socket.io:', error);
       });
       
+      // Função para processar mensagens recebidas via Socket.io e atualizar o estado
+      const processSocketMessages = (data: any): void => {
+        console.log('Processando mensagens recebidas via Socket.io:', data);
+        
+        // Verificar e formatar os dados corretamente
+        if (!data) return;
+        
+        let messagesArray: any[] = [];
+        
+        // Normalizar os dados para ter um formato consistente - a Evolution API pode enviar em diferentes formatos
+        if (Array.isArray(data)) {
+          messagesArray = data;
+        } else if (data.data && Array.isArray(data.data)) {
+          messagesArray = data.data;
+        } else if (data.messages && Array.isArray(data.messages)) {
+          messagesArray = data.messages;
+        } else if (data.messages && data.messages.records && Array.isArray(data.messages.records)) {
+          messagesArray = data.messages.records;
+        } else {
+          // Como último recurso, vamos tentar extrair mensagens de qualquer estrutura
+          const possibleMessages = extractMessages(data);
+          if (possibleMessages.length > 0) {
+            messagesArray = possibleMessages;
+          } else {
+            console.warn('Formato de dados desconhecido recebido via Socket.io:', data);
+            return;
+          }
+        }
+        
+        if (messagesArray.length === 0) {
+          console.log('Nenhuma mensagem para processar');
+          return;
+        }
+        
+        console.log(`Processando ${messagesArray.length} mensagens recebidas via Socket.io`);
+        
+        // Construir o formato que a função processConversationsResponse espera
+        const formattedData = {
+          data: {
+            messages: {
+              records: messagesArray
+            }
+          }
+        };
+        
+        // Usar a função já existente para processar as mensagens
+        // Como ela já atualiza o estado interno via setConversations, não precisamos
+        // retornar nada ou fazer mais nada aqui
+        processConversationsResponse(formattedData);
+      };
+      
+      // Função auxiliar para extrair mensagens de qualquer estrutura de dados
+      const extractMessages = (obj: any): any[] => {
+        if (!obj || typeof obj !== 'object') return [];
+        
+        // Se for um array, verificar se tem estrutura de mensagem WhatsApp
+        if (Array.isArray(obj)) {
+          // Verificar se parece uma mensagem WhatsApp (tem key ou remoteJid)
+          if (obj.some(item => item.key || item.remoteJid)) {
+            return obj;
+          }
+          
+          // Senão, procurar recursivamente em cada item do array
+          let result: any[] = [];
+          for (const item of obj) {
+            result = [...result, ...extractMessages(item)];
+          }
+          return result;
+        }
+        
+        // Verificar se o objeto tem formato de mensagem WhatsApp
+        if (obj.key || obj.remoteJid) {
+          return [obj];
+        }
+        
+        // Procurar mensagens em todas as propriedades do objeto
+        let result: any[] = [];
+        for (const key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            result = [...result, ...extractMessages(obj[key])];
+          }
+        }
+        
+        return result;
+      };
+      
       // Eventos específicos da Evolution API - usando registro direto para todos os formatos possíveis
       socket.on('MESSAGES_UPSERT', (data) => {
         console.log('Evento MESSAGES_UPSERT recebido:', data);
-        alert('Nova mensagem recebida via Socket.io! Verifique o console.');
-        fetchConversations(baseUrl, apikey);
+        processSocketMessages(data);
       });
       
       socket.on('messages.upsert', (data) => {
         console.log('Evento messages.upsert recebido:', data);
-        alert('Nova mensagem recebida via Socket.io! Verifique o console.');
-        fetchConversations(baseUrl, apikey);
+        processSocketMessages(data);
       });
       
       socket.on('message', (data) => {
         console.log('Evento message recebido:', data);
-        alert('Nova mensagem recebida via Socket.io! Verifique o console.');
-        fetchConversations(baseUrl, apikey);
+        processSocketMessages(data);
       });
       
       socket.on('messages', (data) => {
         console.log('Evento messages recebido:', data);
-        alert('Nova mensagem recebida via Socket.io! Verifique o console.');
-        fetchConversations(baseUrl, apikey);
+        processSocketMessages(data);
       });
       
       // Monitorar eventos de conexão
