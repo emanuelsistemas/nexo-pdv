@@ -34,7 +34,70 @@ type Conversation = {
   avatarUrl?: string;
 }
 
-export default function ChatNexo() {
+// Componente wrapper para garantir que o overlay de carregamento apareça imediatamente
+export default function ChatNexoWrapper() {
+  // Este estado controla se o componente principal deve ser renderizado
+  const [ready, setReady] = useState(false);
+  
+  // Estado para controlar a visibilidade do overlay
+  const [showOverlay, setShowOverlay] = useState(true);
+  
+  // Função para ser chamada pelo Content quando o carregamento terminar
+  const handleLoadingComplete = () => {
+    // Adiciona um delay de 1 segundo antes de esconder o overlay para suavizar a transição
+    setTimeout(() => setShowOverlay(false), 1000);
+  };
+  
+  // Renderizamos primeiro apenas o overlay de carregamento
+  // depois de um pequeno atraso (para garantir que o overlay seja renderizado primeiro),
+  // permitimos a renderização do componente principal
+  useEffect(() => {
+    // Garante que o wrapper ocupe toda a altura da tela
+    document.body.style.height = '100vh';
+    document.body.style.overflow = 'hidden'; // Previne scroll enquanto carrega
+    
+    const timer = setTimeout(() => {
+      setReady(true);
+    }, 100); // pequeno delay para garantir que o overlay seja renderizado primeiro
+    
+    return () => {
+      clearTimeout(timer);
+      // Restaura estilos do body
+      document.body.style.height = '';
+      document.body.style.overflow = '';
+    };
+  }, []);
+  
+  // Sempre renderizar o overlay primeiro
+  return (
+    // Garante que o wrapper e o conteúdo ocupem toda a altura e define um fundo
+    <div className="relative h-screen flex flex-col bg-gray-100">
+      {/* Overlay de carregamento visível baseado no estado showOverlay */}
+      {showOverlay && (
+        <div className="absolute inset-0 bg-black flex items-center justify-center z-50">
+          <div className="text-white text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+            <p>Carregando dados...</p> {/* Mensagem mais genérica */}
+          </div>
+        </div>
+      )}
+      
+      {/* Renderizar o componente principal apenas quando ready for true, passando a função de callback */}
+      {/* O conteúdo só será visível quando showOverlay for false, com transição */}
+      <div className={`flex-1 flex flex-col ${showOverlay ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}>
+        {ready && <ChatNexoContent onLoadingComplete={handleLoadingComplete} />}
+      </div>
+    </div>
+  );
+}
+
+// Interface para as props do ChatNexoContent
+interface ChatNexoContentProps {
+  onLoadingComplete: () => void;
+}
+
+// Componente principal com toda a lógica original
+function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
@@ -54,6 +117,9 @@ export default function ChatNexo() {
   // Referência para o container do menu dropdown
   const menuRef = useRef<HTMLDivElement>(null);
   
+  // Definir isLoading como true por padrão para mostrar o overlay imediatamente
+  const [isLoading, setIsLoading] = useState(true);
+  
   // Fechar o menu dropdown quando clicar fora dele
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -72,8 +138,6 @@ export default function ChatNexo() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isActionMenuOpen]);
-  
-  const [isLoading, setIsLoading] = useState(false);
   // Flag para saber se os status já foram carregados do banco de dados
   const [statusLoaded, setStatusLoaded] = useState(false);
   // Configuração da Evolution API
@@ -114,6 +178,9 @@ export default function ChatNexo() {
   
   // Verificar sessão ao carregar
   useEffect(() => {
+    // Garantir que o overlay de carregamento esteja visivel desde o início
+    setIsLoading(true);
+    
     // Check admin session
     const adminSession = localStorage.getItem('admin_session');
     if (!adminSession) {
@@ -744,9 +811,10 @@ export default function ChatNexo() {
       
       // Adiciona um console.log para ver os cabeçalhos que estão sendo enviados
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'apikey': apikey
       };
-      
+
       // Só adiciona apikey se ela não estiver vazia
       if (apikey && apikey.trim() !== '') {
         headers['apikey'] = apikey;
@@ -1162,7 +1230,7 @@ export default function ChatNexo() {
           
           // Verificar se é o chat atual ou não
           if (normalizedContact !== normalizedSelected) {
-            console.log(`💬 Nova mensagem para conversa não selecionada: ${contactId}`);
+            console.log(`Nova mensagem para conversa não selecionada: ${contactId}`);
             console.log(`Chat atual: ${selectedConversation}, normalizado: ${normalizedSelected}`);
             incrementUnreadCount(contactId);
           } else {
@@ -1553,8 +1621,6 @@ export default function ChatNexo() {
           lastMessageContent = '[Imagem]';
         } else if (lastMsg.message?.videoMessage) {
           lastMessageContent = '[Vídeo]';
-        } else if (lastMsg.message?.audioMessage) {
-          lastMessageContent = '[Áudio]';
         } else {
           lastMessageContent = '[Mídia não suportada]';
         }
@@ -1646,6 +1712,11 @@ export default function ChatNexo() {
       });
     }
   };
+
+  // Notificar o wrapper que o carregamento terminou
+  useEffect(() => {
+    onLoadingComplete();
+  }, []);
 
   return (
     <div className="flex h-screen">
@@ -1959,16 +2030,38 @@ export default function ChatNexo() {
                       
                       // Ao selecionar a conversa, zera a contagem de não lidas
                       setConversations(prevConversations => {
-                        return prevConversations.map(c => {
-                          if (c.id === conv.id) {
-                            return { ...c, unreadCount: 0 };
+                        // Log dos IDs existentes para debug
+                        console.log('IDs das conversas existentes:', 
+                          prevConversations.map(c => `${c.id} (${c.contactName}) - normalizado: ${normalizeContactId(c.id)}`))
+                          
+                        // Primeiro tentar pela ID exata
+                        let matchFound = false;
+                        const updatedConversations = prevConversations.map(conv => {
+                          // Verificar pelo ID exato ou pelo ID normalizado
+                          const convNormalizedId = normalizeContactId(conv.id);
+                          
+                          if (conv.id === conv.id || convNormalizedId === conv.id) {
+                            matchFound = true;
+                            const newCount = (conv.unreadCount || 0) + 1;
+                            console.log(`✅ Contador atualizado: ${conv.contactName} - ${newCount} mensagens não lidas`);
+                            
+                            // Atualizar contador no banco de dados
+                            saveStatusToDatabase(conv.id, conv.status, 0);
+                            
+                            return {
+                              ...conv,
+                              unreadCount: 0
+                            };
                           }
-                          return c;
+                          return conv;
                         });
+                        
+                        if (!matchFound) {
+                          console.warn(`⚠️ AVISO: Nenhuma conversa encontrada com ID ${conv.id} ou normalizado ${conv.id}`);
+                        }
+                        
+                        return updatedConversations;
                       });
-                      
-                      // Atualizar o contador no banco de dados também
-                      saveStatusToDatabase(conv.id, conv.status, 0);
                       
                       // Define a conversa selecionada
                       setSelectedConversation(conv.id);
@@ -2014,14 +2107,7 @@ export default function ChatNexo() {
           
           {/* Área de Chat */}
           <div className="flex-1 flex flex-col">
-            {isLoading && (
-              <div className="absolute inset-0 bg-black flex items-center justify-center z-50">
-                <div className="text-white text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500 mx-auto mb-4"></div>
-                  <p>Carregando conversas...</p>
-                </div>
-              </div>
-            )}
+            {/* O overlay principal agora está no componente wrapper */}
             
             {error && (
               <div className="bg-red-600 text-white p-2 text-center">
