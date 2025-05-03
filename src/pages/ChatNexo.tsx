@@ -223,6 +223,9 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   // Referência para o container de mensagens para controlar o scroll
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   
+  // Conjunto para rastrear IDs de mensagens já processadas e evitar contagem duplicada
+  const processedMessageIds = useRef<Set<string>>(new Set());
+  
   // Referência para o elemento de áudio usado para notificações
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
@@ -1378,7 +1381,19 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       };
       
       // Função para incrementar o contador de mensagens não lidas
-      const incrementUnreadCount = (contactId: string): void => {
+      const incrementUnreadCount = (contactId: string, messageId?: string): void => {
+        // Se foi fornecido um ID de mensagem, verificar se já foi processada
+        if (messageId && processedMessageIds.current.has(messageId)) {
+          console.log(`🔔 Mensagem ${messageId} já contabilizada, ignorando incremento para ${contactId}`);
+          return; // Não incrementa se a mensagem já foi processada
+        }
+        
+        // Registrar o ID da mensagem se existir
+        if (messageId) {
+          processedMessageIds.current.add(messageId);
+          console.log(`🔔 Nova mensagem ${messageId} adicionada à lista de processadas`);
+        }
+        
         console.log(`❤️❤️❤️ INCREMENTANDO CONTADOR para: ${contactId} ❤️❤️❤️`);
         
         // Tocar som de notificação quando incrementar o contador
@@ -1523,6 +1538,22 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       socket.on('MESSAGES_UPSERT', (data) => {
         console.log('⚫⚫⚫ Evento MESSAGES_UPSERT recebido ⚫⚫⚫');
         
+        // Extrair o ID da mensagem para evitar contagens duplicadas
+        let messageId = null;
+        try {
+          if (data.messages && data.messages[0] && data.messages[0].key && data.messages[0].key.id) {
+            messageId = data.messages[0].key.id;
+          } else if (data.key && data.key.id) {
+            messageId = data.key.id;
+          }
+          
+          if (messageId) {
+            console.log(`🔔 ID da mensagem (MESSAGES_UPSERT): ${messageId}`);
+          }
+        } catch (error) {
+          console.log('Erro ao extrair ID da mensagem:', error);
+        }
+        
         // Extrair o remoteJid (ID do contato) da mensagem e verificar se é mensagem recebida
         const contactId = extractContactId(data);
         
@@ -1538,7 +1569,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
           if (normalizedContact !== normalizedSelected) {
             console.log(`Nova mensagem para conversa não selecionada: ${contactId}`);
             console.log(`Chat atual: ${selectedConversation}, normalizado: ${normalizedSelected}`);
-            incrementUnreadCount(contactId);
+            // Usar a função com verificação de duplicidade
+            incrementUnreadCount(contactId, messageId);
           } else {
             console.log(`Mensagem para o chat atual: ${contactId} == ${selectedConversation}. Não incrementando.`);
           }
@@ -1556,17 +1588,30 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         // Verificar se a mensagem é recebida (não enviada por nós)
         const isIncomingMessage = isMessageFromContact(data);
         
-        // Se for mensagem recebida, tocar som de notificação e atualizar contadores
+        // Se for mensagem recebida, processar
         if (isIncomingMessage) {
-          // Tocar som de notificação para avisar sobre nova mensagem
-          playNotificationSound();
+          // Extrair o ID da mensagem para evitar contagens duplicadas
+          let messageId = null;
+          try {
+            if (data.messages && data.messages[0] && data.messages[0].key && data.messages[0].key.id) {
+              messageId = data.messages[0].key.id;
+            } else if (data.key && data.key.id) {
+              messageId = data.key.id;
+            }
+            
+            if (messageId) {
+              console.log(`🔔 ID da mensagem: ${messageId}`);
+            }
+          } catch (error) {
+            console.log('Erro ao extrair ID da mensagem:', error);
+          }
           
           // Extrair o remoteJid (ID do contato) da mensagem
           const contactId = extractContactId(data);
           
           if (contactId && contactId !== selectedConversation) {
-            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
-            incrementUnreadCount(contactId);
+            // Incrementar contagem de não lidas com a verificação de duplicidade
+            incrementUnreadCount(contactId, messageId);
           }
         }
         
@@ -1581,12 +1626,26 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         
         // Se for mensagem recebida e não estiver com o chat aberto, incrementar contador
         if (isIncomingMessage) {
+          // Extrair o ID da mensagem para evitar contagens duplicadas
+          let messageId = null;
+          try {
+            if (data.key && data.key.id) {
+              messageId = data.key.id;
+            }
+            
+            if (messageId) {
+              console.log(`🔔 ID da mensagem (evento message): ${messageId}`);
+            }
+          } catch (error) {
+            console.log('Erro ao extrair ID da mensagem:', error);
+          }
+          
           // Extrair o remoteJid (ID do contato) da mensagem
           const contactId = extractContactId(data);
           
           if (contactId && contactId !== selectedConversation) {
-            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
-            incrementUnreadCount(contactId);
+            // Incrementar contagem de não lidas usando a verificação de duplicidade
+            incrementUnreadCount(contactId, messageId);
           }
         }
         
