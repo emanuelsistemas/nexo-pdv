@@ -1311,34 +1311,35 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         // Se tiver um ID de contato, é porque é uma mensagem recebida válida
         if (contactId) {
           // Incrementar o contador total de mensagens, independente de qualquer outra condição
+          // Esta é uma das principais áreas onde o contador deve ser incrementado!
           setTotalMessagesReceived(prev => {
             const novo = prev + 1;
             console.log(`📥📥📥 MENSAGEM DETECTADA de ${contactId}. Contador: ${prev} -> ${novo}`);
             return novo;
           });
           
-          // Tocar som de notificação
-          playNotificationSound();
+          // Tentar tocar som de notificação
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0;
+            audioRef.current.volume = 0.7;
+            audioRef.current.play().catch(e => {
+              console.warn('Erro de permissão de áudio, esperado em alguns casos:', e);
+            });
+          }
           
           console.log(`Mensagem recebida de: ${contactId}`);
           
-          // Normalizar IDs para comparação consistente
-          const normalizedContactId = normalizeContactId(contactId);
-          const normalizedSelectedId = selectedConversation ? normalizeContactId(selectedConversation) : null;
+          // Normalizar o ID selecionado também para comparação
+          const normalizedSelected = selectedConversation ? normalizeContactId(selectedConversation) : null;
+          const normalizedContact = normalizeContactId(contactId);
           
-          // Verificar se a conversa está atualmente aberta/selecionada
-          const isCurrentlySelected = normalizedContactId === normalizedSelectedId;
-          
-          // Determinar se é uma mensagem enviada por nós (verificação padrão)
-          const isFromMe = data && data.key && data.key.fromMe === true;
-          
-          // Só incrementamos o contador individual quando a conversa NÃO está selecionada
-          // e a mensagem NÃO foi enviada por nós
-          if (!isFromMe && !isCurrentlySelected) {
-            console.log(`🔕 [MESSAGES_UPSERT] Incrementando contador para ${contactId} (não selecionada)`);
+          // Verificar se é o chat atual ou não
+          if (normalizedContact !== normalizedSelected) {
+            console.log(`Nova mensagem para conversa não selecionada: ${contactId}`);
+            console.log(`Chat atual: ${selectedConversation}, normalizado: ${normalizedSelected}`);
             incrementUnreadCount(contactId);
           } else {
-            console.log(`🔔 [MESSAGES_UPSERT] NÃO incrementando contador: ${isCurrentlySelected ? 'conversa atual' : 'mensagem enviada por mim'}`);
+            console.log(`Mensagem para o chat atual: ${contactId} == ${selectedConversation}. Não incrementando.`);
           }
         } else {
           console.log('Dados recebidos não contêm ID de contato válido ou não é mensagem recebida.');
@@ -1409,37 +1410,26 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         }
         
         if (isValidMessageStructure) {
-          console.log('⚡ Evento message válido detectado, incrementando contador global');
-          // Incrementar contador global apenas para mensagens com estrutura válida
+          console.log('⚡ Evento message válido detectado, incrementando contador');
+          // Incrementar contador apenas para mensagens com estrutura válida
           setTotalMessagesReceived(prev => {
             const novo = prev + 1;
-            console.log(`💬 Contador global atualizado via 'message': ${prev} -> ${novo}`);
+            console.log(`💬 Contador atualizado via 'message': ${prev} -> ${novo}`);
             return novo;
           });
-          
-          // Verificar se a mensagem é recebida (não enviada por nós)
-          const isFromMe = data && data.key && data.key.fromMe === true;
-          
+        }
+        
+        // Verificar se a mensagem é recebida (não enviada por nós)
+        const isIncomingMessage = isMessageFromContact(data);
+        
+        // Se for mensagem recebida e não estiver com o chat aberto, incrementar contador
+        if (isIncomingMessage) {
           // Extrair o remoteJid (ID do contato) da mensagem
           const contactId = extractContactId(data);
           
-          if (contactId) {
-            // Normalizar IDs para comparação consistente
-            const normalizedContactId = normalizeContactId(contactId);
-            const normalizedSelectedId = selectedConversation ? normalizeContactId(selectedConversation) : null;
-            
-            // Verificar se a conversa está atualmente aberta/selecionada
-            const isCurrentlySelected = normalizedContactId === normalizedSelectedId;
-            
-            // Só incrementamos se não for mensagem minha E não for conversa selecionada
-            if (!isFromMe && !isCurrentlySelected) {
-              console.log(`🔕 [message] Incrementando contador para ${contactId} (não selecionada)`);
-              playNotificationSound();
-              incrementUnreadCount(contactId);
-            } else {
-              console.log(`🔔 [message] NÃO incrementando contador: ${isCurrentlySelected ? 'conversa atual' : 'mensagem enviada por mim'}`);
-              playNotificationSound();
-            }
+          if (contactId && contactId !== selectedConversation) {
+            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
+            incrementUnreadCount(contactId);
           }
         }
         
@@ -1451,32 +1441,13 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         
         // Verificar se há mensagens novas recebidas e tocar som
         const isIncomingMessage = isMessageFromContact(data);
-        const isFromMe = data && data.key && data.key.fromMe === true;
-        
         if (isIncomingMessage) {
-          // Incrementar contador global
-          setTotalMessagesReceived(prev => prev + 1);
-          
+          playNotificationSound();
           const contactId = extractContactId(data);
           
-          if (contactId) {
-            // Normalizar IDs para comparação consistente
-            const normalizedContactId = normalizeContactId(contactId);
-            const normalizedSelectedId = selectedConversation ? normalizeContactId(selectedConversation) : null;
-            
-            // Verificar se a conversa está atualmente aberta/selecionada
-            const isCurrentlySelected = normalizedContactId === normalizedSelectedId;
-            
-            // Tocar som independentemente de incrementar ou não
-            playNotificationSound();
-            
-            // Só incrementar se não for mensagem minha E não for a conversa selecionada
-            if (!isFromMe && !isCurrentlySelected) {
-              console.log(`🔕 [messages] Incrementando contador para ${contactId} (não selecionada)`);
-              incrementUnreadCount(contactId);
-            } else {
-              console.log(`🔔 [messages] NÃO incrementando contador: ${isCurrentlySelected ? 'conversa atual' : 'mensagem enviada por mim'}`);
-            }
+          if (contactId && contactId !== selectedConversation) {
+            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
+            incrementUnreadCount(contactId);
           }
         }
         
