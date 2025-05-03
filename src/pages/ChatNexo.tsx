@@ -19,7 +19,7 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-type ConversationStatus = 'pending' | 'attending' | 'finished' | 'contacts';
+type ConversationStatus = 'pending' | 'attending' | 'finished' | 'contacts' | 'deletado';
 
 // Tipo para uma conversa
 type Conversation = {
@@ -128,8 +128,6 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
-  // Contador de mensagens totais recebidas via Socket.io
-  const [totalMessagesReceived, setTotalMessagesReceived] = useState<number>(0);
   const [inputMessage, setInputMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   // Estado para o tipo de filtro de empresa (nome ou telefone)
@@ -230,37 +228,25 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   
   // Preencher a referência ao montar o componente
   useEffect(() => {
-    // Carregar som de notificação em um elemento de áudio pré-carregado
-    if (!audioRef.current) {
-      audioRef.current = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3');
-      audioRef.current.preload = 'auto';
-      audioRef.current.volume = 0.7;
-      
-      // Carregar o áudio antecipadamente
-      audioRef.current.load();
-      
-      console.log(' Elemento de áudio para notificações inicializado');
-    }
+    // Inicializar elemento de áudio
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.src = 'https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3';
     
-    // Detectar configurações do usuário para controle da flag de Contatos/Empresas
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      // Verificar se o usuário tem configurações específicas
-      if (user && user.app_metadata && user.app_metadata.settings) {
-        const settings = user.app_metadata.settings;
-        
-        // Verificar se a flag de Contatos/Empresas está habilitada
-        if (settings.contactsEnabled !== undefined) {
-          setIsSidebarCollapsed(!settings.contactsEnabled);
-        }
-      }
-    });
+    // Tentar carregar o som
+    audio.load();
     
-    // Limpar função para salvar a posição quando a conversa mudar
+    // Armazenar na referência
+    audioRef.current = audio;
+    
+    // Limpar ao desmontar
     return () => {
-      saveCurrentScrollPosition();
+      audioRef.current = null;
     };
   }, []);
   
+
+
   // Definir isLoading como true por padrão para mostrar o overlay imediatamente
   const [isLoading, setIsLoading] = useState(true);
   
@@ -282,21 +268,6 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isActionMenuOpen]);
-  
-  // Salvar contador de mensagens no localStorage quando mudar
-  useEffect(() => {
-    localStorage.setItem('nexochat_total_messages', totalMessagesReceived.toString());
-    console.log(' Contador de mensagens atualizado e salvo:', totalMessagesReceived);
-  }, [totalMessagesReceived]);
-  
-  // Efeito para carregar o contador do localStorage na inicialização
-  useEffect(() => {
-    const savedCount = localStorage.getItem('nexochat_total_messages');
-    if (savedCount) {
-      setTotalMessagesReceived(parseInt(savedCount, 10));
-      console.log(' Contador carregado do localStorage:', savedCount);
-    }
-  }, []);
   // Flag para saber se os status já foram carregados do banco de dados
   const [statusLoaded, setStatusLoaded] = useState(false);
   // Configuração da Evolution API
@@ -434,14 +405,16 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
     try {
       // Verificar se tem informações do usuário
       if (!userInfo.id || !userInfo.resellerId) {
-        console.error('Informações do usuário não disponíveis');
+        console.error('Informações do usuário não disponíveis para salvar status:', conversationId, status);
         return;
       }
       
+      console.log(`Iniciando salvamento no banco - ID: ${conversationId}, Status: ${status}`);
+      
       // Dados para inserção/atualização
-      const statusData: any = {
+      const statusData = {
         conversation_id: conversationId,
-        status,
+        status: status,
         reseller_id: userInfo.resellerId,
         profile_admin_id: userInfo.id,
         profile_admin_user_id: userInfo.email,
@@ -458,22 +431,60 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         statusData.scroll_position = scrollPosition;
       }
       
+      console.log('Dados a serem salvos:', statusData);
+      
+      // Verificar se o registro já existe
+      const { data: existingRecord, error: checkError } = await supabase
+        .from('nexochat_status')
+        .select('conversation_id, status')
+        .eq('conversation_id', conversationId)
+        .eq('profile_admin_id', userInfo.id)
+        .maybeSingle();
+      
+      if (checkError) {
+        console.error('Erro ao verificar registro existente:', checkError);
+      }
+      
+      console.log('Registro existente:', existingRecord);
+      
       // Usar upsert para inserir ou atualizar o registro
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('nexochat_status')
         .upsert(statusData, { 
-          onConflict: 'conversation_id,profile_admin_id'
+          onConflict: 'conversation_id,profile_admin_id',
+          returning: 'minimal'
         });
       
       if (error) {
+        console.error('Erro detalhado do upsert:', error.message, error.details, error.hint);
         throw error;
       }
       
-      console.log(`Status da conversa ${conversationId} salvo no banco de dados: ${status} (Não lidas: ${unreadCount !== undefined ? unreadCount : 'não alterado'})`);
+      console.log(`Status da conversa ${conversationId} salvo com sucesso no banco de dados: ${status}`);
+      return data;
     } catch (error) {
       console.error('Erro ao salvar status no banco de dados:', error);
-      // Se falhar, salvar no localStorage como backup
-      saveStatusToLocalStorage(conversationId, status, unreadCount, scrollPosition);
+      // Tentar uma abordagem alternativa - update direto se o upsert falhar
+      try {
+        console.log('Tentando update direto como fallback...');
+        const { error: updateError } = await supabase
+          .from('nexochat_status')
+          .update({ status: status, updated_at: new Date().toISOString() })
+          .eq('conversation_id', conversationId)
+          .eq('profile_admin_id', userInfo.id);
+          
+        if (updateError) {
+          console.error('Erro também no update direto:', updateError);
+          // Se falhar, salvar no localStorage como backup
+          saveStatusToLocalStorage(conversationId, status, unreadCount, scrollPosition);
+        } else {
+          console.log('Update direto bem-sucedido para status:', status);
+        }
+      } catch (fallbackError) {
+        console.error('Erro no fallback:', fallbackError);
+        // Se tudo falhar, salvar no localStorage como último recurso
+        saveStatusToLocalStorage(conversationId, status, unreadCount, scrollPosition);
+      }
     }
   };
   
@@ -703,6 +714,9 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
     const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime();
     
     return conversations.filter(conv => {
+      // Primeiro filtro: excluir conversas com status 'deletado'
+      if (conv.status === 'deletado') return false;
+      
       // Filtro por status (aba selecionada)
       const statusMatch = conv.status === activeTab;
       
@@ -1196,283 +1210,34 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       
       // Monitorar todos os eventos do Socket
       socket.onAny((event, ...args) => {
-        console.log(`🔍🔍🔍 DIAGNÓSTICO DE EVENTO Socket.io: ${event}`, args);
-        console.log('Estrutura do evento:', JSON.stringify(args, null, 2));
-        
-        // Incrementar apenas para eventos que realmente parecem ser mensagens
-        if (event.toLowerCase().includes('message') || event === 'MESSAGES_UPSERT') {
-          // Verificar se o evento tem estrutura de mensagem
-          let isRealMessage = false;
-          
-          // Verificar o primeiro argumento
-          if (args && args.length > 0) {
-            const arg = args[0];
-            
-            // Testes básicos para identificar uma mensagem
-            if (typeof arg === 'object') {
-              if (arg && (
-                  (arg.key && arg.key.remoteJid) ||
-                  (arg.messages && Array.isArray(arg.messages)) ||
-                  (arg.type === 'notify') ||
-                  (arg.data && Array.isArray(arg.data))
-                )) {
-                isRealMessage = true;
-              }
-            }
-          }
-          
-          // Se parece ser uma mensagem real, incrementar contador
-          if (isRealMessage) {
-            console.log(`💬 Possível nova mensagem em evento ${eventName}`);
-            setTotalMessagesReceived(prev => prev + 1);
-          }
-        }
+        console.log(`Socket.io evento recebido: ${event}`, args);
       });
       
-      // Log para facilitar debug
-      console.log('Contagem atual de não lidas:', conversations.map(c => `${c.contactName}: ${c.unreadCount}`));
-      
-      // DETECÇÃO FOCALIZADA DE MENSAGENS - Registramos apenas os eventos importantes
-      console.log('💡 Registrando eventos importantes para mensagens');
-      
-      // Eventos especificamente relacionados a MENSAGENS na Evolution API
-      const messageEvents = [
-        'message', 'messages.upsert', 'MESSAGES_UPSERT'
-      ];
-      
-      // Listener para eventos de mensagem
-      messageEvents.forEach(eventName => {
-        socket.on(eventName, (data) => {
-          console.log(`💬💬💬 EVENTO DE MENSAGEM: ${eventName} 💬💬💬`);
-          console.log(`Conteúdo da mensagem ${eventName}:`, data);
-          
-          // Verificar se é realmente uma mensagem e não uma atualização de status
-          let isTrueMessage = false;
-          
-          try {
-            // Verificar estrutura do objeto para confirmar que é uma mensagem de texto
-            if (data) {
-              // Caso 1: dados com propriedade key e remote
-              if (data.key && data.key.remoteJid) {
-                isTrueMessage = true;
-              }
-              // Caso 2: array com dados de mensagem
-              else if (Array.isArray(data) && data.length > 0 && data[0].key) {
-                isTrueMessage = true;
-              }
-              // Caso 3: formato notify com array de mensagens
-              else if (data.type === 'notify' && data.messages && data.messages.length > 0) {
-                isTrueMessage = true;
-              }
-              // Caso 4: mensagem em data.data
-              else if (data.data) {
-                isTrueMessage = true;
-              }
-            }
-            
-            // Só incrementa o contador se for uma mensagem verdadeira
-            if (isTrueMessage) {
-              console.log(`✅ CONFIRMADO evento de mensagem em: ${eventName}`);
-              setTotalMessagesReceived(prev => {
-                const novo = prev + 1;
-                console.log(`📲 Incrementando contador: ${prev} -> ${novo}`);
-                return novo;
-              });
-              
-              // Colocar elemento de áudio para interagir com o DOM diretamente
-              if (audioRef.current) {
-                audioRef.current.play().catch(e => {
-                  console.warn('Erro ao tocar áudio, esperado em alguns navegadores:', e);
-                });
-              }
-            } else {
-              console.log(`❌ Não parece ser uma mensagem de texto real em ${eventName}`);
-            }
-            
-          } catch (e) {
-            console.error('Erro ao processar dados do evento:', e);
-          }
-        });
+      // Evento de conexão
+      socket.on('connect', () => {
+        console.log(`Socket.io conectado! Socket ID: ${socket.id}`);
+        
+        // Enviar mensagem de inscrição em eventos
+        const subscribeMessage = {
+          action: 'subscribe',
+          instance: instanceName
+        };
+        console.log('Enviando mensagem de inscrição:', subscribeMessage);
+        socket.emit('subscribe', subscribeMessage);
+        
+        // Também tentar se inscrever com outros formatos que podem ser usados pela API
+        console.log('Tentando inscrição alternativa');
+        socket.emit('subscribe', instanceName);
       });
       
-      // Monitorar evento para contatos (apenas para debug, não incrementa contador)
-      socket.on('contacts.update', (data) => {
-        console.log('📝 Evento de atualização de contato detectado:', data);
-        // NÃO incrementa o contador pois não é uma mensagem
+      // Confirmação de inscrição
+      socket.on('subscribed', (data) => {
+        console.log('Inscrição confirmada no Socket.io:', data);
       });
       
-      // DETECTOR PRINCIPAL DA EVOLUTION API - diretamente para MESSAGES_UPSERT
-      socket.on('MESSAGES_UPSERT', (data) => {
-        console.log('⚫⚫⚫ Evento MESSAGES_UPSERT recebido ⚫⚫⚫');
-        
-        // Extrair o remoteJid (ID do contato) da mensagem e verificar se é mensagem recebida
-        const contactId = extractContactId(data);
-        
-        // Se tiver um ID de contato, é porque é uma mensagem recebida válida
-        if (contactId) {
-          // Incrementar o contador total de mensagens, independente de qualquer outra condição
-          // Esta é uma das principais áreas onde o contador deve ser incrementado!
-          setTotalMessagesReceived(prev => {
-            const novo = prev + 1;
-            console.log(`📥📥📥 MENSAGEM DETECTADA de ${contactId}. Contador: ${prev} -> ${novo}`);
-            return novo;
-          });
-          
-          // Tentar tocar som de notificação
-          if (audioRef.current) {
-            audioRef.current.currentTime = 0;
-            audioRef.current.volume = 0.7;
-            audioRef.current.play().catch(e => {
-              console.warn('Erro de permissão de áudio, esperado em alguns casos:', e);
-            });
-          }
-          
-          console.log(`Mensagem recebida de: ${contactId}`);
-          
-          // Normalizar o ID selecionado também para comparação
-          const normalizedSelected = selectedConversation ? normalizeContactId(selectedConversation) : null;
-          const normalizedContact = normalizeContactId(contactId);
-          
-          // Verificar se é o chat atual ou não
-          if (normalizedContact !== normalizedSelected) {
-            console.log(`Nova mensagem para conversa não selecionada: ${contactId}`);
-            console.log(`Chat atual: ${selectedConversation}, normalizado: ${normalizedSelected}`);
-            incrementUnreadCount(contactId);
-          } else {
-            console.log(`Mensagem para o chat atual: ${contactId} == ${selectedConversation}. Não incrementando.`);
-          }
-        } else {
-          console.log('Dados recebidos não contêm ID de contato válido ou não é mensagem recebida.');
-        }
-        
-        // Processar as mensagens normalmente para atualizar a UI
-        processSocketMessages(data);
-      });
-      
-      // PRINCIPAL EVENTO PARA MENSAGENS - confirmado nos testes
-      socket.on('messages.upsert', (data) => {
-        console.log('📞📞📞 EVENTO PRINCIPAL messages.upsert RECEBIDO:', data);
-        
-        // Verificar estrutura do evento para garantir que é uma mensagem válida
-        if (data && data.data && data.data.key && data.data.key.remoteJid) {
-          // Extrair o ID do contato diretamente da estrutura conhecida
-          const contactId = data.data.key.remoteJid;
-          const isFromMe = data.data.key.fromMe === true;
-          const pushName = data.data.pushName || 'Desconhecido';
-          const messageContent = data.data.message?.conversation || data.data.message?.extendedTextMessage?.text || '';
-          
-          console.log(`Nova mensagem de ${pushName} (${contactId}): "${messageContent}". De mim: ${isFromMe}`);
-          
-          // Incrementar contagem global de mensagens recebidas (independente de quem enviou)
-          setTotalMessagesReceived(prev => prev + 1);
-          
-          // Normalizar IDs para comparação consistente
-          const normalizedContactId = normalizeContactId(contactId);
-          const normalizedSelectedId = selectedConversation ? normalizeContactId(selectedConversation) : null;
-          
-          // Verificar se a conversa está atualmente aberta/selecionada
-          const isCurrentlySelected = normalizedContactId === normalizedSelectedId;
-          
-          // Só incrementamos o contador individual quando AMBAS condições são verdadeiras:
-          // 1. A mensagem NÃO foi enviada por nós (não é fromMe)
-          // 2. A conversa NÃO é a que está atualmente selecionada/aberta
-          if (!isFromMe && !isCurrentlySelected) {
-            console.log(`🔕 Incrementando contador individual para ${contactId} (conversa não selecionada)`);  
-            incrementUnreadCount(contactId);
-            playNotificationSound();
-          } else if (isCurrentlySelected) {
-            console.log(`🔔 Mensagem para conversa atual (${contactId}). NÃO incrementando contador.`);
-            // Opcional: tocar som mesmo sendo conversa atual
-            playNotificationSound();
-          } else {
-            console.log(`🔕 Mensagem enviada por mim. Não incrementando contador.`);
-          }
-        } else {
-          console.log('Evento messages.upsert sem estrutura válida de mensagem');  
-        }
-        
-        processSocketMessages(data);
-      });
-      
-      // Evento message genérico - deve capturar mensagens em alguns casos
-      socket.on('message', (data) => {
-        console.log('📨📨📨 Evento message recebido:', data);
-        
-        // Verificar se tem uma estrutura válida de mensagem antes de incrementar
-        let isValidMessageStructure = false;
-        
-        if (data && (
-            (data.key && data.key.remoteJid) ||
-            (typeof data === 'object' && data.message) ||
-            (typeof data === 'object' && data.text)
-          )) {
-          isValidMessageStructure = true;
-        }
-        
-        if (isValidMessageStructure) {
-          console.log('⚡ Evento message válido detectado, incrementando contador');
-          // Incrementar contador apenas para mensagens com estrutura válida
-          setTotalMessagesReceived(prev => {
-            const novo = prev + 1;
-            console.log(`💬 Contador atualizado via 'message': ${prev} -> ${novo}`);
-            return novo;
-          });
-        }
-        
-        // Verificar se a mensagem é recebida (não enviada por nós)
-        const isIncomingMessage = isMessageFromContact(data);
-        
-        // Se for mensagem recebida e não estiver com o chat aberto, incrementar contador
-        if (isIncomingMessage) {
-          // Extrair o remoteJid (ID do contato) da mensagem
-          const contactId = extractContactId(data);
-          
-          if (contactId && contactId !== selectedConversation) {
-            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
-            incrementUnreadCount(contactId);
-          }
-        }
-        
-        processSocketMessages(data);
-      });
-      
-      socket.on('messages', (data) => {
-        console.log('Evento messages recebido:', data);
-        
-        // Verificar se há mensagens novas recebidas e tocar som
-        const isIncomingMessage = isMessageFromContact(data);
-        if (isIncomingMessage) {
-          playNotificationSound();
-          const contactId = extractContactId(data);
-          
-          if (contactId && contactId !== selectedConversation) {
-            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
-            incrementUnreadCount(contactId);
-          }
-        }
-        
-        processSocketMessages(data);
-      });
-      
-      // Monitorar eventos de conexão
-      ['CONNECTION_UPDATE', 'connection.update', 'status.instance'].forEach(eventName => {
-        socket.on(eventName, (data) => {
-          console.log(`Evento ${eventName} recebido:`, data);
-          
-          // Atualizar status da instância
-          const state = data?.state || data?.status;
-          if (state) {
-            console.log(`Atualizando status da instância ${instanceName} para ${state}`);
-            setWhatsappInstances(prev => {
-              return prev.map(inst => {
-                if (inst.instance_name === instanceName) {
-                  return { ...inst, status: state };
-                }
-                return inst;
-              });
-            });
-          }
-        });
+      // Desconexão
+      socket.on('disconnect', (reason) => {
+        console.log(`Socket.io desconectado. Razão: ${reason}`);
       });
       
       // Evento connect_error - importante para depurar problemas de conexão
@@ -1490,7 +1255,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         console.error('Erro no Socket.io:', error);
       });
       
-      // Função para verificar se a mensagem é recebida (de um contato)
+            // Função para verificar se a mensagem é recebida (de um contato)
       const isMessageFromContact = (data: any): boolean => {
         if (!data) return false;
         
@@ -1612,18 +1377,11 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       const incrementUnreadCount = (contactId: string): void => {
         console.log(`❤️❤️❤️ INCREMENTANDO CONTADOR para: ${contactId} ❤️❤️❤️`);
         
-        // Verificar novamente se esta conversa já está selecionada (para evitar incremento quando aberta)
-        const normalizedId = normalizeContactId(contactId);
-        const normalizedSelectedId = selectedConversation ? normalizeContactId(selectedConversation) : null;
-        
-        // Se for a conversa atual, não incrementamos contador individual
-        if (normalizedId === normalizedSelectedId) {
-          console.log(`💡 Conversa ${contactId} está aberta - NÃO incrementando contador individual`);
-          return; // Sair da função sem incrementar
-        }
-        
         // Tocar som de notificação quando incrementar o contador
         playNotificationSound();
+        
+        // Primeiro normalizar o contactId para garantir correspondência
+        const normalizedId = normalizeContactId(contactId);
         
         // Verificar se o ID normalizado está no formato esperado
         console.log(`ID normalizado para incremento: ${normalizedId}`);
@@ -1632,7 +1390,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
           // Log dos IDs existentes para debug
           console.log('IDs das conversas existentes:', 
             prevConversations.map(c => `${c.id} (${c.contactName}) - normalizado: ${normalizeContactId(c.id)}`))
-                
+              
           // Primeiro tentar pela ID exata
           let matchFound = false;
           const updatedConversations = prevConversations.map(conv => {
@@ -1749,39 +1507,125 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         return result;
       };
       
-      // Adicionar evento para qualquer mensagem, com logs detalhados para diagnóstico
+      // Adicionar evento para qualquer mensagem (debug)
       socket.onAny((eventName, ...args) => {
-        console.log(`🔍🔍🔍 DIAGNÓSTICO DE EVENTO Socket.io: ${eventName}`, args);
-        console.log('Estrutura do evento:', JSON.stringify(args, null, 2));
+        console.log(`Evento Socket.io recebido: ${eventName}`, args);
+      });
+      
+      // Log para facilitar debug
+      console.log('Contagem atual de não lidas:', conversations.map(c => `${c.contactName}: ${c.unreadCount}`));
+      
+      // Eventos específicos da Evolution API - usando registro direto para todos os formatos possíveis
+      socket.on('MESSAGES_UPSERT', (data) => {
+        console.log('⚫⚫⚫ Evento MESSAGES_UPSERT recebido ⚫⚫⚫');
         
-        // Incrementar apenas para eventos que realmente parecem ser mensagens
-        if (eventName.toLowerCase().includes('message') || eventName === 'MESSAGES_UPSERT') {
-          // Verificar se o evento tem estrutura de mensagem
-          let isRealMessage = false;
+        // Extrair o remoteJid (ID do contato) da mensagem e verificar se é mensagem recebida
+        const contactId = extractContactId(data);
+        
+        // Se tiver um ID de contato, é porque é uma mensagem recebida válida
+        if (contactId) {
+          console.log(`Mensagem recebida de: ${contactId}`);
           
-          // Verificar o primeiro argumento
-          if (args && args.length > 0) {
-            const arg = args[0];
-            
-            // Testes básicos para identificar uma mensagem
-            if (typeof arg === 'object') {
-              if (arg && (
-                  (arg.key && arg.key.remoteJid) ||
-                  (arg.messages && Array.isArray(arg.messages)) ||
-                  (arg.type === 'notify') ||
-                  (arg.data && Array.isArray(arg.data))
-                )) {
-                isRealMessage = true;
-              }
-            }
+          // Normalizar o ID selecionado também para comparação
+          const normalizedSelected = selectedConversation ? normalizeContactId(selectedConversation) : null;
+          const normalizedContact = normalizeContactId(contactId);
+          
+          // Verificar se é o chat atual ou não
+          if (normalizedContact !== normalizedSelected) {
+            console.log(`Nova mensagem para conversa não selecionada: ${contactId}`);
+            console.log(`Chat atual: ${selectedConversation}, normalizado: ${normalizedSelected}`);
+            incrementUnreadCount(contactId);
+          } else {
+            console.log(`Mensagem para o chat atual: ${contactId} == ${selectedConversation}. Não incrementando.`);
           }
+        } else {
+          console.log('Dados recebidos não contêm ID de contato válido ou não é mensagem recebida.');
+        }
+        
+        // Processar as mensagens normalmente para atualizar a UI
+        processSocketMessages(data);
+      });
+      
+      socket.on('messages.upsert', (data) => {
+        console.log('Evento messages.upsert recebido:', data);
+        
+        // Verificar se a mensagem é recebida (não enviada por nós)
+        const isIncomingMessage = isMessageFromContact(data);
+        
+        // Se for mensagem recebida, tocar som de notificação e atualizar contadores
+        if (isIncomingMessage) {
+          // Tocar som de notificação para avisar sobre nova mensagem
+          playNotificationSound();
           
-          // Se parece ser uma mensagem real, incrementar contador
-          if (isRealMessage) {
-            console.log(`💬 Possível nova mensagem em evento ${eventName}`);
-            setTotalMessagesReceived(prev => prev + 1);
+          // Extrair o remoteJid (ID do contato) da mensagem
+          const contactId = extractContactId(data);
+          
+          if (contactId && contactId !== selectedConversation) {
+            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
+            incrementUnreadCount(contactId);
           }
         }
+        
+        processSocketMessages(data);
+      });
+      
+      socket.on('message', (data) => {
+        console.log('Evento message recebido:', data);
+        
+        // Verificar se a mensagem é recebida (não enviada por nós)
+        const isIncomingMessage = isMessageFromContact(data);
+        
+        // Se for mensagem recebida e não estiver com o chat aberto, incrementar contador
+        if (isIncomingMessage) {
+          // Extrair o remoteJid (ID do contato) da mensagem
+          const contactId = extractContactId(data);
+          
+          if (contactId && contactId !== selectedConversation) {
+            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
+            incrementUnreadCount(contactId);
+          }
+        }
+        
+        processSocketMessages(data);
+      });
+      
+      socket.on('messages', (data) => {
+        console.log('Evento messages recebido:', data);
+        
+        // Verificar se há mensagens novas recebidas e tocar som
+        const isIncomingMessage = isMessageFromContact(data);
+        if (isIncomingMessage) {
+          playNotificationSound();
+          const contactId = extractContactId(data);
+          
+          if (contactId && contactId !== selectedConversation) {
+            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
+            incrementUnreadCount(contactId);
+          }
+        }
+        
+        processSocketMessages(data);
+      });
+      
+      // Monitorar eventos de conexão
+      ['CONNECTION_UPDATE', 'connection.update', 'status.instance'].forEach(eventName => {
+        socket.on(eventName, (data) => {
+          console.log(`Evento ${eventName} recebido:`, data);
+          
+          // Atualizar status da instância
+          const state = data?.state || data?.status;
+          if (state) {
+            console.log(`Atualizando status da instância ${instanceName} para ${state}`);
+            setWhatsappInstances(prev => {
+              return prev.map(inst => {
+                if (inst.instance_name === instanceName) {
+                  return { ...inst, status: state };
+                }
+                return inst;
+              });
+            });
+          }
+        });
       });
       
       // Armazenar referência à conexão
@@ -2363,42 +2207,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
             {/* Abas e Filtros */}
             <div className="border-b border-gray-800">
               {/* Indicador de status do Socket.io agora no topo */}
-              <div className="flex justify-between p-2 bg-[#1E1E1E]" data-component-name="ChatNexoContent">
-                <div className="flex space-x-2">
-                  <div 
-                    className="flex items-center text-xs text-white bg-emerald-600 px-2 py-1 rounded-md cursor-pointer"
-                    onClick={() => {
-                      // Forçar incremento do contador quando clicar (para testes e debug)
-                      setTotalMessagesReceived(prev => prev + 1);
-                      console.log('Contador incrementado manualmente');  
-                      
-                      // Tentar tocar som de notificação quando clicar para pré-autorizar som
-                      try {
-                        if (audioRef.current) {
-                          audioRef.current.currentTime = 0;
-                          audioRef.current.play();
-                        }
-                      } catch (e) {
-                        console.error('Erro ao tocar som de teste:', e);
-                      }
-                    }}
-                    title="Clique para incrementar o contador e permitir notificações sonoras">
-                    <span className="mr-1">Mensagens recebidas:</span>
-                    <span className="font-bold">{totalMessagesReceived}</span>
-                  </div>
-                  
-                  <button 
-                    className="text-xs text-white bg-blue-600 px-2 py-1 rounded-md"
-                    onClick={() => {
-                      // Reset do contador
-                      setTotalMessagesReceived(0);
-                      localStorage.setItem('nexochat_total_messages', '0');
-                      console.log('Contador resetado para 0');
-                    }}
-                    title="Resetar contador para zero">
-                    Reset
-                  </button>
-                </div>
+              <div className="flex justify-end p-2 bg-[#1E1E1E]">
                 <div className="flex items-center text-xs text-gray-400">
                   <span className="mr-1">Status:</span>
                   <span className={socketRef.current ? "text-green-400" : "text-red-400"}>
@@ -3471,11 +3280,47 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                         <button 
                           className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-red-400 text-sm transition-colors"
                           onClick={() => {
-                            // Lógica para deletar a conversa
+                            // Lógica para marcar a conversa como deletada
                             if (window.confirm('Tem certeza que deseja deletar esta conversa?')) {
-                              setConversations(prevConversations => 
-                                prevConversations.filter(conv => conv.id !== currentConversation.id)
-                              );
+                              console.log('Deletando conversa:', currentConversation.id, currentConversation.contactName);
+                              
+                              // Atualizar o status para 'deletado' no estado local
+                              setConversations(prevConversations => {
+                                console.log('Estado anterior:', prevConversations.find(c => c.id === currentConversation.id)?.status);
+                                return prevConversations.map(conv => 
+                                  conv.id === currentConversation.id 
+                                    ? { ...conv, status: 'deletado' as ConversationStatus } 
+                                    : conv
+                                );
+                              });
+                              
+                              // Salvar o status 'deletado' no banco de dados
+                              if (currentConversation.id) {
+                                console.log('Salvando status deletado no banco para:', currentConversation.id);
+                                saveStatusToDatabase(currentConversation.id, 'deletado')
+                                  .then(() => {
+                                    console.log('Status deletado salvo com sucesso');
+                                    // Verificar se o status foi salvo corretamente
+                                    return supabase
+                                      .from('nexochat_status')
+                                      .select('conversation_id, status')
+                                      .eq('conversation_id', currentConversation.id)
+                                      .eq('profile_admin_id', userInfo.id)
+                                      .single();
+                                  })
+                                  .then((result) => {
+                                    if (result.data) {
+                                      console.log('Status atual no banco:', result.data.status);
+                                    } else if (result.error) {
+                                      console.error('Erro ao verificar status:', result.error);
+                                    }
+                                  })
+                                  .catch(error => {
+                                    console.error('Erro ao salvar/verificar status deletado:', error);
+                                  });
+                              }
+                              
+                              // Limpar a seleção atual
                               setSelectedConversation(null);
                             }
                             setIsActionMenuOpen(false);
