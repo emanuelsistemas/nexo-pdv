@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste de Log do Console</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        button {
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px 0;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #3367d6;
+        }
+    </style>
+</head>
+<body>
+    <h1>Teste de Log do Console</h1>
+    <p>Esta página gera logs no console para demonstrar a funcionalidade de captura de logs do Browser Tools MCP.</p>
+    
+    <button id="logBtn">Gerar Logs Informativos</button>
+    <button id="errorBtn">Gerar Logs de Erro</button>
+    <button id="mixedBtn">Gerar Logs Mistos</button>
+    <button id="networkBtn">Simular Requisição de Rede</button>
+    
+    <script>
+        // Log simples ao carregar a página
+        console.log('Página carregada com sucesso!');
+        
+        // Manipuladores de eventos para os botões
+        document.getElementById('logBtn').addEventListener('click', function() {
+            console.log('Botão de log informativo clicado');
+            console.info('Esta é uma mensagem informativa');
+            console.log('Dados de exemplo:', { 
+                nome: 'Usuário Teste', 
+                id: 12345, 
+                ativo: true 
+            });
+            console.log('Operação concluída com sucesso');
+        });
+        
+        document.getElementById('errorBtn').addEventListener('click', function() {
+            console.warn('Atenção: esta ação pode causar problemas');
+            console.error('Erro: não foi possível completar a operação');
+            try {
+                // Forçar um erro
+                const obj = null;
+                obj.propriedade;
+            } catch (e) {
+                console.error('Exceção capturada:', e.message);
+            }
+        });
+        
+        document.getElementById('mixedBtn').addEventListener('click', function() {
+            console.log('Iniciando operação complexa...');
+            console.warn('Alguns parâmetros estão faltando');
+            console.info('Usando valores padrão');
+            console.log('Processamento: 50% concluído');
+            
+            setTimeout(() => {
+                console.log('Processamento: 100% concluído');
+                if (Math.random() > 0.5) {
+                    console.error('Erro aleatório no processamento!');
+                } else {
+                    console.log('Operação complexa concluída com sucesso');
+                }
+            }, 1000);
+        });
+        
+        document.getElementById('networkBtn').addEventListener('click', function() {
+            console.log('Iniciando requisição de rede...');
+            fetch('https://jsonplaceholder.typicode.com/todos/1')
+                .then(response => {
+                    console.log('Resposta recebida:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Dados recebidos:', data);
+                })
+                .catch(error => {
+                    console.error('Erro na requisição:', error);
+                });
+        });
+    </script>
+</body>
+</html>
