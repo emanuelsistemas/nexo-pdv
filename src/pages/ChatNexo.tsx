@@ -128,6 +128,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const navigate = useNavigate();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  // Contador de mensagens totais recebidas via Socket.io
+  const [totalMessagesReceived, setTotalMessagesReceived] = useState<number>(0);
   const [inputMessage, setInputMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   // Estado para o tipo de filtro de empresa (nome ou telefone)
@@ -223,8 +225,27 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   // Referência para o container de mensagens para controlar o scroll
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   
-  // Referência para o contexto de áudio (Web Audio API)
-  const audioContextRef = useRef<AudioContext | null>(null);
+  // Referência para o elemento de áudio usado para notificações
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Preencher a referência ao montar o componente
+  useEffect(() => {
+    // Inicializar elemento de áudio
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.src = 'https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3';
+    
+    // Tentar carregar o som
+    audio.load();
+    
+    // Armazenar na referência
+    audioRef.current = audio;
+    
+    // Limpar ao desmontar
+    return () => {
+      audioRef.current = null;
+    };
+  }, []);
   
 
 
@@ -1060,47 +1081,50 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
 
   // Função para conectar ao Socket.io da Evolution API
   const connectSocketIO = (baseUrl: string, instanceName: string, apikey: string) => {
-    // Função para tocar som padrão de notificação usando Web Audio API
+    // Função simplificada para tocar som de notificação usando elemento de áudio HTML5
     const playNotificationSound = () => {
       try {
-        // Criar contexto de áudio se ainda não existir
-        if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
-        
-        // Se temos o contexto de áudio
-        if (audioContextRef.current) {
-          const audioContext = audioContextRef.current;
+        // Verificar se temos um elemento de áudio
+        if (audioRef.current) {
+          // Reiniciar o som para garantir que toque novamente
+          audioRef.current.currentTime = 0;
           
-          // Notas da melodia (Som de notificação padrão)
-          const notes = [392, 523.25, 659.25]; // G4, C5, E5
-          const startTimes = [0, 0.15, 0.3];
-          const durations = [0.15, 0.15, 0.3];
+          // Tocar o som com volume apropriado
+          audioRef.current.volume = 0.7;
           
-          // Criar um oscilador para cada nota
-          for (let i = 0; i < notes.length; i++) {
-            const oscillator = audioContext.createOscillator();
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(notes[i], audioContext.currentTime + startTimes[i]);
-            
-            const gainNode = audioContext.createGain();
-            gainNode.gain.setValueAtTime(0, audioContext.currentTime + startTimes[i]);
-            gainNode.gain.linearRampToValueAtTime(0.4, audioContext.currentTime + startTimes[i] + 0.01);
-            gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + startTimes[i] + durations[i]);
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.start(audioContext.currentTime + startTimes[i]);
-            oscillator.stop(audioContext.currentTime + startTimes[i] + durations[i]);
+          // Reproduzir o som com tratamento de erro
+          const playPromise = audioRef.current.play();
+          
+          // Tratar a promise retornada pelos navegadores modernos
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                console.log('Som de notificação reproduzido com sucesso');
+              })
+              .catch(error => {
+                console.error('Erro ao reproduzir áudio:', error);
+                
+                // Se falhou, tentar criar um novo elemento de áudio como fallback
+                const fallbackAudio = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3');
+                fallbackAudio.play().catch(e => console.error('Erro no fallback:', e));
+              });
           }
-          
-          console.log('Som de notificação tocado com sucesso');
         } else {
-          console.error('Contexto de áudio não disponível');
+          // Fallback: criar um novo elemento de áudio se a referência não estiver disponível
+          const fallbackAudio = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3');
+          fallbackAudio.play().catch(e => console.error('Erro de fallback:', e));
+          console.log('Usando fallback para som de notificação');
         }
       } catch (error) {
-        console.error('Erro ao tocar som de notificação:', error);
+        console.error('Erro fatal ao reproduzir som:', error);
+        
+        // Última tentativa de fallback em caso de erro fatal
+        try {
+          const emergencyAudio = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3');
+          emergencyAudio.play();
+        } catch (e) {
+          console.error('Todas as tentativas de som falharam:', e);
+        }
       }
     };
     // Fechar conexão existente se houver
@@ -1151,6 +1175,12 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       // Evento de conexão
       socket.on('connect', () => {
         console.log(`Socket.io conectado! Socket ID: ${socket.id}`);
+        
+        // Recuperar contador de mensagens do localStorage ao conectar, se existir
+        const savedCount = localStorage.getItem('nexochat_total_messages');
+        if (savedCount) {
+          setTotalMessagesReceived(parseInt(savedCount, 10));
+        }
         
         // Enviar mensagem de inscrição em eventos
         const subscribeMessage = {
@@ -1312,6 +1342,9 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       const incrementUnreadCount = (contactId: string): void => {
         console.log(`❤️❤️❤️ INCREMENTANDO CONTADOR para: ${contactId} ❤️❤️❤️`);
         
+        // Incrementar contador total de mensagens
+        setTotalMessagesReceived(prev => prev + 1);
+        
         // Tocar som de notificação quando incrementar o contador
         playNotificationSound();
         
@@ -1459,6 +1492,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         
         // Se tiver um ID de contato, é porque é uma mensagem recebida válida
         if (contactId) {
+          // Incrementar o contador total de mensagens, independente do chat estar selecionado
+          setTotalMessagesReceived(prev => prev + 1);
           console.log(`Mensagem recebida de: ${contactId}`);
           
           // Normalizar o ID selecionado também para comparação
@@ -2142,7 +2177,11 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
             {/* Abas e Filtros */}
             <div className="border-b border-gray-800">
               {/* Indicador de status do Socket.io agora no topo */}
-              <div className="flex justify-end p-2 bg-[#1E1E1E]">
+              <div className="flex justify-between p-2 bg-[#1E1E1E]" data-component-name="ChatNexoContent">
+                <div className="flex items-center text-xs text-white bg-emerald-600 px-2 py-1 rounded-md">
+                  <span className="mr-1">Mensagens recebidas:</span>
+                  <span className="font-bold">{totalMessagesReceived}</span>
+                </div>
                 <div className="flex items-center text-xs text-gray-400">
                   <span className="mr-1">Status:</span>
                   <span className={socketRef.current ? "text-green-400" : "text-red-400"}>
@@ -3230,6 +3269,57 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                       </div>
                     )}
                   </div>
+                </div>
+                
+                {/* Botão de teste de som de notificação */}
+                <div className="bg-[#1A1A1A] px-4 py-2 border-b border-gray-800">
+                  <button 
+                    onClick={() => {
+                      // Chamar a função de reprodução de som na mesma função que é usada pela notificação
+                      if (socketRef.current) {
+                        // Acessando a função via socketRef, já que está dentro do escopo do connectSocketIO
+                        const playSound = () => {
+                          try {
+                            // Verificar se temos um elemento de áudio
+                            if (audioRef.current) {
+                              // Reiniciar o som para garantir que toque novamente
+                              audioRef.current.currentTime = 0;
+                              
+                              // Tocar o som com volume apropriado
+                              audioRef.current.volume = 0.7;
+                              
+                              // Reproduzir o som
+                              const playPromise = audioRef.current.play();
+                              
+                              if (playPromise !== undefined) {
+                                playPromise
+                                  .then(() => {
+                                    console.log('Som de teste reproduzido com sucesso');
+                                  })
+                                  .catch(error => {
+                                    console.error('Erro ao reproduzir áudio de teste:', error);
+                                    // Fallback
+                                    const fallbackAudio = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3');
+                                    fallbackAudio.play().catch(e => console.error('Erro no fallback do teste:', e));
+                                  });
+                              }
+                            } else {
+                              // Fallback
+                              const fallbackAudio = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3');
+                              fallbackAudio.play().catch(e => console.error('Erro de fallback do teste:', e));
+                            }
+                          } catch (error) {
+                            console.error('Erro ao reproduzir som de teste:', error);
+                          }
+                        };
+                        
+                        playSound();
+                      }
+                    }}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md flex items-center text-sm"
+                  >
+                    <span className="mr-2">🔊</span> Testar Som de Notificação
+                  </button>
                 </div>
                 
                 {/* Mensagens */}
