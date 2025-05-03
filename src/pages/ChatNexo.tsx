@@ -1349,24 +1349,38 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         processSocketMessages(data);
       });
       
+      // PRINCIPAL EVENTO PARA MENSAGENS - confirmado nos testes
       socket.on('messages.upsert', (data) => {
-        console.log('Evento messages.upsert recebido:', data);
+        console.log('📞📞📞 EVENTO PRINCIPAL messages.upsert RECEBIDO:', data);
         
-        // Verificar se a mensagem é recebida (não enviada por nós)
-        const isIncomingMessage = isMessageFromContact(data);
-        
-        // Se for mensagem recebida, tocar som de notificação e atualizar contadores
-        if (isIncomingMessage) {
-          // Tocar som de notificação para avisar sobre nova mensagem
-          playNotificationSound();
+        // Verificar estrutura do evento para garantir que é uma mensagem válida
+        if (data && data.data && data.data.key && data.data.key.remoteJid) {
+          // Extrair o ID do contato diretamente da estrutura conhecida
+          const contactId = data.data.key.remoteJid;
+          const isFromMe = data.data.key.fromMe === true;
+          const pushName = data.data.pushName || 'Desconhecido';
+          const messageContent = data.data.message?.conversation || data.data.message?.extendedTextMessage?.text || '';
           
-          // Extrair o remoteJid (ID do contato) da mensagem
-          const contactId = extractContactId(data);
+          console.log(`Nova mensagem de ${pushName} (${contactId}): "${messageContent}". De mim: ${isFromMe}`);
           
-          if (contactId && contactId !== selectedConversation) {
-            // Incrementar contagem de não lidas apenas se o chat não estiver selecionado
-            incrementUnreadCount(contactId);
+          // Incrementar contagem global de mensagens recebidas (independente de quem enviou)
+          setTotalMessagesReceived(prev => prev + 1);
+          
+          // Só incrementamos o contador individual quando a mensagem NÃO é nossa
+          if (!isFromMe) {
+            // Só incrementamos o contador individual quando não é a conversa atual
+            if (contactId !== selectedConversation) {
+              console.log(`🔕 Incrementando contador individual para ${contactId} (conversa não selecionada)`);  
+              incrementUnreadCount(contactId);
+              playNotificationSound();
+            } else {
+              console.log(`🔕 Mensagem para conversa atual (${contactId}). Não incrementando contador individual.`);
+            }
+          } else {
+            console.log(`🔕 Mensagem enviada por mim. Não incrementando contador.`);
           }
+        } else {
+          console.log('Evento messages.upsert sem estrutura válida de mensagem');  
         }
         
         processSocketMessages(data);
