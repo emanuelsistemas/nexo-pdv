@@ -162,7 +162,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       position: 'Proprietário'
     }] // Array de contatos com nome, telefone e cargo
   });
-  const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
+  const [activeTab, setActiveTab] = useState<ConversationStatus>('pendente');
   // Removido estado de subaba pois agora a aba Contatos já mostra diretamente a grid de empresas
   // Estado para armazenar a lista de empresas
   const [companies, setCompanies] = useState<Array<{
@@ -718,7 +718,9 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       if (conv.status === 'deletado') return false;
       
       // Filtro por status (aba selecionada)
-      const statusMatch = conv.status === activeTab;
+      // Mapear 'pending' para 'pendente' diretamente aqui
+      const statusForUI = conv.status === 'pending' ? 'pendente' : conv.status;
+      const statusMatch = statusForUI === activeTab;
       
       // Filtro por setor
       const sectorMatch = selectedSector === 'all' || conv.sector === selectedSector;
@@ -745,6 +747,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   // Obter a conversa atual selecionada
   const currentConversation = conversations.find(conv => conv.id === selectedConversation);
   
+
+
   // Formatar data para exibição
   const formatTimestamp = (timestamp: Date | string) => {
     const now = new Date();
@@ -1949,12 +1953,61 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         // Adicionar conversas existentes ao mapa
         prevConversations.forEach(conv => conversationMap.set(conv.id, conv));
         
+        // VERIFICAR CONVERSAS DELETADAS QUE ESTÃO RECEBENDO NOVAS MENSAGENS
+        const contactIdsWithNewMessages = mappedConversations.map(conv => conv.id);
+        console.log('⭐ IDs de contatos com novas mensagens:', contactIdsWithNewMessages);
+        
+        // Verificar se há conversas com status deletado
+        const deletedConversations = prevConversations.filter(c => c.status === 'deletado');
+        console.log(`⭐ Conversas com status DELETADO encontradas: ${deletedConversations.length}`);
+        
+        if (deletedConversations.length > 0) {
+          console.log('⭐ Lista detalhada de conversas DELETADAS:', 
+            deletedConversations.map(c => {
+              // Extrair o número do telefone para facilitar comparação
+              const phone = c.id.split('@')[0];
+              return `${c.contactName} (${c.id}) - Telefone: ${phone}`;
+            })
+          );
+          
+          // Para cada contato com nova mensagem, verificar se corresponde a uma conversa deletada
+          contactIdsWithNewMessages.forEach(contactId => {
+            const phone = contactId.split('@')[0];
+            console.log(`⭐ Verificando contato com nova mensagem: ${contactId} - Telefone: ${phone}`);
+            
+            // Procurar nas conversas deletadas
+            deletedConversations.forEach(delConv => {
+              const delPhone = delConv.id.split('@')[0];
+              
+              // Se o ID completo ou apenas o número de telefone corresponder
+              if (delConv.id === contactId || delPhone === phone) {
+                console.log(`🔄🔄🔄 RESTAURANDO conversa deletada! ID: ${delConv.id}, Nome: ${delConv.contactName}`);
+                
+                // Atualizar no mapa de conversas
+                const updatedConv = {...delConv, status: 'pending'};
+                conversationMap.set(delConv.id, updatedConv);
+                
+                // Atualizar no banco de dados
+                saveStatusToDatabase(delConv.id, 'pending');
+              }
+            });
+          });
+        }
+        
         // Adicionar ou atualizar com novas conversas
         mappedConversations.forEach(newConv => {
           const existingConv = conversationMap.get(newConv.id);
           if (existingConv) {
-            // Se já existir, mantém o status, setor e mescla as mensagens
-            // Primeiro, juntar todas as mensagens (novas e existentes)
+            // Verificar se é uma conversa deletada que está recebendo nova mensagem
+            let finalStatus = existingConv.status;
+            if (finalStatus === 'deletado') {
+              console.log(`🔄 Restaurando conversa deletada que está recebendo mensagem: ${newConv.contactName}`);
+              finalStatus = 'pending';
+              // Atualizar no banco de dados
+              saveStatusToDatabase(newConv.id, 'pending');
+            }
+            
+            // Juntar todas as mensagens (novas e existentes)
             const allMessages = [...newConv.messages, ...existingConv.messages];
             
             // Remover mensagens duplicadas usando um Map com o ID como chave
@@ -1986,10 +2039,11 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
             }
             
             conversationMap.set(newConv.id, {
-              ...newConv,
-              status: existingConv.status,
-              sector: existingConv.sector,
+              ...existingConv,
+              status: finalStatus, // Usar o status atualizado que pode ter mudado de 'deletado' para 'pendente'
               messages: sortedMessages, // Usar as mensagens mescladas
+              lastMessage: newConv.lastMessage,
+              timestamp: newConv.timestamp,
               unreadCount: newUnreadCount // Usar contador atualizado
             });
           } else {
@@ -2247,8 +2301,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                   >
                     {/* Aba Pendentes */}
                     <button
-                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'pending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
-                      onClick={() => setActiveTab('pending')}
+                      onClick={() => setActiveTab('pendente')}
+                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'pendente' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                     >
                       Pendentes
                       {filteredConversations.filter(conv => conv.status === 'pending').length > 0 && (
@@ -2428,13 +2482,13 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                             // Se não existe conversa, iniciar uma nova conversa pendente
                             const newConversation: Conversation = {
                               ...contact,
-                              status: 'pending',
+                              status: 'pending', // Mantemos 'pending' para o banco de dados
                               messages: [],
                               unreadCount: 0
                             };
                             setConversations(prev => [...prev, newConversation]);
                             setSelectedConversation(contact.id);
-                            setActiveTab('pending');
+                            setActiveTab('pendente'); // Usamos 'pendente' para a interface
                           }
                         }}
                       >
