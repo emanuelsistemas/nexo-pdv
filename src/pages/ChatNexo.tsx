@@ -2495,35 +2495,14 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
 
               {/* Sistema de Navegação de Abas com Paginação */}
               <div className="relative border-b border-gray-700 w-full">
-                {/* Container para animação e setas */}
-                <div className="flex items-center space-x-2">
-                  {/* Contador de mensagens removido da aba (movido para as mensagens) */}
-                  
-                  {/* Botão seta esquerda */}
-                  <button 
-                    className="px-2 py-3 text-gray-400 hover:text-white focus:outline-none transition-colors"
-                    onClick={() => {
-                      // Obter todos os elementos de aba
-                      const tabContainer = document.getElementById('tabs-container');
-                      if (tabContainer) {
-                        // Rolar para a esquerda
-                        tabContainer.scrollBy({ left: -150, behavior: 'smooth' });
-                      }
-                    }}
-                  >
-                    <ChevronLeft size={18} />
-                  </button>
-                  
-                  {/* Container escrolável de abas */}
-                  <div 
-                    id="tabs-container"
-                    className="flex-1 flex overflow-x-auto scrollbar-hide" 
-                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} // Firefox e IE
-                  >
+                {/* Navegação de abas em duas linhas */}
+                <div className="flex flex-col space-y-1" data-component-name="ChatNexoContent">
+                  {/* Primeira linha de abas: Pendentes, Atendendo, Finalizados */}
+                  <div className="flex justify-center">
                     {/* Aba Pendentes */}
                     <button
                       onClick={() => setActiveTab('pending')}
-                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'pending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      className={`flex-1 whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'pending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                     >
                       Pendentes
                       {filteredConversations.filter(conv => conv.status === 'pending').length > 0 && (
@@ -2535,7 +2514,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                     
                     {/* Aba Atendendo */}
                     <button
-                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'attending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      className={`flex-1 whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'attending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                       onClick={() => setActiveTab('attending')}
                     >
                       Atendendo
@@ -2548,7 +2527,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                     
                     {/* Aba Finalizados */}
                     <button
-                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'finished' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      className={`flex-1 whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'finished' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                       onClick={() => setActiveTab('finished')}
                     >
                       Finalizados
@@ -2580,10 +2559,13 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                         );
                       })()} 
                     </button>
-                    
+                  </div>
+                  
+                  {/* Segunda linha de abas: Aguardando, Contatos */}
+                  <div className="flex justify-center">
                     {/* Aba Aguardando */}
                     <button
-                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'waiting' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      className={`flex-1 whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'waiting' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                       onClick={() => setActiveTab('waiting')}
                     >
                       Aguardando
@@ -2596,7 +2578,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                     
                     {/* Aba Contatos */}
                     <button
-                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'contacts' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      className={`flex-1 whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'contacts' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                       onClick={() => {
                         setActiveTab('contacts');
                         // Ao selecionar a aba Contatos, popular a lista de contatos a partir das conversas existentes
@@ -2619,24 +2601,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                         </span>
                       )}
                     </button>
-                    
-                    {/* Espaço para abas adicionais no futuro */}
                   </div>
-                  
-                  {/* Botão seta direita */}
-                  <button 
-                    className="px-2 py-3 text-gray-400 hover:text-white focus:outline-none transition-colors"
-                    onClick={() => {
-                      // Obter todos os elementos de aba
-                      const tabContainer = document.getElementById('tabs-container');
-                      if (tabContainer) {
-                        // Rolar para a direita
-                        tabContainer.scrollBy({ left: 150, behavior: 'smooth' });
-                      }
-                    }}
-                  >
-                    <ChevronRight size={18} />
-                  </button>
                 </div>
                 
                 {/* Estilos aplicados diretamente via style e className */}
