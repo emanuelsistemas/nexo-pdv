@@ -2346,17 +2346,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
               <div className="relative border-b border-gray-700 w-full">
                 {/* Container para animação e setas */}
                 <div className="flex items-center space-x-2">
-                  {/* Contador de mensagens do evento messages.upsert */}
-                  {upsertCounter > 0 && (
-                    <div className="flex items-center mr-2">
-                      <span 
-                        className="bg-purple-600 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center"
-                        title="Mensagens do evento messages.upsert"
-                      >
-                        {upsertCounter}
-                      </span>
-                    </div>
-                  )}
+                  {/* Contador de mensagens removido da aba (movido para as mensagens) */}
                   
                   {/* Botão seta esquerda */}
                   <button 
@@ -2656,12 +2646,12 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                           {/* Última mensagem e contador em linha - contador abaixo da hora */}
                           <div className="flex justify-between items-center mt-1">
                             <p className="text-sm text-gray-400 truncate max-w-[80%]">{conv.lastMessage}</p>
-                            {(conv.unreadCount || 0) > 0 && (
+                            {upsertCounter > 0 && (
                               <span 
-                                className="bg-green-500 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center flex-shrink-0"
-                                title={`${conv.unreadCount} mensagens não lidas`}
+                                className="bg-purple-600 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center flex-shrink-0"
+                                title="Mensagens do evento messages.upsert"
                               >
-                                {conv.unreadCount}
+                                {upsertCounter}
                               </span>
                             )}
                           </div>
