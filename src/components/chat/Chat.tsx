@@ -148,10 +148,15 @@ const Chat: React.FC = () => {
           const updatedMessages = [...conversation.messages, newMessage];
           
           // Atualizar unread_count apenas se não for a conversa selecionada e não for do usuário
-          const unreadCount = 
-            selectedConversationId === remoteJid || fromMe ? 
-            (conversation.unread_count || 0) : 
-            (conversation.unread_count || 0) + 1;
+          // Necessita de duas condições:
+          // 1. A mensagem não pode ser do usuário (fromMe deve ser false)
+          // 2. A conversa atual selecionada não deve ser esta (selectedConversationId !== remoteJid)
+          let unreadCount = conversation.unread_count || 0;
+          
+          // Só incrementa o contador se a mensagem não for do usuário E a conversa não estiver selecionada
+          if (!fromMe && selectedConversationId !== remoteJid) {
+            unreadCount += 1;
+          }
           
           updatedConversations.unshift({
             ...conversation,
@@ -179,7 +184,9 @@ const Chat: React.FC = () => {
             status: newStatus, // Inicialmente, todas as novas conversas estão pendentes
             last_message: content,
             last_message_time: timestamp,
-            unread_count: 1,
+            // Para novas conversas, só incrementa o contador se a mensagem não for do usuário
+            // e se a conversa não for a selecionada (como no WhatsApp)
+            unread_count: (!fromMe && selectedConversationId !== remoteJid) ? 1 : 0,
             sector: 'Geral', // Setor padrão
             instanceName: instanceName // Registrar qual instância recebeu esta conversa
           };
