@@ -226,11 +226,11 @@ const Chat: React.FC = () => {
       setScrollPosition(savedData.scrollPosition);
     }
     
-    // Limpar contador de não lidas
+    // Limpar contador de não lidas (ambos os campos usados na aplicação)
     setConversations(prevConversations => 
       prevConversations.map(conv => 
         conv.id === conversationId 
-          ? { ...conv, unreadCount: 0 } 
+          ? { ...conv, unreadCount: 0, unread_count: 0 } 
           : conv
       )
     );

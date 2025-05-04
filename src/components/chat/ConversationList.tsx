@@ -104,9 +104,9 @@ const ConversationList: React.FC<ConversationListProps> = ({
                         {formatTimestamp(conversation.timestamp)}
                       </span>
                       {/* Contador de mensagens não lidas - estilo WhatsApp */}
-                      {(conversation.unreadCount || 0) > 0 && selectedConversationId !== conversation.id && (
+                      {((conversation.unreadCount || conversation.unread_count || 0) > 0) && selectedConversationId !== conversation.id && (
                         <span className="bg-green-500 text-black text-xs font-medium rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 mt-1">
-                          {conversation.unreadCount}
+                          {conversation.unreadCount || conversation.unread_count}
                         </span>
                       )}
                     </div>
