@@ -403,19 +403,7 @@ const Chat: React.FC = () => {
     }
   }, []);
   
-  // Função para atualizar mensagens manualmente
-  const refreshMessages = useCallback(async () => {
-    if (apiConfig) {
-      try {
-        const result = await fetchMessages();
-        if (result.messages.length > 0) {
-          processMessages(result.messages);
-        }
-      } catch (error) {
-        console.error('Erro ao atualizar mensagens:', error);
-      }
-    }
-  }, [apiConfig, fetchMessages]);
+
 
   // Função para alternar o status de uma conversa
   const handleChangeStatus = useCallback((conversationId: string, newStatus: ConversationStatus) => {
