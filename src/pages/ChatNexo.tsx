@@ -1132,52 +1132,118 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
 
   // Função para conectar ao Socket.io da Evolution API
   const connectSocketIO = (baseUrl: string, instanceName: string, apikey: string) => {
-    // Função simplificada para tocar som de notificação usando elemento de áudio HTML5
+    let audioCtx: AudioContext | null = null;
+
+    // Função para tocar som de notificação usando AudioBuffer (método mais confiável)
     const playNotificationSound = () => {
+      console.log('DEBUG DE AUDIO: Tentando tocar som de notificação...');
       try {
-        // Verificar se temos um elemento de áudio
+        // Verificar se o elemento audioRef está disponível
+        console.log('DEBUG DE AUDIO: audioRef existe?', audioRef && audioRef.current ? 'SIM' : 'NÃO');
+
+        // Verificação de permissão de áudio (apenas para debugging)
+        if (navigator && navigator.permissions) {
+          navigator.permissions.query({ name: 'microphone' as PermissionName })
+            .then(result => {
+              console.log('DEBUG DE AUDIO: Status de permissão de audio:', result.state);
+            })
+            .catch(err => {
+              console.log('DEBUG DE AUDIO: Erro ao verificar permissões de audio:', err);
+            });
+        }
+
+        // Método 1: Usar elemento áudio HTML já existente na página (forma mais confiável)
         if (audioRef.current) {
-          // Reiniciar o som para garantir que toque novamente
+          console.log('DEBUG DE AUDIO: Tentando usar audioRef existente...');
           audioRef.current.currentTime = 0;
-          
-          // Tocar o som com volume apropriado
           audioRef.current.volume = 0.7;
           
-          // Reproduzir o som com tratamento de erro
+          // Tentar tocar o som
           const playPromise = audioRef.current.play();
-          
-          // Tratar a promise retornada pelos navegadores modernos
           if (playPromise !== undefined) {
             playPromise
               .then(() => {
-                console.log('Som de notificação reproduzido com sucesso');
+                console.log('DEBUG DE AUDIO: Som reproduzido com sucesso via audioRef!');
               })
-              .catch(error => {
-                console.error('Erro ao reproduzir áudio:', error);
-                
-                // Se falhou, tentar criar um novo elemento de áudio como fallback
-                const fallbackAudio = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3');
-                fallbackAudio.play().catch(e => console.error('Erro no fallback:', e));
+              .catch(err => {
+                console.error('DEBUG DE AUDIO: Erro ao reproduzir audioRef:', err);
+                useFallbackMethods();
               });
+          } else {
+            console.warn('DEBUG DE AUDIO: audioRef.play() não retornou uma promise');
+            useFallbackMethods();
           }
         } else {
-          // Fallback: criar um novo elemento de áudio se a referência não estiver disponível
-          const fallbackAudio = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3');
-          fallbackAudio.play().catch(e => console.error('Erro de fallback:', e));
-          console.log('Usando fallback para som de notificação');
+          console.warn('DEBUG DE AUDIO: audioRef não está disponível, tentando fallbacks...');
+          useFallbackMethods();
         }
       } catch (error) {
-        console.error('Erro fatal ao reproduzir som:', error);
-        
-        // Última tentativa de fallback em caso de erro fatal
-        try {
-          const emergencyAudio = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=notification-sound-7062.mp3');
-          emergencyAudio.play();
-        } catch (e) {
-          console.error('Todas as tentativas de som falharam:', e);
-        }
+        console.error('DEBUG DE AUDIO: Erro geral ao reproduzir som:', error);
+        useFallbackMethods();
       }
     };
+
+    // Função para tentar métodos alternativos de som
+    const useFallbackMethods = () => {
+      try {
+        console.log('DEBUG DE AUDIO: Tentando método fallback com Audio() inline...');
+        // Criar um áudio curto em base64
+        const audioData = 'data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA//////////////////////////////////////////////////////////////////8AAAAeTEFNRTMuMTAwA8MAAAAAAAAAABQgJAUHQQAB9AAAAnGMHkkIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//sQxAADgnABGiAAQBCqgCRMAAgEAH///////////////7+n/9FTuQsQH//////2NG0jWUGlio5gLQTOtIoeR2WX////X4s9Atb/JRVCbBUpeRUq//////////////////3+9GDUATZOmZGIgiI8PTVZBgsYHhUQhAUBQFAUBEVN';
+        
+        const audio = new Audio(audioData);
+        audio.volume = 0.7;
+        
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('DEBUG DE AUDIO: Sucesso com Audio() inline!');
+            })
+            .catch(err => {
+              console.error('DEBUG DE AUDIO: Erro com Audio() inline:', err);
+              fallbackSyntheticSound();
+            });
+        } else {
+          console.warn('DEBUG DE AUDIO: Audio().play() não retornou promise');
+          fallbackSyntheticSound();
+        }
+      } catch (error) {
+        console.error('DEBUG DE AUDIO: Erro no fallback de áudio:', error);
+        fallbackSyntheticSound();
+      }
+    };
+    
+    // Função de fallback para som sintético (só será usada se os outros métodos falharem)
+    const fallbackSyntheticSound = () => {
+      try {
+        // Tentar inicializar AudioContext
+        if (!audioCtx) {
+          // @ts-ignore: Ignorando erro de TypeScript para webkitAudioContext (prefixo para Safari)
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // Criar um beep simples (bem simples para minimizar falhas)
+        const oscillator = audioCtx.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+        
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.05);
+        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.2);
+        
+        console.log('Reproduzido som sintético de fallback');
+      } catch (err) {
+        console.error('Todas as tentativas de reproduzir som falharam:', err);
+      }
+    };
+    
     // Fechar conexão existente se houver
     if (socketRef.current) {
       console.log('Fechando conexão Socket.io existente');
@@ -1572,12 +1638,17 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         }
         
         // Verificar se a mensagem é recebida (não enviada por nós)
+        console.log('DEBUG NOTIFICAÇÃO: Verificando se mensagem é recebida...');
         const isIncomingMessage = isMessageFromContact(data);
+        console.log('DEBUG NOTIFICAÇÃO: Resultado isMessageFromContact:', isIncomingMessage);
         
-        // Se for mensagem recebida, tocar som de notificação e atualizar contadores
+        // IMPORTANTE: Para teste, vamos tocar o som independentemente do resultado de isMessageFromContact
+        console.log('DEBUG NOTIFICAÇÃO: Tentando tocar som independentemente do tipo de mensagem...');
+        playNotificationSound();
+
+        // Se for mensagem recebida, atualizar contadores
         if (isIncomingMessage) {
-          // Tocar som de notificação para avisar sobre nova mensagem
-          playNotificationSound();
+          // Já estamos tentando tocar o som acima (para teste)
           
           // Extrair o ID da mensagem para evitar contagens duplicadas
           let messageId = null;
