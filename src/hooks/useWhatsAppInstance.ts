@@ -44,9 +44,13 @@ export const useWhatsAppInstance = (): WhatsAppInstanceHook => {
       }
       
       const session = JSON.parse(adminSession);
-      const adminId = session.user.id;
+      console.log('Estrutura da sessão:', session);
+      
+      // Verificar o formato da sessão - pode ter diferentes formatos dependendo de como foi salvo
+      const adminId = session.id || (session.user && session.user.id) || session.admin_id;
       
       if (!adminId) {
+        console.error('Estrutura da sessão:', session);
         throw new Error('ID do administrador não encontrado na sessão');
       }
 

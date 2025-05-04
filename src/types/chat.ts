@@ -12,7 +12,7 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
-export type ConversationStatus = 'pending' | 'pendente' | 'attending' | 'finished' | 'waiting' | 'contacts' | 'deletado' | 'suporte' | 'comercial' | 'administrativo';
+export type ConversationStatus = 'Aguardando' | 'Atendendo' | 'Pendentes' | 'Finalizados' | 'Contatos' | 'Status' | 'pendente' | 'deletado' | 'suporte' | 'comercial' | 'administrativo' | 'connection-status';
 
 // Tipo para uma conversa
 export interface EnabledSectors {

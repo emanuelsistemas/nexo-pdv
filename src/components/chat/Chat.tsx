@@ -6,6 +6,7 @@ import StatusTabs from './StatusTabs';
 import SearchBar from './SearchBar';
 import SectorFilter from './SectorFilter';
 import WhatsAppStatus from './WhatsAppStatus';
+import ConnectionStatus from './ConnectionStatus';
 import { ConversationStatus, StatusTab } from '../../types/chat';
 import useSocketIO from '../../hooks/useSocketIO';
 import useEvolutionApi from '../../hooks/useEvolutionApi';
@@ -35,11 +36,14 @@ const Chat: React.FC = () => {
   // Estado local
   const [scrollPosition, setScrollPosition] = useState<number | undefined>(undefined);
   const [statusTabs, setStatusTabs] = useState<StatusTab[]>([
-    { id: 'waiting', label: 'Aguardando', count: 0 },
-    { id: 'attending', label: 'Em Atendimento', count: 0 },
-    { id: 'finished', label: 'Finalizadas', count: 0 },
-    { id: 'pending', label: 'Pendentes', count: 0 },
-    { id: 'all', label: 'Contatos', count: 0 }
+    // Primeira linha - usando exatamente os mesmos nomes em português como IDs
+    { id: 'Aguardando', label: 'Aguardando', count: 0 },
+    { id: 'Atendendo', label: 'Atendendo', count: 0 },
+    { id: 'Pendentes', label: 'Pendentes', count: 0 },
+    // Segunda linha - usando exatamente os mesmos nomes em português como IDs
+    { id: 'Finalizados', label: 'Finalizados', count: 0 },
+    { id: 'Contatos', label: 'Contatos', count: 0 },
+    { id: 'Status', label: 'Status', count: 0 }
   ]);
 
   // Hooks personalizados para integração com WhatsApp e Socket.io
@@ -254,24 +258,65 @@ const Chat: React.FC = () => {
     <div className="flex h-full">
       {/* Painel lateral - Lista de conversas */}
       <div className="w-96 h-full border-r border-gray-800 flex flex-col">
-        <StatusTabs
-          tabs={statusTabs}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
-        
-        {/* Status da Instância WhatsApp da Revenda */}
-        <div className="px-4 pt-2">
-          <WhatsAppStatus 
-            connection={connection}
-            loading={whatsAppLoading}
-            error={whatsAppError}
-            onRefresh={refreshConnection}
-          />
+        {/* Abas simplificadas para solucionar problema de navegação */}
+        <div className="flex flex-col border-b border-gray-800 bg-[#1e1e1e]">
+          {/* Primeira linha: Aguardando > Em Atendimento > Pendentes */}
+          <div className="flex justify-center">
+            {statusTabs.slice(0, 3).map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <div 
+                  key={tab.id}
+                  onClick={() => {
+                    console.log('Clicando diretamente na aba:', tab.id);
+                    // Forçar a mudança de aba
+                    setActiveTab(tab.id as ConversationStatus | 'all');
+                  }}
+                  style={{ cursor: 'pointer', flex: 1, position: 'relative', zIndex: 999 }}
+                  className={`px-4 py-3 text-center ${isActive ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className="ml-2 bg-gray-700 text-white text-xs rounded-full px-2 py-0.5">
+                      {tab.count}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          
+          {/* Segunda linha: Finalizados > Contatos > Status */}
+          <div className="flex justify-center">
+            {statusTabs.slice(3).map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <div 
+                  key={tab.id}
+                  onClick={() => {
+                    console.log('Clicando diretamente na aba:', tab.id);
+                    // Forçar a mudança de aba
+                    setActiveTab(tab.id as ConversationStatus | 'all');
+                  }}
+                  style={{ cursor: 'pointer', flex: 1, position: 'relative', zIndex: 999 }}
+                  className={`px-4 py-3 text-center ${isActive ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span className="ml-2 bg-gray-700 text-white text-xs rounded-full px-2 py-0.5">
+                      {tab.count}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
         
-        {/* Filtro de Setor - Mostrado apenas quando não estiver na aba Contatos */}
-        {activeTab !== 'all' && (
+
+        
+        {/* Filtro de Setor - Mostrado apenas quando não estiver na aba Contatos ou Status */}
+        {activeTab !== 'Contatos' && activeTab !== 'Status' && (
           <SectorFilter
             selectedSector={selectedSector}
             onSectorChange={setSelectedSector}
@@ -279,36 +324,37 @@ const Chat: React.FC = () => {
           />
         )}
         
-        <div className="p-4">
-          <SearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Buscar conversas..."
-          />
-        </div>
-        
-        <div className="flex-1 overflow-hidden">
-          <ConversationList
-            conversations={filterConversations()}
-            selectedConversationId={selectedConversationId}
-            onSelectConversation={handleSelectConversation}
-            statusFilter={activeTab}
-          />
-        </div>
-        
-        {/* Status do Socket.io */}
-        <div className="flex justify-end p-2 bg-[#1E1E1E] border-t border-gray-800">
-          <div className="flex items-center text-xs text-gray-400">
-            <span className="mr-1">Status:</span>
-            <span className={socketConnected ? "text-green-400" : "text-red-400"}>
-              {socketConnected ? "Conectado" : "Desconectado"}
-            </span>
-            <div 
-              className={`ml-2 h-2 w-2 rounded-full ${socketConnected ? "bg-green-500" : "bg-red-500"}`}
-              title={socketConnected ? "Socket.io conectado" : "Socket.io desconectado"}
+        {/* Barra de busca - Não exibida na aba Status */}
+        {activeTab !== 'Status' && (
+          <div className="p-4">
+            <SearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Buscar conversas..."
             />
           </div>
+        )}
+        
+        <div className="flex-1 overflow-hidden">
+          {activeTab !== 'Status' ? (
+            <ConversationList
+              conversations={filterConversations()}
+              selectedConversationId={selectedConversationId}
+              onSelectConversation={handleSelectConversation}
+              statusFilter={activeTab}
+            />
+          ) : (
+            <ConnectionStatus
+              currentConnection={connection}
+              loading={whatsAppLoading}
+              error={whatsAppError}
+              onRefreshConnection={refreshConnection}
+              socketConnected={socketConnected}
+            />
+          )}
         </div>
+        
+        {/* Status do Socket.io removido daqui e movido para a aba Status */}
       </div>
       
       {/* Área principal - Conversa */}

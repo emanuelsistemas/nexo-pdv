@@ -33,7 +33,7 @@ const ChatContext = createContext<ChatContextProps | undefined>(undefined);
 export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<ConversationStatus | 'all'>('pending');
+  const [activeTab, setActiveTab] = useState<ConversationStatus | 'all'>('Aguardando');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState<string>('all');
   const [enabledSectors, setEnabledSectors] = useState<EnabledSectors>({
@@ -97,11 +97,29 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   // Filtrar conversas com base na aba e na pesquisa
   const filterConversations = useCallback(() => {
+    // Caso especial para a aba "Status", que não precisa exibir conversas
+    if (activeTab === 'Status') {
+      return [];
+    }
+    
     let filteredConvs = [...conversations];
     
     // Filtrar por status (aba ativa)
-    if (activeTab !== 'all') {
-      filteredConvs = filteredConvs.filter(conv => conv.status === activeTab);
+    if (activeTab !== 'Contatos' && activeTab !== 'all') {
+      // Mapper para compatibilidade com dados antigos no banco/localStorage
+      const statusMap: Record<string, string> = {
+        'Aguardando': 'waiting',
+        'Em Atendimento': 'attending',
+        'Pendentes': 'pending',
+        'Finalizados': 'finished'
+      };
+
+      // Usar o mapeador ou o valor direto se não houver mapeamento
+      const statusToFilter = statusMap[activeTab] || activeTab;
+      filteredConvs = filteredConvs.filter(conv => {
+        // Verificar tanto o novo valor quanto o valor legado para compatibilidade
+        return conv.status === activeTab || conv.status === statusToFilter;
+      });
     }
     
     // Filtrar por setor
@@ -109,15 +127,19 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       filteredConvs = filteredConvs.filter(conv => conv.sector === selectedSector);
     }
     
-    // Filtrar por pesquisa
-    const searchMatch = !searchQuery || 
-      filteredConvs.find(conv => 
-        conv.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+    // Filtrar por pesquisa - CORRIGIDO: usar filter em vez de find para exibir todas as correspondências
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filteredConvs = filteredConvs.filter(conv => 
+        conv.contactName.toLowerCase().includes(query) ||
+        conv.lastMessage.toLowerCase().includes(query)
       );
+    }
     
-    return searchMatch ? filteredConvs : [];
+    return filteredConvs;
   }, [conversations, activeTab, selectedSector, searchQuery]);
+  
+
   
   useEffect(() => {
     // Aqui irá a lógica para carregar as conversas iniciais
