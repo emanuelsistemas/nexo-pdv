@@ -2317,15 +2317,15 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
             
             // Verificar se existe um status no banco de dados para esta conversa
             // e usar esse status com prioridade
-            const storedStatus = statusMap[newConv.id]?.status;
+            // Note: Sem acesso ao statusMap neste escopo, usamos apenas o status atual 
             
             conversationMap.set(newConv.id, {
               ...existingConv,
+              // Como não temos acesso ao statusMap, apenas verificamos se a conversa não está deletada
               // Prioridade:
-              // 1. Status do banco de dados (se existir)
-              // 2. Status atual da conversa (se não for 'deletado')
-              // 3. Status 'pending' (caso seja 'deletado')
-              status: storedStatus || (finalStatus !== 'deletado' ? finalStatus : 'pending'),
+              // 1. Status atual da conversa (se não for 'deletado')
+              // 2. Status 'pending' (caso seja 'deletado')
+              status: finalStatus !== 'deletado' ? finalStatus : 'pending',
               messages: sortedMessages, // Usar as mensagens mescladas
               lastMessage: newConv.lastMessage,
               timestamp: newConv.timestamp,
