@@ -74,24 +74,6 @@ const Chat: React.FC = () => {
     setStatusTabs(newStatusTabs);
   }, [conversations]);
 
-  // Carregar mensagens iniciais
-  useEffect(() => {
-    const loadInitialMessages = async () => {
-      if (apiConfig) {
-        try {
-          const result = await fetchMessages();
-          if (result.messages.length > 0) {
-            processMessages(result.messages);
-          }
-        } catch (error) {
-          console.error('Erro ao carregar mensagens iniciais:', error);
-        }
-      }
-    };
-
-    loadInitialMessages();
-  }, [apiConfig, fetchMessages]);
-
   // Processar mensagens recebidas e atualizar estado
   const processMessages = (messages: any[], instanceName?: string) => {
     if (!messages || !Array.isArray(messages)) {
@@ -361,6 +343,9 @@ const Chat: React.FC = () => {
         
         // Formato alternativo
         socket.emit('subscribe', instanceName);
+        
+        // Agora que Socket.io está conectado, carregar as mensagens iniciais
+        loadInitialMessages();
       });
       
       socket.on('disconnect', (reason) => {
@@ -405,6 +390,23 @@ const Chat: React.FC = () => {
   
 
 
+  // Função para carregar mensagens iniciais (após Socket.io conectar)
+  const loadInitialMessages = useCallback(async () => {
+    if (apiConfig) {
+      try {
+        console.log('Carregando mensagens iniciais após Socket.io conectado...');
+        const result = await fetchMessages();
+        if (result.messages.length > 0) {
+          processMessages(result.messages);
+        } else {
+          console.log('Nenhuma mensagem encontrada no carregamento inicial');
+        }
+      } catch (error) {
+        console.error('Erro ao carregar mensagens iniciais:', error);
+      }
+    }
+  }, [apiConfig, fetchMessages, processMessages]);
+  
   // Função para alternar o status de uma conversa
   const handleChangeStatus = useCallback((conversationId: string, newStatus: ConversationStatus) => {
     updateConversationStatus(conversationId, newStatus);
