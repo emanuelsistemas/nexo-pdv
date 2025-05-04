@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Database, MessageSquare, Search, ChevronLeft, ChevronRight, Send, Store, Users, LogOut, BarChart2, Settings as SettingsIcon, MessageCircle, Plus, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -232,6 +232,54 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   // Hook para manter referência ao elemento de áudio para notificações
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
+  // Referência para armazenar se o áudio foi desbloqueado
+  const audioUnlocked = useRef<boolean>(false);
+  
+  // Referência para armazenar o contexto de áudio
+  const audioContextRef = useRef<AudioContext | null>(null);
+  
+  // Função para desbloquear o áudio no primeiro clique do usuário
+  const unlockAudio = useCallback(() => {
+    if (audioUnlocked.current) return; // Já desbloqueado
+    
+    console.log('Tentando desbloquear áudio...');
+    
+    try {
+      // Criar um contexto de áudio
+      // @ts-ignore: Ignorando erro de TypeScript para webkitAudioContext
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      audioContextRef.current = audioContext;
+      
+      // Criar um oscilador silencioso para desbloquear o áudio
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 0.001; // Volume extremamente baixo (praticamente silencioso)
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      oscillator.start(0);
+      oscillator.stop(0.001);
+      
+      // Desbloquear também o elemento audio tradicional
+      if (audioRef.current) {
+        audioRef.current.volume = 0.001;
+        const promise = audioRef.current.play();
+        if (promise) {
+          promise
+            .then(() => {
+              audioRef.current?.pause(); // Pausar imediatamente
+              audioUnlocked.current = true;
+              console.log('Audio desbloqueado com sucesso!');
+            })
+            .catch(e => console.log('Erro ao desbloquear audioRef:', e));
+        }
+      }
+      
+      audioUnlocked.current = true;
+    } catch (e) {
+      console.error('Erro ao tentar desbloquear áudio:', e);
+    }
+  }, []);
+  
   // Preencher a referência ao montar o componente
   useEffect(() => {
     // Inicializar elemento de áudio
@@ -245,11 +293,22 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
     // Armazenar na referência
     audioRef.current = audio;
     
+    // Adicionar evento de clique ao documento para desbloquear áudio
+    document.addEventListener('click', unlockAudio, { once: true });
+    document.addEventListener('touchstart', unlockAudio, { once: true });
+    
     // Limpar ao desmontar
     return () => {
       audioRef.current = null;
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+      
+      // Fechar contexto de áudio se existir
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+      }
     };
-  }, []);
+  }, [unlockAudio]);
   
 
 
@@ -1213,32 +1272,49 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       }
     };
     
-    // Função de fallback para som sintético (só será usada se os outros métodos falharem)
+    // Função de fallback para reproduzir o "Toque Padrão" quando outros métodos falharem
     const fallbackSyntheticSound = () => {
       try {
-        // Tentar inicializar AudioContext
-        if (!audioCtx) {
-          // @ts-ignore: Ignorando erro de TypeScript para webkitAudioContext (prefixo para Safari)
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        // Usar o audioContext já desbloqueado ou criar novo
+        const context = audioContextRef.current || audioCtx || null;
+        
+        // Se não temos contexto de áudio, não podemos tocar o som
+        if (!context) {
+          console.warn('Sem contexto de áudio disponível. Interaja com a página primeiro.');
+          return;
         }
         
-        // Criar um beep simples (bem simples para minimizar falhas)
-        const oscillator = audioCtx.createOscillator();
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+        console.log('Usando AudioContext disponível para tocar som...');
         
-        const gainNode = audioCtx.createGain();
-        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.05);
-        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+        // Implementar o "Toque Padrão" da página teste-som-sintetico.html
+        // Notas da melodia
+        const notes = [392, 523.25, 659.25]; // G4, C5, E5 - exatamente como no teste-som-sintetico.html
+        const startTimes = [0, 0.15, 0.3];
+        const durations = [0.15, 0.15, 0.3];
         
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
+        // Usar os mesmos parâmetros que o teste-som-sintetico.html usa
+        for (let i = 0; i < notes.length; i++) {
+          try {
+            const oscillator = context.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(notes[i], context.currentTime + startTimes[i]);
+            
+            const gainNode = context.createGain();
+            gainNode.gain.setValueAtTime(0, context.currentTime + startTimes[i]);
+            gainNode.gain.linearRampToValueAtTime(0.4, context.currentTime + startTimes[i] + 0.01);
+            gainNode.gain.linearRampToValueAtTime(0, context.currentTime + startTimes[i] + durations[i]);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(context.destination);
+            
+            oscillator.start(context.currentTime + startTimes[i]);
+            oscillator.stop(context.currentTime + startTimes[i] + durations[i]);
+          } catch (oscillatorError) {
+            console.error('Erro ao criar oscilador', i, ':', oscillatorError);
+          }
+        }
         
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.2);
-        
-        console.log('Reproduzido som sintético de fallback');
+        console.log('Reproduzido "Toque Padrão" (3 notas) com sucesso!');
       } catch (err) {
         console.error('Todas as tentativas de reproduzir som falharam:', err);
       }
