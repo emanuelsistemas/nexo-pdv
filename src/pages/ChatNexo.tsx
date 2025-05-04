@@ -2648,7 +2648,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                             <p className="text-sm text-gray-400 truncate max-w-[80%]">{conv.lastMessage}</p>
                             {upsertCounter > 0 && (
                               <span 
-                                className="bg-purple-600 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center flex-shrink-0"
+                                className="bg-green-500 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center flex-shrink-0"
                                 title="Mensagens do evento messages.upsert"
                               >
                                 {upsertCounter}
