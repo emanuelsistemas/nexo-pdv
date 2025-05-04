@@ -447,20 +447,23 @@ const Chat: React.FC = () => {
                   .then(() => console.log('SALVAMENTO BEM-SUCEDIDO!'))
                   .catch(err => console.error('FALHA NO SALVAMENTO:', err));
               } else {
-                // Nova conversa - status padrão: Aguardando
-                console.log('CRIAR NOVA CONVERSA COM STATUS "Aguardando"');
+                // Nova conversa - status padrão: waiting ("Aguardando" no front-end)
+                console.log('CRIAR NOVA CONVERSA COM STATUS "waiting" (Aguardando)');
                 const phoneNumber = remoteJid.split('@')[0];
-                const newStatus: ConversationStatus = 'Aguardando';
+                // Usar 'waiting' que é aceito no banco de dados
+                const dbStatus = 'waiting';
+                const uiStatus: ConversationStatus = 'Aguardando';
                 const newConvo = {
                   id: remoteJid,
                   name: phoneNumber,
                   phone: phoneNumber,
                   contactName: phoneNumber,
-                  status: newStatus,
+                  status: uiStatus, // Manter Aguardando para o front-end
                   unread_count: 1
                 };
                 console.log('DADOS DA NOVA CONVERSA:', newConvo);
-                saveConversationStatus(remoteJid, newStatus, newConvo)
+                // Passar 'waiting' para o banco de dados (casting para resolver problema de tipo)
+                saveConversationStatus(remoteJid, dbStatus as any, newConvo)
                   .then(() => console.log('NOVA CONVERSA SALVA COM SUCESSO!'))
                   .catch(err => console.error('ERRO AO SALVAR NOVA CONVERSA:', err));
               }

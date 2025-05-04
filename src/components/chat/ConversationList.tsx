@@ -21,13 +21,15 @@ const ConversationList: React.FC<ConversationListProps> = ({
 
   // Ordenar conversas por timestamp (da mais recente para a mais antiga)
   const sortedConversations = [...filteredConversations].sort((a, b) => {
-    const dateA = new Date(a.timestamp);
-    const dateB = new Date(b.timestamp);
-    return dateB.getTime() - dateA.getTime();
+    // Tratar casos onde timestamp pode ser undefined
+    const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return timeB - timeA;
   });
 
   // Formatar timestamp para exibição
-  const formatTimestamp = (timestamp: Date | string): string => {
+  const formatTimestamp = (timestamp?: Date | string): string => {
+    if (!timestamp) return '';  // Retornar string vazia se timestamp for undefined
     const date = new Date(timestamp);
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
@@ -40,26 +42,32 @@ const ConversationList: React.FC<ConversationListProps> = ({
   };
 
   // Função para truncar o texto se for muito longo
-  const truncateText = (text: string, maxLength: number = 30): string => {
+  const truncateText = (text: string | undefined, maxLength: number = 30): string => {
+    // Tratar caso text seja undefined ou nulo
+    if (!text) return '';
     return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
   };
 
   // Função para determinar a cor do status
   const getStatusColor = (status: ConversationStatus): string => {
-    switch (status) {
-      case 'pending':
-      case 'pendente':
-        return 'bg-yellow-500';
-      case 'attending':
-        return 'bg-blue-500';
-      case 'finished':
-        return 'bg-green-500';
-      case 'waiting':
-        return 'bg-purple-500';
-      case 'deletado':
-        return 'bg-red-500';
-      default:
-        return 'bg-gray-500';
+    // Usar valores literais apenas do tipo ConversationStatus e um casting mais seguro
+    const statusStr = String(status).toLowerCase();
+    
+    // Mapeamento de status para cores
+    if (status === 'Pendentes' || statusStr.includes('pend')) {
+      return 'bg-yellow-500';
+    } else if (status === 'Atendendo' || statusStr.includes('attend')) {
+      return 'bg-blue-500';
+    } else if (status === 'Finalizados' || statusStr.includes('finish')) {
+      return 'bg-green-500';
+    } else if (status === 'Aguardando' || statusStr.includes('wait')) {
+      return 'bg-purple-500';
+    } else if (status === 'Contatos' || statusStr.includes('contact')) {
+      return 'bg-indigo-500';
+    } else if (statusStr.includes('delet')) {
+      return 'bg-red-500';
+    } else {
+      return 'bg-gray-500';
     }
   };
 
@@ -120,7 +128,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
                     </p>
                     
                     {/* Contador de mensagens não lidas */}
-                    {conversation.unreadCount > 0 && (
+                    {(conversation.unreadCount || 0) > 0 && (
                       <span className="bg-emerald-600 text-white text-xs rounded-full h-5 min-w-[20px] flex items-center justify-center px-1">
                         {conversation.unreadCount}
                       </span>
