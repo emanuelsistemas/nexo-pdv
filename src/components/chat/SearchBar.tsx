@@ -31,12 +31,8 @@ const SearchBar: React.FC<SearchBarProps> = ({
   };
 
   return (
-    <div className={`
-      flex items-center bg-gray-800 border rounded-lg px-3 py-2 transition-all
-      ${isFocused ? 'border-emerald-500' : 'border-gray-700'}
-    `}>
-      <Search className="h-5 w-5 text-gray-400 mr-2" />
-      
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
       <input
         ref={inputRef}
         type="text"
@@ -45,13 +41,12 @@ const SearchBar: React.FC<SearchBarProps> = ({
         onFocus={() => setIsFocused(true)}
         onBlur={() => setIsFocused(false)}
         placeholder={placeholder}
-        className="flex-1 bg-transparent border-none focus:ring-0 text-white placeholder-gray-400"
+        className={`w-full pl-10 pr-4 py-2 bg-[#2A2A2A] border border-gray-800 rounded-lg text-white placeholder-gray-500 ${isFocused ? 'focus:ring-2 focus:ring-emerald-500 focus:border-transparent' : ''}`}
       />
-      
       {value && (
         <button
           onClick={handleClear}
-          className="text-gray-400 hover:text-white focus:outline-none"
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white focus:outline-none"
           type="button"
         >
           <XCircle className="h-5 w-5" />

@@ -70,21 +70,21 @@ const ConversationList: React.FC<ConversationListProps> = ({
           Nenhuma conversa encontrada
         </div>
       ) : (
-        <ul className="divide-y divide-gray-700">
+        <ul className="divide-y divide-gray-800">
           {sortedConversations.map((conversation) => (
             <li
               key={conversation.id}
               onClick={() => onSelectConversation(conversation.id)}
-              className={`p-3 hover:bg-gray-800 cursor-pointer ${
+              className={`p-3 hover:bg-[#2A2A2A] cursor-pointer ${
                 selectedConversationId === conversation.id
-                  ? 'bg-gray-800'
+                  ? 'bg-[#2A2A2A]'
                   : ''
               }`}
             >
               <div className="flex items-center gap-3">
                 <div className="relative">
                   {/* Avatar (placeholder ou imagem do contato) */}
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gray-700 text-white">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-[#2A2A2A] text-white">
                     {conversation.avatarUrl ? (
                       <img
                         src={conversation.avatarUrl}
@@ -98,7 +98,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   
                   {/* Indicador de status */}
                   <div
-                    className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-gray-900 ${getStatusColor(
+                    className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#1e1e1e] ${getStatusColor(
                       conversation.status
                     )}`}
                   />

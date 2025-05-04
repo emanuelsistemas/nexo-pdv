@@ -272,20 +272,16 @@ const Chat: React.FC = () => {
         </div>
         
         {/* Status do Socket.io */}
-        <div className="p-2 border-t border-gray-700">
-          <div className="flex items-center text-xs">
-            <div
-              className={`w-2 h-2 rounded-full mr-2 ${
-                socketConnected ? 'bg-green-500' : 'bg-red-500'
-              }`}
-            />
-            <span className="text-gray-400">
-              {socketConnected 
-                ? 'Socket conectado' 
-                : socketError 
-                  ? `Desconectado: ${socketError}` 
-                  : 'Socket desconectado'}
+        <div className="flex justify-end p-2 bg-[#1E1E1E] border-t border-gray-800">
+          <div className="flex items-center text-xs text-gray-400">
+            <span className="mr-1">Status:</span>
+            <span className={socketConnected ? "text-green-400" : "text-red-400"}>
+              {socketConnected ? "Conectado" : "Desconectado"}
             </span>
+            <div 
+              className={`ml-2 h-2 w-2 rounded-full ${socketConnected ? "bg-green-500" : "bg-red-500"}`}
+              title={socketConnected ? "Socket.io conectado" : "Socket.io desconectado"}
+            />
           </div>
         </div>
       </div>

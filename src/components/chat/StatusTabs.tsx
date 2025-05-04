@@ -32,7 +32,7 @@ const StatusTabs: React.FC<StatusTabsProps> = ({ tabs, activeTab, onTabChange })
   };
 
   return (
-    <div className="flex overflow-x-auto no-scrollbar border-b border-gray-700 bg-gray-900">
+    <div className="flex overflow-x-auto no-scrollbar border-b border-gray-800 bg-[#1e1e1e]">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         const tabColor = getTabColor(tab.id, isActive);
