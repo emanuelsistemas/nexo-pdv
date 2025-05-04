@@ -1,8 +1,14 @@
 // Componente modular do Nexo Chat
+import AdminSidebar from '../components/admin/AdminSidebar';
 
 export default function NexoChat() {
+
   return (
     <div className="flex h-screen bg-[#1A1A1A] text-white">
+      {/* Usar o componente AdminSidebar */}
+      <AdminSidebar activeMenuItem="/admin/nexochat" />
+      
+      {/* Conteúdo principal */}
       <div className="flex-1 flex flex-col">
         <header className="bg-[#2A2A2A] p-4 border-b border-gray-800">
           <h1 className="text-xl font-semibold text-white">Nexo Chat (Modular)</h1>
