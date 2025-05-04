@@ -30,11 +30,11 @@ const Chat: React.FC = () => {
   // Estado local
   const [scrollPosition, setScrollPosition] = useState<number | undefined>(undefined);
   const [statusTabs, setStatusTabs] = useState<StatusTab[]>([
-    { id: 'all', label: 'Todas', count: 0 },
-    { id: 'pending', label: 'Pendentes', count: 0 },
-    { id: 'attending', label: 'Em Atendimento', count: 0 },
     { id: 'waiting', label: 'Aguardando', count: 0 },
-    { id: 'finished', label: 'Finalizadas', count: 0 }
+    { id: 'attending', label: 'Em Atendimento', count: 0 },
+    { id: 'finished', label: 'Finalizadas', count: 0 },
+    { id: 'pending', label: 'Pendentes', count: 0 },
+    { id: 'all', label: 'Contatos', count: 0 }
   ]);
 
   // Hooks personalizados
