@@ -226,6 +226,9 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   // Referência para armazenar os IDs de mensagens já processadas
   const processedMessageIds = useRef<Set<string>>(new Set());
   
+  // Estado para armazenar contador específico do evento messages.upsert
+  const [upsertCounter, setUpsertCounter] = useState(0);
+  
   // Hook para manter referência ao elemento de áudio para notificações
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
@@ -1556,6 +1559,14 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       socket.on('messages.upsert', (data) => {
         console.log('Evento messages.upsert recebido:', data);
         
+        // Incrementar o contador roxo específico para TODAS as mensagens do evento messages.upsert
+        // sem verificações, apenas para teste
+        setUpsertCounter(prevCounter => {
+          const newCount = prevCounter + 1;
+          console.log(`🟣 Incrementando contador ROXO de teste: ${prevCounter} -> ${newCount}`);
+          return newCount;
+        });
+        
         // Verificar se a mensagem é recebida (não enviada por nós)
         const isIncomingMessage = isMessageFromContact(data);
         
@@ -2334,7 +2345,19 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
               {/* Sistema de Navegação de Abas com Paginação */}
               <div className="relative border-b border-gray-700 w-full">
                 {/* Container para animação e setas */}
-                <div className="flex items-center">
+                <div className="flex items-center space-x-2">
+                  {/* Contador de mensagens do evento messages.upsert */}
+                  {upsertCounter > 0 && (
+                    <div className="flex items-center mr-2">
+                      <span 
+                        className="bg-purple-600 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center"
+                        title="Mensagens do evento messages.upsert"
+                      >
+                        {upsertCounter}
+                      </span>
+                    </div>
+                  )}
+                  
                   {/* Botão seta esquerda */}
                   <button 
                     className="px-2 py-3 text-gray-400 hover:text-white focus:outline-none transition-colors"
