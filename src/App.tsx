@@ -24,7 +24,7 @@ const PasswordRecovery = lazy(() => import('./pages/PasswordRecovery'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const ResendConfirmation = lazy(() => import('./pages/ResendConfirmation'));
 const ManualConfirmation = lazy(() => import('./pages/ManualConfirmation'));
-const NexoChat = lazy(() => import('./pages/NexoChat'));
+// Chat modular é a única versão de chat agora
 const AdminLogin = lazy(() => import('./pages/AdminLogin'));
 const AdminRegister = lazy(() => import('./pages/AdminRegister'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
@@ -32,7 +32,6 @@ const CompanyEdit = lazy(() => import('./pages/CompanyEdit'));
 const Resellers = lazy(() => import('./pages/Resellers'));
 const ResellerEdit = lazy(() => import('./pages/ResellerEdit'));
 const Settings = lazy(() => import('./pages/Settings'));
-const ChatNexo = lazy(() => import('./pages/ChatNexo'));
 const NexoChatModular = lazy(() => import('./pages/NexoChatModular'));
 const WhatsAppConnection = lazy(() => import('./pages/WhatsAppConnection'));
 
@@ -356,9 +355,7 @@ function App() {
             <Route path="/admin/resellers" element={<Resellers />} />
             <Route path="/admin/reseller/:id" element={<ResellerEdit />} />
             <Route path="/admin/settings" element={<Settings />} />
-            <Route path="/admin/chat" element={<ChatNexo />} />
-            <Route path="/admin/nexochat" element={<NexoChat />} />
-            <Route path="/admin/chat-modular" element={<NexoChatModular />} />
+            <Route path="/admin/chat" element={<NexoChatModular />} />
             <Route path="/admin/whatsapp-connection" element={<WhatsAppConnection />} />
             <Route path="/admin/whats-test" element={<WhatsConnector />} />
             <Route path="/admin/whats-login" element={<LoginTest />} />

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { MessageCircle, MessageSquare, BarChart2, Store, Settings as SettingsIcon, LogOut, Database, ChevronLeft, ChevronRight, Users } from 'lucide-react';
+import { MessageCircle, BarChart2, Store, Settings as SettingsIcon, LogOut, Database, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 // Definindo a interface para as props do componente
@@ -201,45 +201,13 @@ export default function AdminSidebar({
               to="/admin/chat"
               className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors ${isActive('/admin/chat') ? 'bg-[#3A3A3A] bg-opacity-50' : ''} group relative`}
             >
-              <MessageSquare size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-              {!isSidebarCollapsed && <span>Chat nexo</span>}
-              
-              {/* Tooltip quando o menu está retraído */}
-              {isSidebarCollapsed && (
-                <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                  Chat nexo
-                </div>
-              )}
-            </Link>
-          </li>
-          <li>
-            <Link
-              to="/admin/nexochat"
-              className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors ${isActive('/admin/nexochat') ? 'bg-[#3A3A3A] bg-opacity-50' : ''} group relative`}
-            >
-              <MessageSquare size={isSidebarCollapsed ? 22 : 18} className={isActive('/admin/nexochat') ? 'text-blue-500' : 'text-emerald-500'} />
-              {!isSidebarCollapsed && <span>Nexo Chat</span>}
-              
-              {/* Tooltip quando o menu está retraído */}
-              {isSidebarCollapsed && (
-                <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                  Nexo Chat
-                </div>
-              )}
-            </Link>
-          </li>
-          <li>
-            <Link
-              to="/admin/chat-modular"
-              className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors ${isActive('/admin/chat-modular') ? 'bg-[#3A3A3A] bg-opacity-50' : ''} group relative`}
-            >
               <MessageCircle size={isSidebarCollapsed ? 22 : 18} className="text-blue-500" />
-              {!isSidebarCollapsed && <span>Chat Modular</span>}
+              {!isSidebarCollapsed && <span>Chat</span>}
               
               {/* Tooltip quando o menu está retraído */}
               {isSidebarCollapsed && (
                 <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                  Chat Modular
+                  Chat
                 </div>
               )}
             </Link>
