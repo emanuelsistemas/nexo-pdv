@@ -103,19 +103,21 @@ const ConversationList: React.FC<ConversationListProps> = ({
                       <span className="text-xs text-gray-400">
                         {formatTimestamp(conversation.timestamp)}
                       </span>
-                      {/* Contador de mensagens não lidas - estilo WhatsApp */}
-                      {((conversation.unreadCount || conversation.unread_count || 0) > 0) && selectedConversationId !== conversation.id && (
-                        <span className="bg-green-500 text-black text-xs font-medium rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 mt-1">
-                          {conversation.unreadCount || conversation.unread_count}
-                        </span>
-                      )}
+                      {/* Contador movido para a linha da prévia */}
                     </div>
                   </div>
                   
                   <div className="flex items-center justify-between mt-1">
-                    <p className="text-sm text-gray-400 truncate w-full">
-                      {truncateText(conversation.lastMessage || conversation.last_message, 40)}
+                    <p className="text-sm text-gray-400 truncate w-4/5">
+                      {truncateText(conversation.lastMessage || conversation.last_message, 30)}
                     </p>
+                    
+                    {/* Contador de mensagens não lidas - estilo WhatsApp */}
+                    {((conversation.unreadCount || conversation.unread_count || 0) > 0) && selectedConversationId !== conversation.id && (
+                      <span className="bg-green-500 text-black text-xs font-medium rounded-full h-5 min-w-[20px] flex items-center justify-center px-1">
+                        {conversation.unreadCount || conversation.unread_count}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
