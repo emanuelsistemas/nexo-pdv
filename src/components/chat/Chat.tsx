@@ -559,11 +559,27 @@ const Chat: React.FC = () => {
         
       if (existingData) {
         console.log('Conversa existente encontrada, atualizando:', existingData);
-        // Atualiza o registro existente
+        
+        // Converter o status para um dos valores permitidos no banco
+        let validStatus = status;
+        
+        // Mapeamento de valores antigos para novos (ingles para português)
+        // Usar String para evitar problemas de tipagem
+        const statusStr = String(status).toLowerCase();
+        
+        if (statusStr === 'waiting') validStatus = 'Aguardando';
+        if (statusStr === 'attending') validStatus = 'Atendendo';
+        if (statusStr === 'pending') validStatus = 'Pendentes';
+        if (statusStr === 'finished') validStatus = 'Finalizados';
+        if (statusStr === 'contacts') validStatus = 'Contatos';
+        
+        console.log(`Convertendo status de "${status}" para "${validStatus}"`);
+        
+        // Atualiza o registro existente com o status válido
         const { error } = await supabase
           .from('nexochat_status')
           .update({
-            status,
+            status: validStatus, // Usar o status convertido
             updated_at: new Date().toISOString(),
             unread_count: conversationData.unread_count || 0
           })
