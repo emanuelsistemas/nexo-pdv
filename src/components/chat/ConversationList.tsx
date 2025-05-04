@@ -52,22 +52,16 @@ const ConversationList: React.FC<ConversationListProps> = ({
 
   // Função para determinar a cor do status
   const getStatusColor = (status: ConversationStatus): string => {
-    // Usar valores literais apenas do tipo ConversationStatus e um casting mais seguro
-    const statusStr = String(status).toLowerCase();
-    
-    // Mapeamento de status para cores
-    if (status === 'Pendentes' || statusStr.includes('pend')) {
-      return 'bg-yellow-500';
-    } else if (status === 'Atendendo' || statusStr.includes('attend')) {
-      return 'bg-blue-500';
-    } else if (status === 'Finalizados' || statusStr.includes('finish')) {
+    // Verificar status de online/offline
+    if (status === 'Atendendo' || status === 'Finalizados') {
+      // Online - verde
       return 'bg-green-500';
-    } else if (status === 'Aguardando' || statusStr.includes('wait')) {
-      return 'bg-purple-500';
-    } else if (status === 'Contatos' || statusStr.includes('contact')) {
-      return 'bg-indigo-500';
-    } else if (statusStr.includes('delet')) {
+    } else if (status === 'Aguardando' || status === 'Pendentes') {
+      // Offline - vermelho
       return 'bg-red-500';
+    } else if (status === 'Contatos') {
+      // Mantém a cor original para contatos
+      return 'bg-indigo-500';
     } else {
       return 'bg-gray-500';
     }
