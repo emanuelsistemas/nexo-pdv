@@ -5,11 +5,12 @@ import ChatContainer from './ChatContainer';
 import StatusTabs from './StatusTabs';
 import SearchBar from './SearchBar';
 import SectorFilter from './SectorFilter';
+import WhatsAppStatus from './WhatsAppStatus';
 import { ConversationStatus, StatusTab } from '../../types/chat';
 import useSocketIO from '../../hooks/useSocketIO';
 import useEvolutionApi from '../../hooks/useEvolutionApi';
+import useWhatsAppInstance from '../../hooks/useWhatsAppInstance';
 import { loadStatusFromLocalStorage, saveStatusToLocalStorage } from '../../services/storage';
-import { supabase } from '../../lib/supabase';
 
 const Chat: React.FC = () => {
   // Contexto global do chat
@@ -41,19 +42,20 @@ const Chat: React.FC = () => {
     { id: 'all', label: 'Contatos', count: 0 }
   ]);
 
-  // Hooks personalizados
+  // Hooks personalizados para integração com WhatsApp e Socket.io
+  const { apiConfig, connection, refreshConnection, loading: whatsAppLoading, error: whatsAppError } = useWhatsAppInstance();
+  
+  // Usar apiConfig do hook useWhatsAppInstance se estiver disponível
   const {
-    config: evolutionConfig,
-    checkConnectionStatus,
     fetchMessages,
     sendMessage: apiSendMessage
-  } = useEvolutionApi();
+  } = useEvolutionApi(apiConfig);
 
   const {
     isConnected: socketConnected,
     connectionError: socketError
   } = useSocketIO({
-    config: evolutionConfig,
+    config: apiConfig,
     onNewMessage: (data) => {
       handleNewMessage(data);
     },
@@ -80,7 +82,7 @@ const Chat: React.FC = () => {
   // Carregar mensagens iniciais
   useEffect(() => {
     const loadInitialMessages = async () => {
-      if (evolutionConfig) {
+      if (apiConfig) {
         try {
           const result = await fetchMessages();
           if (result.messages.length > 0) {
@@ -93,7 +95,7 @@ const Chat: React.FC = () => {
     };
 
     loadInitialMessages();
-  }, [evolutionConfig, fetchMessages]);
+  }, [apiConfig, fetchMessages]);
 
   // Processar mensagens vindas da API
   const processMessages = useCallback((apiMessages: any[]) => {
@@ -257,6 +259,16 @@ const Chat: React.FC = () => {
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
+        
+        {/* Status da Instância WhatsApp da Revenda */}
+        <div className="px-4 pt-2">
+          <WhatsAppStatus 
+            connection={connection}
+            loading={whatsAppLoading}
+            error={whatsAppError}
+            onRefresh={refreshConnection}
+          />
+        </div>
         
         {/* Filtro de Setor - Mostrado apenas quando não estiver na aba Contatos */}
         {activeTab !== 'all' && (

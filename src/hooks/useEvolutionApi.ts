@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { EvolutionApiConfig } from '../types/chat';
 import { loadEvolutionApiConfig } from '../services/storage';
 import axios from 'axios';
@@ -9,8 +9,16 @@ interface FetchMessagesResult {
   error: string | null;
 }
 
-const useEvolutionApi = () => {
-  const [config, setConfig] = useState<EvolutionApiConfig | null>(loadEvolutionApiConfig());
+const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
+  // Usar configuração externa ou carregar do localStorage
+  const [config, setConfig] = useState<EvolutionApiConfig | null>(externalConfig || loadEvolutionApiConfig());
+  
+  // Atualizar configuração quando a externa mudar
+  useEffect(() => {
+    if (externalConfig) {
+      setConfig(externalConfig);
+    }
+  }, [externalConfig]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'unknown'>('unknown');
