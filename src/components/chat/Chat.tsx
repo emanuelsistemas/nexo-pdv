@@ -11,6 +11,7 @@ import useWhatsAppInstance from '../../hooks/useWhatsAppInstance';
 import { loadStatusFromLocalStorage, saveStatusToLocalStorage } from '../../services/storage';
 import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
+import { supabase } from '../../lib/supabase';
 
 const Chat: React.FC = () => {
   // Contexto global do chat
@@ -163,19 +164,28 @@ const Chat: React.FC = () => {
           const phoneNumber = remoteJid.split('@')[0];
           const displayName = phoneNumber; // Poderia buscar o nome em uma lista de contatos
           
-          updatedConversations.unshift({
+          // Criar a nova conversa com status 'Aguardando'
+          const newStatus: ConversationStatus = 'Aguardando';
+          
+          const newConversation = {
             id: remoteJid,
             name: displayName,
             phone: phoneNumber,
             contactName: displayName, // Adicionar contactName para satisfazer o tipo Conversation
             messages: [newMessage],
-            status: 'Aguardando', // Inicialmente, todas as novas conversas estão pendentes
+            status: newStatus, // Inicialmente, todas as novas conversas estão pendentes
             last_message: content,
             last_message_time: timestamp,
             unread_count: 1,
             sector: 'Geral', // Setor padrão
             instanceName: instanceName // Registrar qual instância recebeu esta conversa
-          });
+          };
+          
+          // Adicionar conversa ao array local
+          updatedConversations.unshift(newConversation as any);
+          
+          // Salvar na tabela nexochat_status
+          saveConversationStatus(remoteJid, newStatus, newConversation);
         }
 
         return updatedConversations;
@@ -407,13 +417,84 @@ const Chat: React.FC = () => {
     }
   }, [apiConfig, fetchMessages, processMessages]);
   
+  // Função para salvar o status da conversa na tabela nexochat_status
+  const saveConversationStatus = useCallback(async (
+    conversationId: string, 
+    status: ConversationStatus, 
+    conversationData: any
+  ) => {
+    try {
+      console.log(`Salvando conversa ${conversationId} com status ${status} no banco de dados`);
+      
+      // Buscar reseller_id e admin_id do localStorage
+      const adminSession = localStorage.getItem('admin_session');
+      
+      if (!adminSession) {
+        console.error('Sessão admin não encontrada');
+        return;
+      }
+      
+      const session = JSON.parse(adminSession);
+      const resellerId = session.reseller_id || '';
+      const adminId = session.id || session.admin_id || '';
+      const adminUserId = session.user?.id || '';
+      
+      // Verificar se a conversa já existe na tabela
+      const { data: existingData } = await supabase
+        .from('nexochat_status')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .single();
+        
+      if (existingData) {
+        // Atualiza o registro existente
+        const { error } = await supabase
+          .from('nexochat_status')
+          .update({
+            status,
+            updated_at: new Date().toISOString(),
+            unread_count: conversationData.unread_count || 0
+          })
+          .eq('conversation_id', conversationId);
+          
+        if (error) {
+          console.error('Erro ao atualizar status da conversa:', error);
+        }
+      } else {
+        // Cria um novo registro
+        const { error } = await supabase
+          .from('nexochat_status')
+          .insert({
+            conversation_id: conversationId,
+            status,
+            reseller_id: resellerId,
+            profile_admin_id: adminId,
+            profile_admin_user_id: adminUserId,
+            unread_count: conversationData.unread_count || 0,
+            scroll_position: 0
+          });
+          
+        if (error) {
+          console.error('Erro ao salvar nova conversa no banco:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao salvar status da conversa:', error);
+    }
+  }, []);
+  
   // Função para alternar o status de uma conversa
   const handleChangeStatus = useCallback((conversationId: string, newStatus: ConversationStatus) => {
+    // Atualizar no estado local
     updateConversationStatus(conversationId, newStatus);
     
-    // Aqui poderia salvar o status no banco de dados
-    // Isso já deve estar implementado em updateConversationStatus no contexto
-  }, [updateConversationStatus]);
+    // Buscar conversa nos dados locais
+    const conversation = conversations.find(c => c.id === conversationId);
+    if (conversation) {
+      // Salvar no banco de dados
+      saveConversationStatus(conversationId, newStatus, conversation);
+    }
+  }, [updateConversationStatus, conversations, saveConversationStatus]);
   
   // Efeito para gerenciar a conexão Socket.io
   // Usando ref para controlar se já montou e prevenir loops
