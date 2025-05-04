@@ -388,17 +388,28 @@ const Chat: React.FC = () => {
           console.log('======= FIM DOS DETALHES DA ESTRUTURA =======');
           
           // Na Evolution API, mensagens podem estar em diferentes lugares dependendo da estrutura
+          // Vamos tratar todos os formatos possíveis
           let messages = [];
+          
           if (data.data && data.data.messages) {
-            // Formato 1: data.data.messages
+            // Formato 1: data.data.messages (array)
             messages = data.data.messages;
+            console.log('Formato 1: Usando data.data.messages');
           } else if (data.messages) {
-            // Formato 2: data.messages
+            // Formato 2: data.messages (array)
             messages = data.messages;
+            console.log('Formato 2: Usando data.messages');
           } else if (data.data) {
-            // Formato 3: data.data pode ser o array de mensagens diretamente
+            // Formato 3: data.data é um array de mensagens
             if (Array.isArray(data.data)) {
               messages = data.data;
+              console.log('Formato 3: Usando data.data (array)');
+            } 
+            // Formato 4: data.data é uma única mensagem (objeto)
+            else if (data.data.key && data.data.message) {
+              // A mensagem está vindo como um único objeto, não um array!
+              messages = [data.data]; // Colocamos em um array para processar
+              console.log('Formato 4: Mensagem única em data.data');
             }
           }
           
