@@ -49,6 +49,9 @@ const Chat: React.FC = () => {
   // Estado para Socket.io
   const [isConnected, setIsConnected] = useState(false);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
+  
+  // Estado para controlar o carregamento de conversas
+  const [loadingConversations, setLoadingConversations] = useState(true);
   const [socketError, setSocketError] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
   
@@ -500,6 +503,8 @@ const Chat: React.FC = () => {
   const loadInitialMessages = useCallback(async () => {
     if (apiConfig) {
       try {
+        // Iniciar carregamento
+        setLoadingConversations(true);
         console.log('Carregando mensagens iniciais após Socket.io conectado...');
         
         // PASSO 1: Carregar mensagens da Evolution API
@@ -612,6 +617,10 @@ const Chat: React.FC = () => {
         }
       } catch (error) {
         console.error('Erro ao carregar mensagens e conversas iniciais:', error);
+      } finally {
+        // Finalizar carregamento independente de sucesso ou erro
+        console.log('Carregamento de conversas finalizado');
+        setLoadingConversations(false);
       }
     }
   }, [apiConfig, fetchMessages, processMessages, conversations, setConversations]);
@@ -872,6 +881,7 @@ const Chat: React.FC = () => {
               selectedConversationId={selectedConversationId}
               onSelectConversation={handleSelectConversation}
               statusFilter={activeTab}
+              isLoading={loadingConversations}
             />
           ) : (
             <ConnectionStatus 

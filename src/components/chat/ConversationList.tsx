@@ -6,13 +6,15 @@ interface ConversationListProps {
   selectedConversationId: string | null;
   onSelectConversation: (id: string) => void;
   statusFilter: ConversationStatus | 'all';
+  isLoading?: boolean;
 }
 
 const ConversationList: React.FC<ConversationListProps> = ({
   conversations,
   selectedConversationId,
   onSelectConversation,
-  statusFilter
+  statusFilter,
+  isLoading = false
 }) => {
   // Filtrar conversas com base no statusFilter
   const filteredConversations = conversations.filter(
@@ -72,8 +74,13 @@ const ConversationList: React.FC<ConversationListProps> = ({
   };
 
   return (
-    <div className="h-full overflow-y-auto">
-      {sortedConversations.length === 0 ? (
+    <div className="h-full overflow-y-auto" data-component-name="ConversationList">
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center h-full text-gray-200">
+          <div className="w-8 h-8 border-t-2 border-b-2 border-purple-500 rounded-full animate-spin mb-2"></div>
+          <div>Carregando Mensagens</div>
+        </div>
+      ) : sortedConversations.length === 0 ? (
         <div className="flex items-center justify-center h-full text-gray-400">
           Nenhuma conversa encontrada
         </div>
