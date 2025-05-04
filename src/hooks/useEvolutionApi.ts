@@ -68,20 +68,60 @@ const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
 
     try {
       setLoading(true);
-      const response = await axios.get(
-        `${config.baseUrl}/message/fetch/${config.instanceName}`,
-        {
-          headers: {
-            'apikey': config.apikey
+      // Implementando a mesma estratégia de fallback do ChatNexo
+      // O ChatNexo tenta dois endpoints diferentes em sequência
+      let responseData: any = null;
+      
+      try {
+        // Tentativa 1: /chat/findMessages (como no ChatNexo)
+        console.log(`Tentativa 1: Buscando mensagens com /chat/findMessages/${config.instanceName}`);
+        
+        const response = await axios.post(
+          `${config.baseUrl}/chat/findMessages/${config.instanceName}`,
+          { 
+            where: {},
+            count: 50
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': config.apikey
+            }
           }
+        );
+        
+        console.log('Resposta da API (/chat/findMessages) Tentativa 1:', response.data);
+        responseData = response.data;
+      } catch (err1) {
+        console.log('Falha na Tentativa 1, tentando alternativa...');
+        
+        // Tentativa 2: /chat/fetchAllChats (como no ChatNexo)
+        try {
+          console.log(`Tentativa 2: Buscando mensagens com /chat/fetchAllChats/${config.instanceName}`);
+          
+          const response2 = await axios.get(
+            `${config.baseUrl}/chat/fetchAllChats/${config.instanceName}`,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'apikey': config.apikey
+              }
+            }
+          );
+          
+          console.log('Resposta da API (/chat/fetchAllChats) Tentativa 2:', response2.data);
+          responseData = response2.data;
+        } catch (err2) {
+          console.error('Falha na Tentativa 2:', err2);
+          throw new Error(`Todas as tentativas de buscar mensagens para a instância ${config.instanceName} falharam`);
         }
-      );
+      }
 
       setLoading(false);
       setError(null);
       
       return { 
-        messages: response.data?.messages || [], 
+        messages: responseData?.messages || [], 
         loading: false, 
         error: null 
       };
