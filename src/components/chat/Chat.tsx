@@ -319,7 +319,7 @@ const Chat: React.FC = () => {
       console.log('Status da instância:', response.data);
       
       // PASSO 2: Conectar Socket.io
-      console.log('Conectando Socket.io...');
+      console.log('======= INICIANDO CONEXÃO COM SOCKET.IO =======');
       
       const socket = io(baseUrl, {
         transports: ['websocket', 'polling'],
@@ -334,27 +334,25 @@ const Chat: React.FC = () => {
         reconnectionDelay: 1000
       });
       
-      // Log para todos os eventos
+      // Configurar log detalhado para TODOS os eventos
       socket.onAny((event, ...args) => {
-        console.log(`Socket.io evento: ${event}`, args);
+        console.log(`======= SOCKET.IO EVENTO: ${event} =======`, JSON.stringify(args, null, 2));
       });
       
-      // Eventos principais
+      // Tratar evento de conexão
       socket.on('connect', () => {
-        console.log(`Socket.io conectado! ID: ${socket.id}`);
+        console.log(`======= SOCKET.IO CONECTADO! ID: ${socket.id} =======`);
         setIsConnected(true);
         setSocketError(null);
-        setConnectionAttempts(0); // Resetar contador após sucesso
+        setConnectionAttempts(0); // Resetar contador
         
-        // Enviar subscribe
+        // Enviar subscribe de duas formas para garantir
         const subscribeMessage = {
           action: 'subscribe',
           instance: instanceName
         };
-        console.log('Enviando subscribe:', subscribeMessage);
+        console.log('======= ENVIANDO SUBSCRIBE =======', subscribeMessage);
         socket.emit('subscribe', subscribeMessage);
-        
-        // Formato alternativo
         socket.emit('subscribe', instanceName);
         
         // Agora que Socket.io está conectado, carregar as mensagens iniciais
@@ -377,16 +375,17 @@ const Chat: React.FC = () => {
       });
       
       socket.on('messages.upsert', (data) => {
-        console.log('Nova mensagem recebida:', data);
+        console.log('\n\n======= NOVA MENSAGEM RECEBIDA VIA SOCKET.IO - HORA: ' + new Date().toISOString() + ' =======');
+        console.log('DADOS COMPLETOS DA MENSAGEM:', JSON.stringify(data, null, 2));
         try {
           // Log mais detalhado
-          console.log('Estrutura do evento messages.upsert:', {
-            eventType: data.event,
-            instanceName: data.instance,
-            dataKeys: data.data ? Object.keys(data.data) : 'no data',
-            hasMessages: data.data && data.data.messages ? 'yes' : 'no',
-            messageCount: data.data && data.data.messages ? data.data.messages.length : 0
-          });
+          console.log('======= DETALHES DA ESTRUTURA DA MENSAGEM =======');
+          console.log('Tipo de evento:', data.event);
+          console.log('Nome da instância:', data.instance);
+          console.log('Chaves em data:', data.data ? Object.keys(data.data) : 'no data');
+          console.log('Tem array de mensagens?', data.data && data.data.messages ? 'SIM' : 'NÃO');
+          console.log('Quantidade de mensagens:', data.data && data.data.messages ? data.data.messages.length : 0);
+          console.log('======= FIM DOS DETALHES DA ESTRUTURA =======');
           
           // Na Evolution API, mensagens podem estar em diferentes lugares dependendo da estrutura
           let messages = [];
@@ -403,35 +402,56 @@ const Chat: React.FC = () => {
             }
           }
           
-          console.log(`Processando ${messages.length} mensagens do Socket.io`);
+          console.log(`\n======= PROCESSANDO ${messages.length} MENSAGENS DO SOCKET.IO =======`);
           if (messages && messages.length > 0) {
+            // Log detalhado das mensagens
+            console.log('PRIMEIRA MENSAGEM DETALHADA:', JSON.stringify(messages[0], null, 2));
+            
             // Processar mensagens e atualizar estado
+            console.log('CHAMANDO processMessages() PARA ATUALIZAR ESTADO LOCAL...');
             processMessages(messages, instanceName);
+            console.log('ESTADO LOCAL ATUALIZADO COM NOVAS MENSAGENS!');
+            
+            // Tentar salvar no banco IMEDIATAMENTE
+            console.log('\n======= TENTATIVA DE SALVAMENTO NO BANCO DE DADOS =======');
             
             // Pegar a primeira mensagem para identificar a conversa
             const firstMsg = messages[0];
+            console.log('ANALISANDO PRIMEIRA MENSAGEM:', {temKey: !!firstMsg?.key, temRemoteJid: !!firstMsg?.key?.remoteJid});
+            
             if (firstMsg && firstMsg.key && firstMsg.key.remoteJid) {
               const remoteJid = firstMsg.key.remoteJid;
-              console.log('Salvando dados da conversa no banco de dados:', remoteJid);
+              console.log('\n>>> SALVANDO CONVERSA NO BANCO DE DADOS! ID:', remoteJid);
               
               // Encontrar conversa atualizada
+              console.log('VERIFICANDO SE JÁ EXISTE CONVERSA COM ID:', remoteJid);
+              console.log('ARRAY DE CONVERSAS:', conversations.map(c => c.id));
               const updatedConvo = conversations.find(c => c.id === remoteJid);
+              console.log('CONVERSA ENCONTRADA?', !!updatedConvo);
               
               if (updatedConvo) {
                 // Conversa existente
-                saveConversationStatus(remoteJid, updatedConvo.status, updatedConvo);
+                console.log('CONVERSA JÁ EXISTE! ATUALIZANDO COMO:', updatedConvo.status);
+                saveConversationStatus(remoteJid, updatedConvo.status, updatedConvo)
+                  .then(() => console.log('SALVAMENTO BEM-SUCEDIDO!'))
+                  .catch(err => console.error('FALHA NO SALVAMENTO:', err));
               } else {
                 // Nova conversa - status padrão: Aguardando
+                console.log('CRIAR NOVA CONVERSA COM STATUS "Aguardando"');
                 const phoneNumber = remoteJid.split('@')[0];
+                const newStatus: ConversationStatus = 'Aguardando';
                 const newConvo = {
                   id: remoteJid,
                   name: phoneNumber,
                   phone: phoneNumber,
                   contactName: phoneNumber,
-                  status: 'Aguardando' as ConversationStatus,
+                  status: newStatus,
                   unread_count: 1
                 };
-                saveConversationStatus(remoteJid, 'Aguardando', newConvo);
+                console.log('DADOS DA NOVA CONVERSA:', newConvo);
+                saveConversationStatus(remoteJid, newStatus, newConvo)
+                  .then(() => console.log('NOVA CONVERSA SALVA COM SUCESSO!'))
+                  .catch(err => console.error('ERRO AO SALVAR NOVA CONVERSA:', err));
               }
             } else {
               console.warn('Mensagem recebida sem remoteJid válido:', firstMsg);
