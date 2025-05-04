@@ -19,7 +19,7 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-type ConversationStatus = 'pending' | 'attending' | 'finished' | 'waiting' | 'contacts' | 'deletado';
+type ConversationStatus = 'pending' | 'pendente' | 'attending' | 'finished' | 'waiting' | 'contacts' | 'deletado';
 
 // Tipo para uma conversa
 type Conversation = {
@@ -417,6 +417,61 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
     };
   }, [navigate]);
   
+  // Efeito para sincronizar periodicamente os status das conversas com o banco de dados
+  useEffect(() => {
+    // Só iniciar a sincronização quando tivermos conversas carregadas
+    if (conversations.length === 0) return;
+    
+    console.log('Configurando sincronização periódica de status...');
+    
+    // Sincronizar a cada 10 segundos
+    const syncInterval = setInterval(() => {
+      console.log('Sincronizando status das conversas com o banco de dados...');
+      loadConversationStatuses();
+      
+      // Após carregar os status, atualizar as conversas que estiverem com status diferente
+      supabase
+        .from('nexochat_status')
+        .select('conversation_id, status')
+        .eq('profile_admin_id', userInfo.id)
+        .eq('reseller_id', userInfo.resellerId)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('Erro ao carregar status para sincronização:', error);
+            return;
+          }
+          
+          if (!data || data.length === 0) return;
+          
+          // Verificar se alguma conversa está com status diferente do banco
+          let needsUpdate = false;
+          const updatedConversations = conversations.map(conv => {
+            // Procurar o status desta conversa no banco
+            const dbStatus = data.find(item => item.conversation_id === conv.id);
+            
+            // Se encontrou e o status é diferente, atualizar
+            if (dbStatus && dbStatus.status !== conv.status) {
+              console.log(`Atualizando status da conversa ${conv.id} de ${conv.status} para ${dbStatus.status}`);
+              needsUpdate = true;
+              return { ...conv, status: dbStatus.status as ConversationStatus };
+            }
+            
+            return conv;
+          });
+          
+          // Só atualizar o estado se houve alguma mudança
+          if (needsUpdate) {
+            console.log('Atualizando conversas com status sincronizados do banco');
+            setConversations(updatedConversations);
+          }
+        });
+    }, 10000); // Verificar a cada 10 segundos
+    
+    return () => {
+      clearInterval(syncInterval);
+    };
+  }, [conversations, userInfo.id, userInfo.resellerId]);
+  
   // Função para inicializar o estado de conversas vazio
   const initializeEmptyConversations = () => {
     // As conversas reais serão carregadas posteriormente
@@ -783,9 +838,12 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       if (conv.status === 'deletado') return false;
       
       // Filtro por status (aba selecionada)
-      // Não precisamos mais mapear 'pending' para 'pendente' 
-      // Usamos diretamente o status conforme está armazenado
-      const statusMatch = conv.status === activeTab;
+      // Garantir que a conversa só apareça na aba que corresponde ao seu status real
+      // Se estiver na aba de pendentes, considerar tanto 'pending' quanto 'pendente' 
+      // para compatibilidade com dados já existentes
+      const statusMatch = 
+        (activeTab === 'pending' && ['pending', 'pendente'].includes(conv.status)) ||
+        (activeTab !== 'pending' && conv.status === activeTab);
       
       // Filtro por setor
       const sectorMatch = selectedSector === 'all' || conv.sector === selectedSector;
@@ -2257,9 +2315,17 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
               console.log(`Incrementando contador para ${newConv.contactName}: ${newUnreadCount}`);
             }
             
+            // Verificar se existe um status no banco de dados para esta conversa
+            // e usar esse status com prioridade
+            const storedStatus = statusMap[newConv.id]?.status;
+            
             conversationMap.set(newConv.id, {
               ...existingConv,
-              status: finalStatus, // Usar o status atualizado que pode ter mudado de 'deletado' para 'pendente'
+              // Prioridade:
+              // 1. Status do banco de dados (se existir)
+              // 2. Status atual da conversa (se não for 'deletado')
+              // 3. Status 'pending' (caso seja 'deletado')
+              status: storedStatus || (finalStatus !== 'deletado' ? finalStatus : 'pending'),
               messages: sortedMessages, // Usar as mensagens mescladas
               lastMessage: newConv.lastMessage,
               timestamp: newConv.timestamp,
@@ -2277,8 +2343,13 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
               console.log(`Nova conversa recebida: ${newConv.contactName}`);
             }
             
+            // Para novas conversas, verificar se já existe na lista atual
+            const existingStatus = conversations.find(c => c.id === newConv.id)?.status;
+            
             conversationMap.set(newConv.id, {
               ...newConv,
+              // Usar o status existente se já tiver, senão usar o da nova conversa
+              status: existingStatus || newConv.status,
               unreadCount: initialUnreadCount
             });
           }
