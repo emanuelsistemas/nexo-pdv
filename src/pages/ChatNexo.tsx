@@ -226,8 +226,49 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   // Referência para armazenar os IDs de mensagens já processadas
   const processedMessageIds = useRef<Set<string>>(new Set());
   
-  // Estado para armazenar contador específico do evento messages.upsert
-  const [upsertCounter, setUpsertCounter] = useState(0);
+  // Estado para armazenar contadores específicos do evento messages.upsert por conversa
+  const [upsertCounters, setUpsertCounters] = useState<Record<string, number>>({});
+  
+  // Função global para normalizar o ID do contato para uso em todo o componente
+  const normalizeContactId = (contactId: string): string => {
+    // Remover sufixos como @s.whatsapp.net, @c.us, etc.
+    let normalizedId = contactId;
+    
+    // Remover o trecho após o : para IDs como 123456789:12@s.whatsapp.net
+    if (normalizedId.includes(':')) {
+      normalizedId = normalizedId.split(':')[0] + '@' + normalizedId.split('@')[1];
+    }
+    
+    // Manter apenas a parte do número/identificador
+    if (normalizedId.includes('@')) {
+      normalizedId = normalizedId.split('@')[0];
+    }
+    
+    console.log(`ID normalizado: ${contactId} -> ${normalizedId}`);
+    return normalizedId;
+  };
+  
+  // Função para incrementar o contador de messages.upsert para uma conversa específica
+  const incrementUpsertCounter = (contactId: string): void => {
+    if (!contactId) {
+      console.log('ID do contato inválido para incrementar o contador roxo');
+      return;
+    }
+    
+    // Normalizar o ID do contato
+    const normalizedContactId = normalizeContactId(contactId);
+    
+    // Atualizar o contador no estado
+    setUpsertCounters(prevCounters => {
+      const currentCount = prevCounters[normalizedContactId] || 0;
+      const newCount = currentCount + 1;
+      console.log(`🟣 Incrementando contador ROXO para ${normalizedContactId}: ${currentCount} -> ${newCount}`);
+      return {
+        ...prevCounters,
+        [normalizedContactId]: newCount
+      };
+    });
+  };
   
   // Hook para manter referência ao elemento de áudio para notificações
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -1297,24 +1338,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
         return false;
       };
       
-      // Função para normalizar o ID do contato (remover sufixos e formatar consistentemente)
-      const normalizeContactId = (contactId: string): string => {
-        // Remover sufixos como @s.whatsapp.net, @c.us, etc.
-        let normalizedId = contactId;
-        
-        // Remover o trecho após o : para IDs como 123456789:12@s.whatsapp.net
-        if (normalizedId.includes(':')) {
-          normalizedId = normalizedId.split(':')[0] + '@' + normalizedId.split('@')[1];
-        }
-        
-        // Manter apenas a parte do número/identificador
-        if (normalizedId.includes('@')) {
-          normalizedId = normalizedId.split('@')[0];
-        }
-        
-        console.log(`ID normalizado: ${contactId} -> ${normalizedId}`);
-        return normalizedId;
-      };
+      // Usando a função normalizeContactId já definida no escopo do componente
       
       // Função para extrair o ID do contato (remoteJid) da mensagem
       const extractContactId = (data: any): string | null => {
@@ -1559,13 +1583,36 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       socket.on('messages.upsert', (data) => {
         console.log('Evento messages.upsert recebido:', data);
         
-        // Incrementar o contador roxo específico para TODAS as mensagens do evento messages.upsert
-        // sem verificações, apenas para teste
-        setUpsertCounter(prevCounter => {
-          const newCount = prevCounter + 1;
-          console.log(`🟣 Incrementando contador ROXO de teste: ${prevCounter} -> ${newCount}`);
-          return newCount;
+        // Incrementar contador para TODAS as conversas ativas para teste
+        // Isso garantirá que o contador roxo apareça em todas as conversas
+        conversations.forEach(conv => {
+          setUpsertCounters(prevCounters => {
+            const currentCount = prevCounters[conv.id] || 0;
+            const newCount = currentCount + 1;
+            console.log(`🟣 [TESTE] Incrementando contador ROXO para ${conv.id} (${conv.contactName}): ${currentCount} -> ${newCount}`);
+            return {
+              ...prevCounters,
+              [conv.id]: newCount
+            };
+          });
         });
+        
+        // Logando todas as conversas disponíveis e seus IDs para depuração
+        console.log('IDs de todas as conversas disponíveis:', conversations.map(c => `${c.id} (${c.contactName})`));
+        console.log('Estado atual dos contadores roxos:', upsertCounters);
+        
+        // Tentativa normal de extrair ID e incrementar o contador específico
+        // Desativando temporariamente para o teste
+        /*
+        const contactId = extractContactId(data);
+        if (contactId) {
+          // Usar a função de incrementar o contador roxo
+          incrementUpsertCounter(contactId);
+          console.log(`ID do contato extraído com sucesso: ${contactId}`);
+        } else {
+          console.log('ID do contato NÃO encontrado para incrementar o contador roxo');
+        }
+        */
         
         // Verificar se a mensagem é recebida (não enviada por nós)
         const isIncomingMessage = isMessageFromContact(data);
@@ -2346,17 +2393,6 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
               <div className="relative border-b border-gray-700 w-full">
                 {/* Container para animação e setas */}
                 <div className="flex items-center space-x-2">
-                  {/* Contador de mensagens do evento messages.upsert */}
-                  {upsertCounter > 0 && (
-                    <div className="flex items-center mr-2">
-                      <span 
-                        className="bg-purple-600 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center"
-                        title="Mensagens do evento messages.upsert"
-                      >
-                        {upsertCounter}
-                      </span>
-                    </div>
-                  )}
                   
                   {/* Botão seta esquerda */}
                   <button 
@@ -2632,6 +2668,19 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                         });
                       });
                       
+                      // Zerar também o contador roxo do evento messages.upsert para esta conversa
+                      setUpsertCounters(prevCounters => {
+                        // Se o contador existir para esta conversa, criar um novo objeto omitindo esta conversa
+                        if (prevCounters[conv.id]) {
+                          console.log(`🟣 Zerando contador ROXO para ${conv.id}`);
+                          const newCounters = { ...prevCounters };
+                          newCounters[conv.id] = 0;
+                          return newCounters;
+                        }
+                        // Se não existir, retornar o objeto original sem modificações
+                        return prevCounters;
+                      });
+                      
                       // Define a conversa selecionada
                       setSelectedConversation(conv.id);
                     }}
@@ -2656,14 +2705,17 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                           {/* Última mensagem e contador em linha - contador abaixo da hora */}
                           <div className="flex justify-between items-center mt-1">
                             <p className="text-sm text-gray-400 truncate max-w-[80%]">{conv.lastMessage}</p>
-                            {(conv.unreadCount || 0) > 0 && (
-                              <span 
-                                className="bg-green-500 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center flex-shrink-0"
-                                title={`${conv.unreadCount} mensagens não lidas`}
-                              >
-                                {conv.unreadCount}
-                              </span>
-                            )}
+                            <div className="flex space-x-1">
+                              {/* Contador para eventos messages.upsert (agora verde) */}
+                              {(upsertCounters[conv.id] || 0) > 0 && (
+                                <span 
+                                  className="bg-green-700 text-white font-bold text-xs rounded-full min-h-[20px] min-w-[20px] px-1.5 flex items-center justify-center flex-shrink-0 shadow"
+                                  title={`${upsertCounters[conv.id]} eventos messages.upsert`}
+                                >
+                                  {upsertCounters[conv.id]}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
