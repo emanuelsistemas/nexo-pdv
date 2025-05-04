@@ -185,7 +185,10 @@ const Chat: React.FC = () => {
           updatedConversations.unshift(newConversation as any);
           
           // Salvar na tabela nexochat_status
-          saveConversationStatus(remoteJid, newStatus, newConversation);
+          console.log('Salvando nova conversa com ID:', remoteJid, 'Status:', newStatus);
+          saveConversationStatus(remoteJid, newStatus, newConversation)
+            .then(() => console.log('Conversa salva com sucesso no banco!'))
+            .catch(err => console.error('Erro ao salvar conversa no banco:', err));
         }
 
         return updatedConversations;
@@ -424,7 +427,8 @@ const Chat: React.FC = () => {
     conversationData: any
   ) => {
     try {
-      console.log(`Salvando conversa ${conversationId} com status ${status} no banco de dados`);
+      console.log(`INICIANDO SALVAMENTO: conversa ${conversationId} com status ${status} no banco de dados`);
+      console.log('Dados da conversa para salvar:', conversationData);
       
       // Buscar reseller_id e admin_id do localStorage
       const adminSession = localStorage.getItem('admin_session');
@@ -434,19 +438,34 @@ const Chat: React.FC = () => {
         return;
       }
       
+      console.log('Admin session encontrada:', adminSession);
       const session = JSON.parse(adminSession);
+      console.log('Session parsed:', session);
+      
       const resellerId = session.reseller_id || '';
       const adminId = session.id || session.admin_id || '';
       const adminUserId = session.user?.id || '';
       
+      console.log('Dados extraídos da sessão:', { resellerId, adminId, adminUserId });
+      
       // Verificar se a conversa já existe na tabela
-      const { data: existingData } = await supabase
+      console.log('Verificando se a conversa já existe no banco de dados...');
+      const { data: existingData, error: queryError } = await supabase
         .from('nexochat_status')
         .select('id')
         .eq('conversation_id', conversationId)
         .single();
+      
+      if (queryError) {
+        console.log('Erro ao verificar conversa existente:', queryError);
+        // PGJSON:22P02 error often means the conversa já doesn't exist (erro no single())
+        if (queryError.code === 'PGSQL_ERROR_QUERY_EXCEPT') {
+          console.log('Conversa não existe no banco, vamos criar uma nova');
+        }
+      }
         
       if (existingData) {
+        console.log('Conversa existente encontrada, atualizando:', existingData);
         // Atualiza o registro existente
         const { error } = await supabase
           .from('nexochat_status')
@@ -459,10 +478,20 @@ const Chat: React.FC = () => {
           
         if (error) {
           console.error('Erro ao atualizar status da conversa:', error);
+        } else {
+          console.log('Conversa atualizada com sucesso!');
         }
       } else {
+        console.log('Criando nova entrada na tabela nexochat_status...', {
+          conversation_id: conversationId,
+          status,
+          reseller_id: resellerId,
+          profile_admin_id: adminId,
+          profile_admin_user_id: adminUserId
+        });
+        
         // Cria um novo registro
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('nexochat_status')
           .insert({
             conversation_id: conversationId,
@@ -472,14 +501,22 @@ const Chat: React.FC = () => {
             profile_admin_user_id: adminUserId,
             unread_count: conversationData.unread_count || 0,
             scroll_position: 0
-          });
+          })
+          .select();
           
         if (error) {
           console.error('Erro ao salvar nova conversa no banco:', error);
+          console.error('Código do erro:', error.code);
+          console.error('Detalhes do erro:', error.details);
+          console.error('Mensagem do erro:', error.message);
+        } else {
+          console.log('Nova conversa salva com sucesso:', data);
         }
       }
+      return true;
     } catch (error) {
-      console.error('Erro ao salvar status da conversa:', error);
+      console.error('ERRO GERAL ao salvar status da conversa:', error);
+      return false;
     }
   }, []);
   
