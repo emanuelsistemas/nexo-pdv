@@ -783,9 +783,9 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       if (conv.status === 'deletado') return false;
       
       // Filtro por status (aba selecionada)
-      // Mapear 'pending' para 'pendente' diretamente aqui
-      const statusForUI = conv.status === 'pending' ? 'pendente' : conv.status;
-      const statusMatch = statusForUI === activeTab;
+      // Não precisamos mais mapear 'pending' para 'pendente' 
+      // Usamos diretamente o status conforme está armazenado
+      const statusMatch = conv.status === activeTab;
       
       // Filtro por setor
       const sectorMatch = selectedSector === 'all' || conv.sector === selectedSector;
