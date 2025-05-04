@@ -378,8 +378,67 @@ const Chat: React.FC = () => {
       
       socket.on('messages.upsert', (data) => {
         console.log('Nova mensagem recebida:', data);
-        if (data && data.messages) {
-          processMessages(data.messages, instanceName);
+        try {
+          // Log mais detalhado
+          console.log('Estrutura do evento messages.upsert:', {
+            eventType: data.event,
+            instanceName: data.instance,
+            dataKeys: data.data ? Object.keys(data.data) : 'no data',
+            hasMessages: data.data && data.data.messages ? 'yes' : 'no',
+            messageCount: data.data && data.data.messages ? data.data.messages.length : 0
+          });
+          
+          // Na Evolution API, mensagens podem estar em diferentes lugares dependendo da estrutura
+          let messages = [];
+          if (data.data && data.data.messages) {
+            // Formato 1: data.data.messages
+            messages = data.data.messages;
+          } else if (data.messages) {
+            // Formato 2: data.messages
+            messages = data.messages;
+          } else if (data.data) {
+            // Formato 3: data.data pode ser o array de mensagens diretamente
+            if (Array.isArray(data.data)) {
+              messages = data.data;
+            }
+          }
+          
+          console.log(`Processando ${messages.length} mensagens do Socket.io`);
+          if (messages && messages.length > 0) {
+            // Processar mensagens e atualizar estado
+            processMessages(messages, instanceName);
+            
+            // Pegar a primeira mensagem para identificar a conversa
+            const firstMsg = messages[0];
+            if (firstMsg && firstMsg.key && firstMsg.key.remoteJid) {
+              const remoteJid = firstMsg.key.remoteJid;
+              console.log('Salvando dados da conversa no banco de dados:', remoteJid);
+              
+              // Encontrar conversa atualizada
+              const updatedConvo = conversations.find(c => c.id === remoteJid);
+              
+              if (updatedConvo) {
+                // Conversa existente
+                saveConversationStatus(remoteJid, updatedConvo.status, updatedConvo);
+              } else {
+                // Nova conversa - status padrão: Aguardando
+                const phoneNumber = remoteJid.split('@')[0];
+                const newConvo = {
+                  id: remoteJid,
+                  name: phoneNumber,
+                  phone: phoneNumber,
+                  contactName: phoneNumber,
+                  status: 'Aguardando' as ConversationStatus,
+                  unread_count: 1
+                };
+                saveConversationStatus(remoteJid, 'Aguardando', newConvo);
+              }
+            } else {
+              console.warn('Mensagem recebida sem remoteJid válido:', firstMsg);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao processar mensagem Socket.io:', error);
         }
       });
       
