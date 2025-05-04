@@ -1,5 +1,5 @@
-import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-import { Conversation, ConversationStatus, ChatMessage } from '../types/chat';
+import React, { createContext, useState, useContext, useEffect, useCallback, ReactNode } from 'react';
+import { Conversation, ConversationStatus, ChatMessage, EnabledSectors } from '../types/chat';
 import { loadStatusFromLocalStorage, saveStatusToLocalStorage } from '../services/storage';
 
 interface ChatContextProps {
@@ -8,6 +8,8 @@ interface ChatContextProps {
   selectedConversationId: string | null;
   activeTab: ConversationStatus | 'all';
   searchQuery: string;
+  selectedSector: string;
+  enabledSectors: EnabledSectors;
   loading: boolean;
   socketConnected: boolean;
   
@@ -16,6 +18,8 @@ interface ChatContextProps {
   setSelectedConversationId: (id: string | null) => void;
   setActiveTab: (tab: ConversationStatus | 'all') => void;
   setSearchQuery: (query: string) => void;
+  setSelectedSector: (sector: string) => void;
+  setEnabledSectors: (sectors: EnabledSectors) => void;
   
   // Funções utilitárias
   getCurrentConversation: () => Conversation | null;
@@ -31,17 +35,23 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ConversationStatus | 'all'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSector, setSelectedSector] = useState<string>('all');
+  const [enabledSectors, setEnabledSectors] = useState<EnabledSectors>({
+    suporte: true,
+    comercial: true,
+    administrativo: true
+  });
   const [loading, setLoading] = useState(true);
   const [socketConnected, setSocketConnected] = useState(false);
   
   // Função para obter a conversa atual selecionada
-  const getCurrentConversation = (): Conversation | null => {
+  const getCurrentConversation = useCallback(() => {
     if (!selectedConversationId) return null;
     return conversations.find(c => c.id === selectedConversationId) || null;
-  };
+  }, [conversations, selectedConversationId]);
   
   // Enviar mensagem (implementação inicial básica)
-  const sendMessage = (content: string) => {
+  const sendMessage = useCallback((content: string) => {
     if (!selectedConversationId || !content.trim()) return;
     
     const newMessage: ChatMessage = {
@@ -67,10 +77,10 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     // Aqui irá a lógica para enviar a mensagem via API ou Socket
     // será implementada nos services
-  };
+  }, [selectedConversationId]);
   
   // Atualizar status de uma conversa
-  const updateConversationStatus = (conversationId: string, newStatus: ConversationStatus) => {
+  const updateConversationStatus = useCallback((conversationId: string, newStatus: ConversationStatus) => {
     setConversations(prevConversations => 
       prevConversations.map(conv => 
         conv.id === conversationId 
@@ -83,22 +93,31 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     saveStatusToLocalStorage(conversationId, newStatus);
     
     // Implementação parcial - a conexão com DB será adicionada depois
-  };
+  }, []);
   
   // Filtrar conversas com base na aba e na pesquisa
-  const filterConversations = (): Conversation[] => {
-    return conversations.filter(conv => {
-      // Filtrar por status
-      const statusMatch = activeTab === 'all' || conv.status === activeTab;
-      
-      // Filtrar por pesquisa
-      const searchMatch = !searchQuery || 
+  const filterConversations = useCallback(() => {
+    let filteredConvs = [...conversations];
+    
+    // Filtrar por status (aba ativa)
+    if (activeTab !== 'all') {
+      filteredConvs = filteredConvs.filter(conv => conv.status === activeTab);
+    }
+    
+    // Filtrar por setor
+    if (selectedSector !== 'all') {
+      filteredConvs = filteredConvs.filter(conv => conv.sector === selectedSector);
+    }
+    
+    // Filtrar por pesquisa
+    const searchMatch = !searchQuery || 
+      filteredConvs.find(conv => 
         conv.contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      return statusMatch && searchMatch;
-    });
-  };
+        conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    
+    return searchMatch ? filteredConvs : [];
+  }, [conversations, activeTab, selectedSector, searchQuery]);
   
   useEffect(() => {
     // Aqui irá a lógica para carregar as conversas iniciais
@@ -120,16 +139,20 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     selectedConversationId,
     activeTab,
     searchQuery,
+    selectedSector,
+    enabledSectors,
     loading,
     socketConnected,
     setConversations,
     setSelectedConversationId,
     setActiveTab,
     setSearchQuery,
+    setSelectedSector,
+    setEnabledSectors,
     getCurrentConversation,
     sendMessage,
     updateConversationStatus,
-    filterConversations,
+    filterConversations
   };
   
   return (

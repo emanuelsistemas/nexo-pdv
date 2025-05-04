@@ -12,9 +12,15 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
-export type ConversationStatus = 'pending' | 'pendente' | 'attending' | 'finished' | 'waiting' | 'contacts' | 'deletado';
+export type ConversationStatus = 'pending' | 'pendente' | 'attending' | 'finished' | 'waiting' | 'contacts' | 'deletado' | 'suporte' | 'comercial' | 'administrativo';
 
 // Tipo para uma conversa
+export interface EnabledSectors {
+  suporte: boolean;
+  comercial: boolean;
+  administrativo: boolean;
+}
+
 export interface Conversation {
   id: string;
   contactName: string;
@@ -32,6 +38,25 @@ export interface StatusTab {
   label: string;
   count: number;
   color?: string;
+}
+
+export interface ChatContextProps {
+  conversations: Conversation[];
+  setConversations: (conversations: Conversation[]) => void;
+  selectedConversationId: string | null;
+  setSelectedConversationId: (id: string | null) => void;
+  activeTab: ConversationStatus | 'all';
+  setActiveTab: (tab: ConversationStatus | 'all') => void;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  selectedSector: string;
+  setSelectedSector: (sector: string) => void;
+  enabledSectors: EnabledSectors;
+  setEnabledSectors: (sectors: EnabledSectors) => void;
+  getCurrentConversation: () => Conversation | null;
+  sendMessage: (content: string) => void;
+  updateConversationStatus: (conversationId: string, newStatus: ConversationStatus) => void;
+  filterConversations: () => Conversation[];
 }
 
 export interface EvolutionApiConfig {

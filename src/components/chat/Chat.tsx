@@ -4,6 +4,7 @@ import ConversationList from './ConversationList';
 import ChatContainer from './ChatContainer';
 import StatusTabs from './StatusTabs';
 import SearchBar from './SearchBar';
+import SectorFilter from './SectorFilter';
 import { ConversationStatus, StatusTab } from '../../types/chat';
 import useSocketIO from '../../hooks/useSocketIO';
 import useEvolutionApi from '../../hooks/useEvolutionApi';
@@ -21,6 +22,9 @@ const Chat: React.FC = () => {
     setActiveTab,
     searchQuery,
     setSearchQuery,
+    selectedSector,
+    setSelectedSector,
+    enabledSectors,
     getCurrentConversation,
     sendMessage: contextSendMessage,
     updateConversationStatus,
@@ -253,6 +257,15 @@ const Chat: React.FC = () => {
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
+        
+        {/* Filtro de Setor - Mostrado apenas quando não estiver na aba Contatos */}
+        {activeTab !== 'all' && (
+          <SectorFilter
+            selectedSector={selectedSector}
+            onSectorChange={setSelectedSector}
+            enabledSectors={enabledSectors}
+          />
+        )}
         
         <div className="p-4">
           <SearchBar
