@@ -19,7 +19,7 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-type ConversationStatus = 'pending' | 'attending' | 'finished' | 'contacts' | 'deletado';
+type ConversationStatus = 'pending' | 'attending' | 'finished' | 'waiting' | 'contacts' | 'deletado';
 
 // Tipo para uma conversa
 type Conversation = {
@@ -162,7 +162,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       position: 'Proprietário'
     }] // Array de contatos com nome, telefone e cargo
   });
-  const [activeTab, setActiveTab] = useState<ConversationStatus>('pendente');
+  const [activeTab, setActiveTab] = useState<ConversationStatus>('pending');
   // Removido estado de subaba pois agora a aba Contatos já mostra diretamente a grid de empresas
   // Estado para armazenar a lista de empresas
   const [companies, setCompanies] = useState<Array<{
@@ -2522,8 +2522,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                   >
                     {/* Aba Pendentes */}
                     <button
-                      onClick={() => setActiveTab('pendente')}
-                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'pendente' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      onClick={() => setActiveTab('pending')}
+                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'pending' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
                     >
                       Pendentes
                       {filteredConversations.filter(conv => conv.status === 'pending').length > 0 && (
@@ -2579,6 +2579,19 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                           </span>
                         );
                       })()} 
+                    </button>
+                    
+                    {/* Aba Aguardando */}
+                    <button
+                      className={`min-w-[100px] whitespace-nowrap px-4 py-3 text-sm font-medium flex items-center justify-center gap-2 ${activeTab === 'waiting' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-gray-400 hover:text-white'}`}
+                      onClick={() => setActiveTab('waiting')}
+                    >
+                      Aguardando
+                      {filteredConversations.filter(conv => conv.status === 'waiting').length > 0 && (
+                        <span className="bg-blue-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
+                          {filteredConversations.filter(conv => conv.status === 'waiting').length}
+                        </span>
+                      )}
                     </button>
                     
                     {/* Aba Contatos */}
@@ -2709,7 +2722,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                             };
                             setConversations(prev => [...prev, newConversation]);
                             setSelectedConversation(contact.id);
-                            setActiveTab('pendente'); // Usamos 'pendente' para a interface
+                            setActiveTab('pending'); // Usamos 'pendente' para a interface
                           }
                         }}
                       >
