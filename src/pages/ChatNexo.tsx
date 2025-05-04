@@ -708,7 +708,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   };
   
   // Função para atualizar o status de uma conversa
-  const updateConversationStatus = (conversationId: string, newStatus: ConversationStatus) => {
+  const updateConversationStatus = (conversationId: string, newStatus: ConversationStatus, shouldChangeTab: boolean = false) => {
     // Obter contagem de mensagens não lidas atual
     const conversation = conversations.find(c => c.id === conversationId);
     const currentUnreadCount = conversation?.unreadCount || 0;
@@ -736,6 +736,11 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
     
     // Salvar no localStorage como backup
     saveStatusToLocalStorage(conversationId, newStatus, updatedUnreadCount);
+    
+    // Opcional: mudar a aba ativa para a aba correspondente ao novo status
+    if (shouldChangeTab) {
+      setActiveTab(newStatus);
+    }
     
     console.log(`Status da conversa ${conversationId} atualizado para: ${newStatus} (Não lidas: ${updatedUnreadCount})`);
   };
@@ -3470,10 +3475,7 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                         onClick={() => {
                           if (currentConversation) {
                             // Atualizar status para atendendo
-                            updateConversationStatus(currentConversation.id, 'attending');
-                            
-                            // Mudar para a aba de Atendendo automaticamente
-                            setActiveTab('attending');
+                            updateConversationStatus(currentConversation.id, 'attending', false);
                             // Forçar carregamento do status do banco novamente no próximo ciclo
                             setStatusLoaded(false);
                             
