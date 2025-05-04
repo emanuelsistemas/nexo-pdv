@@ -501,17 +501,120 @@ const Chat: React.FC = () => {
     if (apiConfig) {
       try {
         console.log('Carregando mensagens iniciais após Socket.io conectado...');
+        
+        // PASSO 1: Carregar mensagens da Evolution API
         const result = await fetchMessages();
         if (result.messages.length > 0) {
+          console.log(`Processando ${result.messages.length} mensagens da Evolution API`);
           processMessages(result.messages);
         } else {
-          console.log('Nenhuma mensagem encontrada no carregamento inicial');
+          console.log('Nenhuma mensagem encontrada na Evolution API');
+        }
+        
+        // PASSO 2: Carregar conversas do banco de dados Supabase
+        console.log('Carregando conversas salvas da tabela nexochat_status...');
+        
+        // Buscar dados da sessão do usuário para obter o reseller_id
+        const adminSession = localStorage.getItem('admin_session');
+        if (!adminSession) {
+          console.error('Sessão admin não encontrada ao carregar conversas do banco');
+          return;
+        }
+        
+        const session = JSON.parse(adminSession);
+        const resellerId = session.reseller_id || '';
+        
+        if (!resellerId) {
+          console.error('reseller_id não encontrado na sessão');
+          return;
+        }
+        
+        // Buscar conversas salvas no banco que pertencem a este reseller
+        const { data: savedConversations, error } = await supabase
+          .from('nexochat_status')
+          .select('*')
+          .eq('reseller_id', resellerId);
+          
+        if (error) {
+          console.error('Erro ao buscar conversas do banco:', error);
+          return;
+        }
+        
+        if (!savedConversations || savedConversations.length === 0) {
+          console.log('Nenhuma conversa encontrada no banco de dados');
+          return;
+        }
+        
+        console.log(`Encontradas ${savedConversations.length} conversas no banco de dados:`, savedConversations);
+        
+        // Atualizar as conversas no estado local
+        const currentConversations = [...conversations];
+        let conversationsUpdated = false;
+        
+        // Para cada conversa no banco, verificar se já existe no estado e atualizar/adicionar
+        savedConversations.forEach((savedConvo: any) => {
+          // Verificar se a conversa já existe no estado
+          const existingIndex = currentConversations.findIndex(
+            convo => convo.id === savedConvo.conversation_id
+          );
+          
+          if (existingIndex >= 0) {
+            // Atualizar conversa existente com dados do banco
+            const existing = currentConversations[existingIndex];
+            currentConversations[existingIndex] = {
+              ...existing,
+              status: savedConvo.status as ConversationStatus,
+              unread_count: savedConvo.unread_count || 0
+            };
+          } else {
+            // Criar uma nova conversa com os dados mínimos
+            const phoneNumber = String(savedConvo.conversation_id).split('@')[0];
+            
+            // Adicionar nova conversa ao estado
+            currentConversations.push({
+              id: String(savedConvo.conversation_id),
+              name: phoneNumber,
+              contactName: phoneNumber,
+              phone: phoneNumber,
+              messages: [], // Mensagens vazias inicialmente
+              status: savedConvo.status as ConversationStatus,
+              unread_count: Number(savedConvo.unread_count || 0),
+              last_message: 'Conversa carregada do banco',
+              last_message_time: String(savedConvo.updated_at),
+              timestamp: String(savedConvo.updated_at),
+              sector: 'Geral' // Adicionar o setor padrão para satisfazer o tipo Conversation
+            });
+          }
+          
+          conversationsUpdated = true;
+        });
+        
+        // Se houve atualizações, atualizar o estado
+        if (conversationsUpdated) {
+          console.log('Atualizando estado com conversas do banco:', currentConversations);
+          setConversations(currentConversations);
+          
+          // Atualizar contagens nas abas de status
+          // Contar o número de conversas para cada status
+          const counts: Record<string, number> = {};
+          currentConversations.forEach(convo => {
+            const status = convo.status || 'Pendentes';
+            counts[status] = (counts[status] || 0) + 1;
+          });
+          
+          // Atualizar as contagens nos status tabs
+          const updatedTabs = statusTabs.map(tab => ({
+            ...tab,
+            count: counts[tab.id] || 0
+          }));
+          
+          setStatusTabs(updatedTabs);
         }
       } catch (error) {
-        console.error('Erro ao carregar mensagens iniciais:', error);
+        console.error('Erro ao carregar mensagens e conversas iniciais:', error);
       }
     }
-  }, [apiConfig, fetchMessages, processMessages]);
+  }, [apiConfig, fetchMessages, processMessages, conversations, setConversations]);
   
   // Função para salvar o status da conversa na tabela nexochat_status
   const saveConversationStatus = useCallback(async (
