@@ -43,29 +43,15 @@ const ConversationList: React.FC<ConversationListProps> = ({
     }
   };
 
-  // Função para truncar o texto se for muito longo
-  const truncateText = (text: string | undefined, maxLength: number = 30): string => {
-    // Tratar caso text seja undefined ou nulo
+  // Função para truncar texto longo
+  const truncateText = (text: string | undefined, maxLength: number): string => {
     if (!text) return '';
-    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
+    // Limpar texto de tags HTML e caracteres especiais
+    const cleanText = text.replace(/<[^>]*>?/gm, '').trim();
+    return cleanText.length > maxLength ? `${cleanText.substring(0, maxLength)}...` : cleanText;
   };
 
-  // Função para determinar a cor do status
-  const getStatusColor = (status: ConversationStatus): string => {
-    // Verificar status de online/offline
-    if (status === 'Atendendo' || status === 'Finalizados') {
-      // Online - verde
-      return 'bg-green-500';
-    } else if (status === 'Aguardando' || status === 'Pendentes') {
-      // Offline - vermelho
-      return 'bg-red-500';
-    } else if (status === 'Contatos') {
-      // Mantém a cor original para contatos
-      return 'bg-indigo-500';
-    } else {
-      return 'bg-gray-500';
-    }
-  };
+  // Função getStatusColor removida pois não é mais usada após remover o indicador de status
 
   return (
     <div className="h-full overflow-y-auto" data-component-name="ConversationList">
@@ -105,32 +91,27 @@ const ConversationList: React.FC<ConversationListProps> = ({
                     )}
                   </div>
                   
-                  {/* Indicador de status */}
-                  <div
-                    className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#1e1e1e] ${getStatusColor(
-                      conversation.status
-                    )}`}
-                  />
+                  {/* Indicador de status removido */}
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline">
                     <h3 className="font-medium truncate">
-                      {truncateText(conversation.contactName, 20)}
+                      {conversation.contactName}
                     </h3>
                     <span className="text-xs text-gray-400">
                       {formatTimestamp(conversation.timestamp)}
                     </span>
                   </div>
                   
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-gray-400 truncate">
-                      {truncateText(conversation.lastMessage, 30)}
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-sm text-gray-400 truncate w-4/5">
+                      {truncateText(conversation.lastMessage, 40)}
                     </p>
                     
                     {/* Contador de mensagens não lidas */}
                     {(conversation.unreadCount || 0) > 0 && (
-                      <span className="bg-emerald-600 text-white text-xs rounded-full h-5 min-w-[20px] flex items-center justify-center px-1">
+                      <span className="bg-emerald-600 text-white text-xs rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 ml-1">
                         {conversation.unreadCount}
                       </span>
                     )}
