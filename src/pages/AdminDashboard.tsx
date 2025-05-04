@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Database, Users, LogOut, BarChart2, Store, Search, ChevronLeft, ChevronRight, Trash2, X, Settings as SettingsIcon, MessageCircle, MessageSquare } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Trash2, X, Store, ChevronLeft, ChevronRight } from 'lucide-react';
+import AdminSidebar from '../components/admin/AdminSidebar';
 import AIChat from '../components/AIChat';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-toastify';
@@ -224,190 +225,16 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex h-screen">
-      {/* Sidebar */}
-      <div className={`bg-[#2A2A2A] transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-16' : 'w-64'} h-screen flex flex-col border-r border-gray-800 relative z-10`}>
-        {/* Toggle button */}
-        <button 
-          onClick={() => {
-            const newState = !isSidebarCollapsed;
-            setIsSidebarCollapsed(newState);
-            // Salvar preferência no localStorage
-            localStorage.setItem('sidebar_collapsed', String(newState));
-          }}
-          className="absolute -right-3 top-[4.5rem] bg-emerald-500 text-white rounded-full p-1 shadow-md hover:bg-emerald-600 transition-colors z-10"
-        >
-          {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
-        
-        <div className="p-6 border-b border-gray-800 flex items-center justify-center">
-          <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-            <Database className="w-8 h-8 text-emerald-500 flex-shrink-0" />
-            {!isSidebarCollapsed && (
-              <div>
-                <h1 className="text-lg font-bold text-white font-['MuseoModerno']">nexo</h1>
-                <p className="text-sm text-gray-400">Painel de Controle</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'}`}>
-          <ul className="px-2 py-4 space-y-1">
-            {/* Botão de Chat IA na barra lateral */}
-            <li>
-              <button
-                onClick={() => setIsAiChatOpen(!isAiChatOpen)}
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative w-full`}
-              >
-                <MessageCircle size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Assistente IA</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Assistente IA
-                  </div>
-                )}
-              </button>
-            </li>
-            <li>
-              <Link
-                to="/admin/dashboard"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
-              >
-                <BarChart2 size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Dashboard</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Dashboard
-                  </div>
-                )}
-              </Link>
-            </li>
-            <li>
-              <Link
-                to="/admin/chat"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
-              >
-                <MessageSquare size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Chat nexo</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Chat nexo
-                  </div>
-                )}
-              </Link>
-            </li>
-            <li>
-              <Link
-                to="/admin/dashboard"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors bg-[#3A3A3A] bg-opacity-50 group relative`}
-              >
-                <Store size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Users nexo</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Users nexo
-                  </div>
-                )}
-              </Link>
-            </li>
-
-            <li>
-              <Link
-                to="/admin/settings"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
-              >
-                <SettingsIcon size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Configurações</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Configurações
-                  </div>
-                )}
-              </Link>
-            </li>
-            <li>
-              <button
-                onClick={handleLogout}
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-red-400 hover:bg-red-400 hover:text-white hover:bg-opacity-20 transition-colors w-full text-left group relative`}
-              >
-                <LogOut size={isSidebarCollapsed ? 22 : 18} />
-                {!isSidebarCollapsed && <span>Sair</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Sair
-                  </div>
-                )}
-              </button>
-            </li>
-          </ul>
-          
-          {/* Footer com informações do usuário */}
-          <div className={`mt-auto pt-4`}>
-            {/* Versão expandida */}
-            {!isSidebarCollapsed && (
-              <div className="border-t border-gray-800 pt-4 px-2">
-                <div className="text-sm font-medium text-white truncate">{userInfo.email}</div>
-                
-                {/* Menu Revendas abaixo do email - versão expandida (apenas se dev='S') */}
-                {userInfo.dev === 'S' && (
-                  <div className="mt-4">
-                    <Link
-                      to="/admin/resellers"
-                      className={`flex items-center gap-2 p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors`}
-                    >
-                      <Users size={18} className="text-emerald-500" />
-                      Revendas
-                    </Link>
-                  </div>
-                )}
-              </div>
-            )}
-            
-            {/* Versão retraída */}
-            {isSidebarCollapsed && (
-              <div className="border-t border-gray-800 pt-4 flex justify-center">
-                <div className="group relative">
-                  <div className="w-8 h-8 bg-emerald-600 rounded-full flex items-center justify-center text-white font-medium">
-                    {userInfo.email.substring(0, 1).toUpperCase()}
-                  </div>
-                  
-                  {/* Tooltip com o email */}
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    {userInfo.email}
-                  </div>
-                  
-                  {/* Menu Revendas abaixo do email - versão retraída (apenas se dev='S') */}
-                  {userInfo.dev === 'S' && (
-                    <div className="mt-4">
-                      <Link
-                        to="/admin/resellers"
-                        className="group relative flex justify-center p-2 rounded-lg hover:bg-[#3A3A3A] transition-colors"
-                      >
-                        <Store size={18} className="text-emerald-500" />
-                        <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                          Revendas
-                        </div>
-                      </Link>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* Sidebar modularizado */}
+      <AdminSidebar
+        activeMenuItem="/admin/dashboard"
+        onLogout={handleLogout}
+        collapsed={isSidebarCollapsed}
+        onCollapseChange={setIsSidebarCollapsed}
+        onAiChatClick={() => setIsAiChatOpen(!isAiChatOpen)}
+        isAiChatOpen={isAiChatOpen}
+        userInfo={userInfo}
+      />
 
       {/* Main Content */}
       <div className="flex-1 bg-[#1C1C1C]">
@@ -502,7 +329,7 @@ export default function AdminDashboard() {
                               className="p-1 text-blue-400 hover:text-blue-300 rounded-lg"
                               title="Editar"
                             >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                               </svg>
