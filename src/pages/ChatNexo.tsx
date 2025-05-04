@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Database, MessageSquare, Search, ChevronLeft, ChevronRight, Send, Store, Users, LogOut, BarChart2, Settings as SettingsIcon, MessageCircle, Plus, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { MessageSquare, Search, Send, Plus, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
+import AdminSidebar from '../components/admin/AdminSidebar';
 
 interface Message {
   id: string;
@@ -126,6 +127,12 @@ interface ChatNexoContentProps {
 // Componente principal com toda a lógica original
 function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
   const navigate = useNavigate();
+  
+  // Função para fazer logout
+  const handleLogout = () => {
+    localStorage.removeItem('admin_session');
+    navigate('/admin/login');
+  };
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [inputMessage, setInputMessage] = useState('');
@@ -2372,180 +2379,16 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
 
   return (
     <div className="flex h-screen">
-      {/* Sidebar */}
-      <div className={`bg-[#2A2A2A] transition-all duration-300 ease-in-out ${isSidebarCollapsed ? 'w-16' : 'w-64'} h-screen flex flex-col border-r border-gray-800 relative z-10`}>
-        {/* Toggle button */}
-        <button 
-          onClick={() => {
-            const newState = !isSidebarCollapsed;
-            setIsSidebarCollapsed(newState);
-            localStorage.setItem('sidebar_collapsed', String(newState));
-          }}
-          className="absolute -right-3 top-[4.5rem] bg-emerald-500 text-white rounded-full p-1 shadow-md hover:bg-emerald-600 transition-colors z-10"
-        >
-          {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
-        
-        <div className="p-6 border-b border-gray-800 flex items-center justify-center">
-          <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-            <Database className="w-8 h-8 text-emerald-500 flex-shrink-0" />
-            {!isSidebarCollapsed && (
-              <div>
-                <h1 className="text-lg font-bold text-white font-['MuseoModerno']">nexo</h1>
-                <p className="text-sm text-gray-400">Painel de Controle</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className={`${isSidebarCollapsed ? 'p-2' : 'p-4'}`}>
-          <ul className="px-2 py-4 space-y-1">
-            <li>
-              <button
-                onClick={() => {}} // Placeholder para a função de abrir chat IA
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative w-full`}
-              >
-                <MessageCircle size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Assistente IA</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Assistente IA
-                  </div>
-                )}
-              </button>
-            </li>
-            <li>
-              <Link
-                to="/admin/dashboard"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
-              >
-                <BarChart2 size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Dashboard</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Dashboard
-                  </div>
-                )}
-              </Link>
-            </li>
-            
-            {/* Novo item de menu para o Chat */}
-            <li>
-              <Link
-                to="/admin/chat"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white bg-[#3A3A3A] bg-opacity-70 transition-colors group relative`}
-              >
-                <MessageSquare size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Chat nexo</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Chat nexo
-                  </div>
-                )}
-              </Link>
-            </li>
-            
-            <li>
-              <Link
-                to="/admin/dashboard"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
-              >
-                <Store size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Users nexo</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Users nexo
-                  </div>
-                )}
-              </Link>
-            </li>
-
-            <li>
-              <Link
-                to="/admin/settings"
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
-              >
-                <SettingsIcon size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                {!isSidebarCollapsed && <span>Configurações</span>}
-                
-                {/* Tooltip quando o menu está retraído */}
-                {isSidebarCollapsed && (
-                  <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                    Configurações
-                  </div>
-                )}
-              </Link>
-            </li>
-
-            {userInfo.dev === 'S' && (
-              <div className="mt-4">
-                <Link
-                  to="/admin/resellers"
-                  className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative`}
-                >
-                  <Users size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
-                  {!isSidebarCollapsed && <span>Revendas</span>}
-                  
-                  {/* Tooltip quando o menu está retraído */}
-                  {isSidebarCollapsed && (
-                    <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                      Revendas
-                    </div>
-                  )}
-                </Link>
-              </div>
-            )}
-          </ul>
-
-          <div className="mt-auto">
-            <button
-              onClick={() => {
-                localStorage.removeItem('admin_session');
-                navigate('/admin/login');
-              }}
-              className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-red-500 hover:bg-opacity-10 text-red-500 w-full group relative`}
-            >
-              <LogOut size={isSidebarCollapsed ? 22 : 18} />
-              {!isSidebarCollapsed && <span>Sair</span>}
-              
-              {/* Tooltip quando o menu está retraído */}
-              {isSidebarCollapsed && (
-                <div className="absolute left-full ml-2 bg-[#3A3A3A] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50 shadow-lg">
-                  Sair
-                </div>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Usuario logado */}
-        <div className="mt-auto border-t border-gray-800 p-4">
-          <div className="flex items-center gap-2 text-gray-400 text-sm">
-            {isSidebarCollapsed ? (
-              <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
-                <span className="text-xs text-white">{userInfo.email.substring(0, 1).toUpperCase()}</span>
-              </div>
-            ) : (
-              <>
-                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
-                  <span className="text-xs text-white">{userInfo.email.substring(0, 1).toUpperCase()}</span>
-                </div>
-                <div className="truncate">
-                  <p className="truncate w-40">{userInfo.email}</p>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* Sidebar modularizado */}
+      <AdminSidebar
+        activeMenuItem="/admin/chat"
+        onLogout={handleLogout}
+        collapsed={isSidebarCollapsed}
+        onCollapseChange={setIsSidebarCollapsed}
+        onAiChatClick={() => {}}
+        isAiChatOpen={false}
+        userInfo={userInfo}
+      />
 
       {/* Main Content - Chat Interface */}
       <div className="flex-1 bg-[#1C1C1C] flex flex-col">
@@ -3511,11 +3354,10 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                               className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
                               onClick={() => {
                                 if (currentConversation) {
-                                  // Voltar para Pendente
-                                  updateConversationStatus(currentConversation.id, 'pending');
-                                  setActiveTab('pending');
-                // Forçar carregamento do status do banco novamente no próximo ciclo
-                setStatusLoaded(false);
+                                  // Voltar para Pendente sem mudar a aba ativa
+                                  updateConversationStatus(currentConversation.id, 'pending', false);
+                                  // Forçar carregamento do status do banco novamente no próximo ciclo
+                                  setStatusLoaded(false);
                                   setIsActionMenuOpen(false);
                                 }
                               }}
@@ -3526,9 +3368,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                               className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
                               onClick={() => {
                                 if (currentConversation) {
-                                  // Finalizar conversa
-                                  updateConversationStatus(currentConversation.id, 'finished');
-                                  setActiveTab('finished');
+                                  // Finalizar conversa sem mudar a aba ativa
+                                  updateConversationStatus(currentConversation.id, 'finished', false);
                                   // Forçar carregamento do status do banco novamente no próximo ciclo
                                   setStatusLoaded(false);
                                   setIsActionMenuOpen(false);
@@ -3546,9 +3387,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                             className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
                             onClick={() => {
                               if (currentConversation) {
-                                // Finalizar direto
-                                updateConversationStatus(currentConversation.id, 'finished');
-                                setActiveTab('finished');
+                                // Finalizar direto sem mudar a aba ativa
+                                updateConversationStatus(currentConversation.id, 'finished', false);
                                 // Forçar carregamento do status do banco novamente no próximo ciclo
                                 setStatusLoaded(false);
                                 setIsActionMenuOpen(false);
@@ -3566,11 +3406,10 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                               className="w-full text-left py-2 px-3 hover:bg-[#3A3A3A] text-white text-sm transition-colors"
                               onClick={() => {
                                 if (currentConversation) {
-                                  // Voltar para Pendente
-                                  updateConversationStatus(currentConversation.id, 'pending');
-                                  setActiveTab('pending');
-                // Forçar carregamento do status do banco novamente no próximo ciclo
-                setStatusLoaded(false);
+                                  // Voltar para Pendente sem mudar a aba ativa
+                                  updateConversationStatus(currentConversation.id, 'pending', false);
+                                  // Forçar carregamento do status do banco novamente no próximo ciclo
+                                  setStatusLoaded(false);
                                   setIsActionMenuOpen(false);
                                 }
                               }}

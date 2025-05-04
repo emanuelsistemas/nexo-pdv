@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Database, MessageSquare, ChevronLeft, ChevronRight, LogOut, BarChart2, Store, Settings as SettingsIcon, MessageCircle } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { MessageCircle, MessageSquare, BarChart2, Store, Settings as SettingsIcon, LogOut, Database, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 // Definindo a interface para as props do componente
@@ -13,13 +13,26 @@ interface AdminSidebarProps {
   collapsed?: boolean;
   // Handler opcional para quando o estado do colapso muda
   onCollapseChange?: (collapsed: boolean) => void;
+  // Handler opcional para o chat do assistente IA
+  onAiChatClick?: () => void;
+  // Estado opcional do chat IA para destacar o botão quando ativo
+  isAiChatOpen?: boolean;
+  // Informações do usuário
+  userInfo?: {
+    email: string;
+    dev: string;
+    [key: string]: any;
+  };
 }
 
 export default function AdminSidebar({
   activeMenuItem,
   onLogout,
   collapsed: externalCollapsed,
-  onCollapseChange
+  onCollapseChange,
+  onAiChatClick,
+  isAiChatOpen = false,
+  userInfo
 }: AdminSidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,13 +59,16 @@ export default function AdminSidebar({
     }
   }, [externalCollapsed]);
   
-  // Informações do usuário logado
-  const [userInfo, setUserInfo] = useState({
+  // Informações do usuário logado - usando o valor passado como prop ou um fallback
+  const [localUserInfo, setLocalUserInfo] = useState({
     email: '',
     companyName: 'Nexo Sistema',
     nome: '',
     dev: 'N'  // Valor padrão 'N'
   });
+  
+  // Usar as informações do usuário fornecidas como prop ou o estado local
+  const effectiveUserInfo = userInfo || localUserInfo;
 
   useEffect(() => {
     // Check admin session
@@ -83,7 +99,7 @@ export default function AdminSidebar({
       userNome = session.nome || '';
     }
     
-    setUserInfo({
+    setLocalUserInfo({
       email: session.email || '',
       companyName: session.companyName || 'Nexo Sistema',
       nome: userNome,
@@ -150,9 +166,10 @@ export default function AdminSidebar({
         <ul className="space-y-1">
           <li>
             <button
-              className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors group relative w-full`}
+              onClick={onAiChatClick}
+              className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'} p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors ${isAiChatOpen ? 'bg-[#3A3A3A] bg-opacity-50' : ''} group relative w-full`}
             >
-              <MessageCircle size={isSidebarCollapsed ? 22 : 18} className="text-emerald-500" />
+              <MessageCircle size={isSidebarCollapsed ? 22 : 18} className={isAiChatOpen ? 'text-blue-500' : 'text-emerald-500'} />
               {!isSidebarCollapsed && <span>Assistente IA</span>}
               
               {/* Tooltip quando o menu está retraído */}
@@ -265,9 +282,20 @@ export default function AdminSidebar({
         <div className="mt-auto pt-4 border-t border-gray-800 mt-6">
           {!isSidebarCollapsed && (
             <div className="text-sm text-gray-400">
-              <p className="truncate">{userInfo.email}</p>
-              <p className="truncate">{userInfo.nome}</p>
+              <p className="truncate">{effectiveUserInfo.email}</p>
+              <p className="truncate">{effectiveUserInfo.nome}</p>
               {/* Menu Revendas abaixo do email - versão expandida (apenas se dev='S') */}
+              {effectiveUserInfo.dev === 'S' && (
+                <div className="mt-4">
+                  <Link
+                    to="/admin/resellers"
+                    className={`flex items-center gap-2 p-2 rounded-lg text-white hover:bg-[#3A3A3A] hover:bg-opacity-70 transition-colors ${isActive('/admin/resellers') ? 'bg-[#3A3A3A] bg-opacity-50' : ''}`}
+                  >
+                    <Users size={18} className="text-emerald-500" />
+                    Revendas
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </div>
