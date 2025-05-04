@@ -1559,13 +1559,17 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
       socket.on('messages.upsert', (data) => {
         console.log('Evento messages.upsert recebido:', data);
         
-        // Incrementar o contador roxo específico para TODAS as mensagens do evento messages.upsert
-        // sem verificações, apenas para teste
-        setUpsertCounter(prevCounter => {
-          const newCount = prevCounter + 1;
-          console.log(`🟣 Incrementando contador ROXO de teste: ${prevCounter} -> ${newCount}`);
-          return newCount;
-        });
+        // Verificar se o chat está selecionado para decidir se incrementa o contador
+        if (!selectedConversation) {
+          // Se nenhum chat estiver selecionado, incrementa o contador normalmente
+          setUpsertCounter(prevCounter => {
+            const newCount = prevCounter + 1;
+            console.log(`🟢 Incrementando contador de evento messages.upsert: ${prevCounter} -> ${newCount}`);
+            return newCount;
+          });
+        } else {
+          console.log(`Chat selecionado (${selectedConversation}), contador não será incrementado`);
+        }
         
         // Verificar se a mensagem é recebida (não enviada por nós)
         const isIncomingMessage = isMessageFromContact(data);
@@ -2622,6 +2626,10 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                         });
                       });
                       
+                      // Zerar o contador de eventos messages.upsert quando a conversa for clicada
+                      console.log(`Zerando contador upsertCounter. Valor anterior: ${upsertCounter}`);
+                      setUpsertCounter(0);
+                      
                       // Define a conversa selecionada
                       setSelectedConversation(conv.id);
                     }}
@@ -2646,7 +2654,8 @@ function ChatNexoContent({ onLoadingComplete }: ChatNexoContentProps) {
                           {/* Última mensagem e contador em linha - contador abaixo da hora */}
                           <div className="flex justify-between items-center mt-1">
                             <p className="text-sm text-gray-400 truncate max-w-[80%]">{conv.lastMessage}</p>
-                            {upsertCounter > 0 && (
+                            {/* Exibir contador apenas se esta conversa NÃO for a selecionada E o contador for maior que zero */}
+                            {upsertCounter > 0 && selectedConversation !== conv.id && (
                               <span 
                                 className="bg-green-500 text-white text-xs rounded-full min-h-[20px] min-w-[20px] px-1 flex items-center justify-center flex-shrink-0"
                                 title="Mensagens do evento messages.upsert"
