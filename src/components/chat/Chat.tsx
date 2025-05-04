@@ -1,17 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useChat } from '../../contexts/ChatContext';
 import ConversationList from './ConversationList';
 import ChatContainer from './ChatContainer';
-import StatusTabs from './StatusTabs';
 import SearchBar from './SearchBar';
 import SectorFilter from './SectorFilter';
-import WhatsAppStatus from './WhatsAppStatus';
 import ConnectionStatus from './ConnectionStatus';
-import { ConversationStatus, StatusTab } from '../../types/chat';
-import useSocketIO from '../../hooks/useSocketIO';
+import { ConversationStatus, StatusTab, ChatMessage } from '../../types/chat';
 import useEvolutionApi from '../../hooks/useEvolutionApi';
 import useWhatsAppInstance from '../../hooks/useWhatsAppInstance';
 import { loadStatusFromLocalStorage, saveStatusToLocalStorage } from '../../services/storage';
+import { io, Socket } from 'socket.io-client';
+import axios from 'axios';
 
 const Chat: React.FC = () => {
   // Contexto global do chat
@@ -45,29 +44,21 @@ const Chat: React.FC = () => {
     { id: 'Contatos', label: 'Contatos', count: 0 },
     { id: 'Status', label: 'Status', count: 0 }
   ]);
-
-  // Hooks personalizados para integração com WhatsApp e Socket.io
-  const { apiConfig, connection, refreshConnection, loading: whatsAppLoading, error: whatsAppError } = useWhatsAppInstance();
   
+  // Estado para Socket.io
+  const [isConnected, setIsConnected] = useState(false);
+  const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [socketError, setSocketError] = useState<string | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  
+  // Hook personalizado para integração com WhatsApp
+  const { connection, apiConfig, loading, error, refreshConnection } = useWhatsAppInstance();
+
   // Usar apiConfig do hook useWhatsAppInstance se estiver disponível
   const {
     fetchMessages,
     sendMessage: apiSendMessage
   } = useEvolutionApi(apiConfig);
-
-  const {
-    isConnected: socketConnected,
-    connectionError: socketError
-  } = useSocketIO({
-    config: apiConfig,
-    onNewMessage: (data) => {
-      handleNewMessage(data);
-    },
-    onConnectionStatusChange: (isConnected) => {
-      console.log('Socket connection status changed:', isConnected);
-    },
-    enabled: true
-  });
 
   // Calcular contagens para as abas de status
   useEffect(() => {
@@ -101,81 +92,114 @@ const Chat: React.FC = () => {
     loadInitialMessages();
   }, [apiConfig, fetchMessages]);
 
-  // Processar mensagens vindas da API
-  const processMessages = useCallback((apiMessages: any[]) => {
-    const newConversations = [...conversations];
-    const processedConversations = new Set<string>();
+  // Processar mensagens recebidas e atualizar estado
+  const processMessages = (messages: any[], instanceName?: string) => {
+    if (!messages || !Array.isArray(messages)) {
+      return;
+    }
 
-    apiMessages.forEach(msg => {
-      // Identificar a conversa
-      const isFromMe = msg.key.fromMe;
-      const chatId = msg.key.remoteJid;
-      
-      if (!chatId) return;
-      
-      // Formatar nome do contato
-      const contactName = msg.pushName || chatId.split('@')[0];
-      
-      // Verificar se a conversa já existe
-      let conversation = newConversations.find(c => c.id === chatId);
-      
-      if (!conversation) {
-        // Criar nova conversa
-        conversation = {
-          id: chatId,
-          contactName,
-          lastMessage: msg.message?.conversation || msg.message?.extendedTextMessage?.text || 'Mídia',
-          timestamp: new Date(msg.messageTimestamp * 1000),
-          status: 'pending',
-          messages: [],
-          sector: null,
-          unreadCount: 0
-        };
-        
-        // Verificar se existe status salvo
-        const savedStatus = loadStatusFromLocalStorage(chatId);
-        if (savedStatus.status) {
-          conversation.status = savedStatus.status;
-        }
-        
-        newConversations.push(conversation);
+    console.log(`Processando ${messages.length} mensagens ${instanceName ? 'da instância ' + instanceName : ''}`);
+
+    // Para cada mensagem recebida
+    messages.forEach((msg) => {
+      if (!msg || !msg.key || !msg.key.remoteJid) {
+        console.log('Mensagem inválida recebida:', msg);
+        return;
       }
+
+      const remoteJid = msg.key.remoteJid;
+      const fromMe = msg.key.fromMe;
+      const timestamp = new Date();
+      let content = '';
       
-      // Adicionar mensagem à conversa se ainda não existir
-      const messageExists = conversation.messages.some(m => m.id === msg.key.id);
-      
-      if (!messageExists) {
-        const newMessage = {
-          id: msg.key.id,
-          content: msg.message?.conversation || msg.message?.extendedTextMessage?.text || 'Mídia',
-          sender: isFromMe ? 'user' : 'contact',
-          timestamp: new Date(msg.messageTimestamp * 1000)
-        };
-        
-        conversation.messages.push(newMessage);
-        
-        // Atualizar última mensagem e timestamp da conversa
-        conversation.lastMessage = newMessage.content;
-        conversation.timestamp = newMessage.timestamp;
-        
-        // Incrementar contador de não lidas se for mensagem do contato
-        if (!isFromMe && !processedConversations.has(chatId)) {
-          conversation.unreadCount += 1;
-        }
+      // Extrair conteúdo com base no tipo de mensagem
+      if (msg.message?.conversation) {
+        content = msg.message.conversation;
+      } else if (msg.message?.extendedTextMessage?.text) {
+        content = msg.message.extendedTextMessage.text;
+      } else if (msg.message?.imageMessage?.caption) {
+        content = '[Imagem] ' + msg.message.imageMessage.caption;
+      } else if (msg.message?.videoMessage?.caption) {
+        content = '[Vídeo] ' + msg.message.videoMessage.caption;
+      } else if (msg.message?.documentMessage?.fileName) {
+        content = '[Documento] ' + msg.message.documentMessage.fileName;
+      } else if (msg.message?.audioMessage) {
+        content = '[Áudio]';
+      } else if (msg.message?.locationMessage) {
+        content = '[Localização]';
+      } else if (msg.message?.contactMessage) {
+        content = '[Contato]';
+      } else if (msg.message?.stickerMessage) {
+        content = '[Sticker]';
+      } else {
+        content = '[Mensagem desconhecida]';
       }
-      
-      processedConversations.add(chatId);
-    });
 
-    // Ordenar conversas por timestamp
-    newConversations.sort((a, b) => {
-      const dateA = new Date(a.timestamp);
-      const dateB = new Date(b.timestamp);
-      return dateB.getTime() - dateA.getTime();
-    });
+      // Incluir informação sobre a instância nos metadados da mensagem
+      const newMessage: ChatMessage = {
+        id: msg.key.id,
+        content,
+        sender: fromMe ? 'me' : 'them',
+        timestamp,
+        instanceName: instanceName // Adicionando o nome da instância como metadado
+      };
 
-    setConversations(newConversations);
-  }, [conversations, setConversations]);
+      // Atualizar a lista de conversas
+      setConversations(prevConversations => {
+        // Verificar se já existe uma conversa com esse remoteJid
+        const existingConversationIndex = prevConversations.findIndex(
+          c => c.id === remoteJid
+        );
+
+        // Criar nova lista de conversas
+        const updatedConversations = [...prevConversations];
+
+        if (existingConversationIndex !== -1) {
+          // Conversa existente: adicionar mensagem e atualizar para o topo da lista
+          const conversation = updatedConversations[existingConversationIndex];
+          updatedConversations.splice(existingConversationIndex, 1);
+          
+          const updatedMessages = [...conversation.messages, newMessage];
+          
+          // Atualizar unread_count apenas se não for a conversa selecionada e não for do usuário
+          const unreadCount = 
+            selectedConversationId === remoteJid || fromMe ? 
+            (conversation.unread_count || 0) : 
+            (conversation.unread_count || 0) + 1;
+          
+          updatedConversations.unshift({
+            ...conversation,
+            messages: updatedMessages,
+            last_message: content,
+            last_message_time: timestamp,
+            unread_count: unreadCount,
+            instanceName: instanceName || conversation.instanceName // Manter ou atualizar a instância
+          });
+        } else {
+          // Nova conversa: criar e adicionar ao topo da lista
+          // Extrair informações do remoteJid (nome, telefone)
+          const phoneNumber = remoteJid.split('@')[0];
+          const displayName = phoneNumber; // Poderia buscar o nome em uma lista de contatos
+          
+          updatedConversations.unshift({
+            id: remoteJid,
+            name: displayName,
+            phone: phoneNumber,
+            contactName: displayName, // Adicionar contactName para satisfazer o tipo Conversation
+            messages: [newMessage],
+            status: 'Aguardando', // Inicialmente, todas as novas conversas estão pendentes
+            last_message: content,
+            last_message_time: timestamp,
+            unread_count: 1,
+            sector: 'Geral', // Setor padrão
+            instanceName: instanceName // Registrar qual instância recebeu esta conversa
+          });
+        }
+
+        return updatedConversations;
+      });
+    });
+  };
 
   // Função para salvar a posição de rolagem
   const handleScrollPositionChange = useCallback((position: number) => {
@@ -184,7 +208,7 @@ const Chat: React.FC = () => {
     if (selectedConversationId) {
       saveStatusToLocalStorage(
         selectedConversationId, 
-        getCurrentConversation()?.status || 'pending',
+        getCurrentConversation()?.status || 'Pendentes', // Usar Pendentes em vez de pending
         undefined,
         position
       );
@@ -235,16 +259,163 @@ const Chat: React.FC = () => {
     }
   }, [getCurrentConversation, contextSendMessage, apiSendMessage]);
 
-  // Função para tratar novas mensagens recebidas via Socket.io
-  const handleNewMessage = useCallback((data: any) => {
-    if (data && data.messages) {
-      processMessages(data.messages);
-      
-      // Tocar som de notificação
-      const audio = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3');
-      audio.play().catch(e => console.error('Erro ao tocar som:', e));
+  // Função para conectar o Socket.io
+  const connectSocket = useCallback(async () => {
+    console.log(`=== CONNECT SOCKET CALLED === [API Config: ${!!apiConfig}, Attempts: ${connectionAttempts}]`);
+    if (!apiConfig) {
+      console.log('API Config ainda não disponível, abortando conexão');
+      return;
     }
-  }, [processMessages]);
+    
+    if (connectionAttempts >= 3) {
+      console.log('Atingido limite de 3 tentativas, parando conexão');
+      return;
+    }
+    
+    if (!mountedRef.current) {
+      console.log('Componente desmontado, abortando conexão');
+      return;
+    }
+    
+    if (socketRef.current?.connected) {
+      console.log('Já existe uma conexão ativa, abortando nova conexão');
+      return;
+    }
+    
+    try {
+      setConnectionAttempts(prev => prev + 1);
+      console.log(`Tentativa de conexão ${connectionAttempts + 1}/3 [${new Date().toISOString()}]`);
+      
+      // Desconectar socket existente
+      if (socketRef.current) {
+        console.log('Desconectando socket existente');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      
+      // PASSO 1: Verificar o status da instância primeiro
+      console.log('Verificando status da instância via HTTP');
+      
+      const { baseUrl, instanceName, apikey } = apiConfig;
+      
+      if (!baseUrl || !instanceName) {
+        throw new Error('URL da API ou nome da instância não definidos');
+      }
+      
+      // Configurar headers
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      
+      if (apikey && apikey.trim() !== '') {
+        headers['apikey'] = apikey;
+      }
+      
+      // Verificar status da instância
+      const statusUrl = `${baseUrl}/instance/connectionState/${instanceName}`;
+      console.log(`Verificando status: ${statusUrl}`);
+      
+      const response = await axios.get(statusUrl, { headers });
+      
+      if (response.status !== 200) {
+        throw new Error(`Erro ao verificar status: ${response.status}`);
+      }
+      
+      console.log('Status da instância:', response.data);
+      
+      // PASSO 2: Conectar Socket.io
+      console.log('Conectando Socket.io...');
+      
+      const socket = io(baseUrl, {
+        transports: ['websocket', 'polling'],
+        query: {
+          instance: instanceName
+        },
+        extraHeaders: {
+          'apikey': apikey
+        },
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
+      });
+      
+      // Log para todos os eventos
+      socket.onAny((event, ...args) => {
+        console.log(`Socket.io evento: ${event}`, args);
+      });
+      
+      // Eventos principais
+      socket.on('connect', () => {
+        console.log(`Socket.io conectado! ID: ${socket.id}`);
+        setIsConnected(true);
+        setSocketError(null);
+        setConnectionAttempts(0); // Resetar contador após sucesso
+        
+        // Enviar subscribe
+        const subscribeMessage = {
+          action: 'subscribe',
+          instance: instanceName
+        };
+        console.log('Enviando subscribe:', subscribeMessage);
+        socket.emit('subscribe', subscribeMessage);
+        
+        // Formato alternativo
+        socket.emit('subscribe', instanceName);
+      });
+      
+      socket.on('disconnect', (reason) => {
+        console.log(`Socket.io desconectado. Razão: ${reason}`);
+        setIsConnected(false);
+      });
+      
+      socket.on('connect_error', (error) => {
+        console.error('Socket.io erro de conexão:', error.message);
+        setSocketError(`Erro de conexão: ${error.message}`);
+      });
+      
+      socket.on('error', (error) => {
+        console.error('Socket.io erro:', error);
+        setSocketError(`Erro: ${JSON.stringify(error)}`);
+      });
+      
+      socket.on('messages.upsert', (data) => {
+        console.log('Nova mensagem recebida:', data);
+        if (data && data.messages) {
+          processMessages(data.messages, instanceName);
+        }
+      });
+      
+      socketRef.current = socket;
+      
+    } catch (error) {
+      console.error('Erro ao conectar Socket.io:', error);
+      setSocketError(`Erro: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [apiConfig, connectionAttempts]);
+  
+  // Função para desconectar o Socket.io
+  const disconnectSocket = useCallback(() => {
+    if (socketRef.current) {
+      console.log('Desconectando Socket.io');
+      socketRef.current.disconnect();
+      socketRef.current = null;
+      setIsConnected(false);
+    }
+  }, []);
+  
+  // Função para atualizar mensagens manualmente
+  const refreshMessages = useCallback(async () => {
+    if (apiConfig) {
+      try {
+        const result = await fetchMessages();
+        if (result.messages.length > 0) {
+          processMessages(result.messages);
+        }
+      } catch (error) {
+        console.error('Erro ao atualizar mensagens:', error);
+      }
+    }
+  }, [apiConfig, fetchMessages]);
 
   // Função para alternar o status de uma conversa
   const handleChangeStatus = useCallback((conversationId: string, newStatus: ConversationStatus) => {
@@ -253,6 +424,45 @@ const Chat: React.FC = () => {
     // Aqui poderia salvar o status no banco de dados
     // Isso já deve estar implementado em updateConversationStatus no contexto
   }, [updateConversationStatus]);
+  
+  // Efeito para gerenciar a conexão Socket.io
+  // Usando ref para controlar se já montou e prevenir loops
+  const hasInitializedRef = useRef(false);
+  const mountedRef = useRef(true);
+  
+  // Ref para apiConfig para estar disponível no useEffect
+  const apiConfigRef = useRef(apiConfig);
+  useEffect(() => {
+    // Manter a ref atualizada quando apiConfig mudar
+    apiConfigRef.current = apiConfig;
+  }, [apiConfig]);
+  
+  // useEffect para inicialização - executado apenas UMA vez
+  useEffect(() => {
+    console.log("=== MOUNT EFFECT ====");
+    // Marcar componente como montado
+    mountedRef.current = true;
+    
+    // Função para tentar conexão com delay
+    const attemptConnection = () => {
+      if (mountedRef.current && apiConfigRef.current && !hasInitializedRef.current) {
+        console.log("=== TENTANDO INICIALIZAÇÃO ====", apiConfigRef.current);
+        hasInitializedRef.current = true;
+        connectSocket();
+      }
+    };
+    
+    // Tenta conexão após 2 segundos para garantir que tudo carregou
+    console.log("Agendando tentativa de conexão após 2 segundos...");
+    const timer = setTimeout(attemptConnection, 2000);
+    
+    return () => {
+      console.log("=== UNMOUNT EFFECT ====");
+      mountedRef.current = false;
+      clearTimeout(timer);
+      disconnectSocket();
+    };
+  }, []);  // <-- Dependencies vazias para executar apenas uma vez
 
   return (
     <div className="flex h-full">
@@ -344,12 +554,13 @@ const Chat: React.FC = () => {
               statusFilter={activeTab}
             />
           ) : (
-            <ConnectionStatus
-              currentConnection={connection}
-              loading={whatsAppLoading}
-              error={whatsAppError}
-              onRefreshConnection={refreshConnection}
-              socketConnected={socketConnected}
+            <ConnectionStatus 
+              connection={connection}
+              loading={loading}
+              error={error}
+              onRefresh={refreshConnection}
+              socketConnected={isConnected}
+              socketError={socketError}
             />
           )}
         </div>

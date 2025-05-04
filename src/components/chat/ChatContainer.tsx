@@ -1,5 +1,5 @@
 import React from 'react';
-import { Conversation } from '../../types/chat';
+import { Conversation, ConversationStatus } from '../../types/chat';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import ChatHeader from './ChatHeader';
@@ -7,7 +7,7 @@ import ChatHeader from './ChatHeader';
 interface ChatContainerProps {
   conversation: Conversation | null;
   onSendMessage: (content: string) => void;
-  onChangeStatus: (status: any) => void;
+  onChangeStatus: (conversationId: string, newStatus: ConversationStatus) => void;
   scrollPosition?: number;
   onScrollPositionChange?: (position: number) => void;
 }
@@ -45,11 +45,11 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
       
       <MessageInput 
         onSendMessage={onSendMessage}
-        disabled={conversation.status === 'finished' || conversation.status === 'deletado'}
+        disabled={conversation.status === 'Finalizados' || conversation.status === 'deletado'}
         placeholder={
-          conversation.status === 'finished' || conversation.status === 'deletado'
+          conversation.status === 'Finalizados' || conversation.status === 'deletado'
             ? 'Esta conversa está finalizada'
-            : 'Digite sua mensagem...'
+            : 'Digite sua mensagem aqui...'
         } 
       />
     </div>

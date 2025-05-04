@@ -1,169 +1,305 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
-import WhatsAppStatus from './WhatsAppStatus';
-import { Smartphone, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { WhatsAppConnection } from '../../hooks/useWhatsAppInstance';
+import { supabase } from '../../lib/supabase';
+
+// Componente de carregamento circular
+const CircularProgress: React.FC<{ size: number; className?: string }> = ({ size, className }) => {
+  return (
+    <div 
+      className={`animate-spin rounded-full border-t-2 border-gray-500 ${className || ''}`}
+      style={{ width: `${size}px`, height: `${size}px` }}
+    />
+  );
+};
 
 interface ConnectionStatusProps {
-  currentConnection: WhatsAppConnection | null;
+  connection: WhatsAppConnection | null;
+  connections?: WhatsAppConnection[];
   loading: boolean;
   error: string | null;
-  onRefreshConnection: () => void;
-  socketConnected?: boolean; // Adicionar prop para o status do Socket.io
+  onRefresh: () => void;
+  socketConnected?: boolean;
+  socketError?: string | null;
 }
 
 const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
-  currentConnection,
+  connection,
+  connections = [],
   loading,
   error,
-  onRefreshConnection,
-  socketConnected = false // Valor padrão caso não seja fornecido
+  onRefresh,
+  socketConnected = false,
+  socketError = null
 }) => {
-  const [connections, setConnections] = useState<WhatsAppConnection[]>([]);
-  const [loadingConnections, setLoadingConnections] = useState<boolean>(true);
+  // Estado para armazenar todas as conexões da revenda
+  const [allConnections, setAllConnections] = useState<WhatsAppConnection[]>([]);
+  const [loadingAllConnections, setLoadingAllConnections] = useState<boolean>(true);
 
-  // Carregar todas as conexões disponíveis para a revenda
-  useEffect(() => {
-    const loadAllConnections = async () => {
-      try {
-        setLoadingConnections(true);
-        const adminSession = localStorage.getItem('admin_session');
-        
-        if (!adminSession) {
-          return;
-        }
-        
-        const session = JSON.parse(adminSession);
-        const adminId = session.id || (session.user && session.user.id);
-        
-        if (!adminId) {
-          return;
-        }
+  // Usar as conexões passadas como prop ou as carregadas do banco
+  const displayConnections = connections.length > 0 ? connections : allConnections;
 
-        // Buscar o reseller_id do admin logado
-        const { data: adminData, error: adminError } = await supabase
-          .from('profile_admin')
-          .select('reseller_id')
-          .eq('id', adminId)
-          .single();
-          
-        if (adminError || !adminData?.reseller_id) {
-          console.error('Erro ao obter dados do administrador:', adminError);
-          return;
-        }
-        
-        const resellerId = adminData.reseller_id;
-        
-        // Buscar todas as conexões da revenda
-        const { data: connectionData, error: connectionError } = await supabase
-          .from('whatsapp_connections')
-          .select('*')
-          .eq('reseller_id', resellerId)
-          .order('created_at', { ascending: false });
-          
-        if (connectionError) {
-          console.error('Erro ao buscar conexões:', connectionError);
-          return;
-        }
-        
-        if (connectionData) {
-          // Mapear as conexões para o formato correto
-          const formattedConnections = connectionData.map(conn => ({
-            id: String(conn.id),
-            name: String(conn.name || ''),
-            phone: String(conn.phone || ''),
-            status: conn.status as WhatsAppConnection['status'],
-            created_at: String(conn.created_at),
-            instance_name: String(conn.instance_name || ''),
-            reseller_id: String(conn.reseller_id || '')
-          }));
-          
-          setConnections(formattedConnections);
-        }
-      } catch (err) {
-        console.error('Erro ao carregar conexões:', err);
-      } finally {
-        setLoadingConnections(false);
+  // Função para carregar todas as conexões da revenda logada
+  const loadAllConnections = async () => {
+    try {
+      setLoadingAllConnections(true);
+
+      // Obter admin_id do usuário logado
+      const adminSession = localStorage.getItem('admin_session');
+      
+      if (!adminSession) {
+        setLoadingAllConnections(false);
+        return;
       }
-    };
-    
+      
+      const session = JSON.parse(adminSession);
+      
+      // Verificar o formato da sessão
+      const adminId = session.id || (session.user && session.user.id) || session.admin_id;
+      
+      if (!adminId) {
+        setLoadingAllConnections(false);
+        return;
+      }
+
+      // Buscar dados do admin para obter reseller_id
+      const { data: adminData, error: adminError } = await supabase
+        .from('profile_admin')
+        .select('reseller_id')
+        .eq('id', adminId)
+        .single();
+        
+      if (adminError || !adminData?.reseller_id) {
+        setLoadingAllConnections(false);
+        return;
+      }
+      
+      const resellerId = adminData.reseller_id;
+
+      // Buscar todas as conexões WhatsApp para esta revenda
+      const { data, error: connectionsError } = await supabase
+        .from('whatsapp_connections')
+        .select('*')
+        .eq('reseller_id', resellerId)
+        .order('created_at', { ascending: false });
+        
+      if (connectionsError || !data) {
+        setLoadingAllConnections(false);
+        return;
+      }
+      
+      // Mapear as conexões para o formato esperado
+      const whatsappConnections: WhatsAppConnection[] = data.map((conn: any) => ({
+        id: String(conn.id),
+        name: String(conn.name || 'Instância WhatsApp'),
+        phone: String(conn.phone || ''),
+        status: conn.status as WhatsAppConnection['status'],
+        created_at: String(conn.created_at),
+        instance_name: String(conn.instance_name || ''),
+        reseller_id: String(conn.reseller_id || '')
+      }));
+      
+      setAllConnections(whatsappConnections);
+    } catch (err) {
+      console.error('Erro ao carregar conexões WhatsApp:', err);
+    } finally {
+      setLoadingAllConnections(false);
+    }
+  };
+
+  // Carregar as conexões ao inicializar o componente
+  useEffect(() => {
     loadAllConnections();
   }, []);
 
+  // Função auxiliar para formatar o status da conexão
+  const getStatusLabel = (status: WhatsAppConnection['status']) => {
+    switch (status) {
+      case 'active': return 'Ativo';
+      case 'connecting': return 'Conectando';
+      case 'disconnected': return 'Desconectado';
+      case 'inactive': return 'Inativo';
+      default: return 'Desconhecido';
+    }
+  };
+
   return (
     <div className="py-2 px-1">
+      {/* Card de status do Socket.io */}
       <div className="mb-4 px-3">
-        {/* Status do Socket.io - colocado primeiro e renomeado para "Status" */}
-        <div className="mb-4 p-3 bg-[#222222] rounded-md border border-gray-800 flex items-center">
-          <div className="flex-1">
-            <h4 className="text-white text-sm font-medium mb-1">Status</h4>
-            <p className="text-xs text-gray-400">Conexão para atualizações em tempo real</p>
+        <div className="mb-4 p-3 bg-[#222222] rounded-md border border-gray-800 flex flex-col">
+          <div className="flex items-center mb-3">
+            <div className="flex-1">
+              <h4 className="text-white text-sm font-medium mb-1">Status Socket.io</h4>
+              <p className="text-xs text-gray-400">Conexão para atualizações em tempo real</p>
+            </div>
+            <div className="flex items-center">
+              <span className={socketConnected ? "text-green-400 text-sm" : "text-red-400 text-sm"}>
+                {socketConnected ? "Conectado" : "Desconectado"}
+              </span>
+              <div 
+                className={`ml-2 h-3 w-3 rounded-full ${socketConnected ? "bg-green-500" : "bg-red-500"}`}
+                title={socketConnected ? "Socket.io conectado" : "Socket.io desconectado"}
+              />
+            </div>
           </div>
-          <div className="flex items-center">
-            <span className={socketConnected ? "text-green-400 text-sm" : "text-red-400 text-sm"}>
-              {socketConnected ? "Conectado" : "Desconectado"}
-            </span>
-            <div 
-              className={`ml-2 h-3 w-3 rounded-full ${socketConnected ? "bg-green-500" : "bg-red-500"}`}
-              title={socketConnected ? "Socket.io conectado" : "Socket.io desconectado"}
-            />
+          
+          {socketError && (
+            <div className="mt-2 p-2 bg-red-900/30 border border-red-800 rounded text-xs text-red-300">
+              {socketError}
+            </div>
+          )}
+        </div>
+
+        {/* Card de configuração manual */}
+        <div className="mb-4 p-3 bg-[#222222] rounded-md border border-gray-800 flex flex-col">
+          <div className="flex items-center mb-3">
+            <div className="flex-1">
+              <h4 className="text-white text-sm font-medium mb-1">Configuração</h4>
+              <p className="text-xs text-gray-400">Gerenciamento da API WhatsApp</p>
+            </div>
+          </div>
+          
+          {/* Botões de configuração manual */}
+          <div className="flex justify-center gap-2 flex-wrap">
+            {/* Botão para salvar configuração no localStorage */}
+            <button 
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm flex items-center gap-2"
+              onClick={() => {
+                try {
+                  // Tentar buscar dados da API para a revenda logada
+                  if (connection?.reseller_id) {
+                    // Mostrar prompt para confirmar
+                    if (window.confirm('Isso buscará a configuração da revenda no banco de dados e salvará no localStorage. Continuar?')) {
+                      // Buscar config do banco
+                      supabase
+                        .from('nexochat_config')
+                        .select('*')
+                        .eq('reseller_id', connection.reseller_id)
+                        .single()
+                        .then(({ data, error }) => {
+                          if (error) {
+                            console.error('Erro ao buscar configuração:', error);
+                            alert(`Erro: ${error.message}`);
+                            return;
+                          }
+                          
+                          if (data) {
+                            const config = {
+                              baseUrl: data.evolution_api_url || '',
+                              apikey: data.evolution_api_key || '',
+                              instanceName: data.instance_name || ''
+                            };
+                            
+                            // Salvar no localStorage
+                            localStorage.setItem('nexochat_config', JSON.stringify(config));
+                            console.log('Configuração salva no localStorage:', config);
+                            alert(`Configuração salva com sucesso:\nURL: ${config.baseUrl}\nInstância: ${config.instanceName}`);
+                          } else {
+                            alert('Nenhuma configuração encontrada para esta revenda.');
+                          }
+                        });
+                    }
+                  } else {
+                    // Permitir entrada manual
+                    const baseUrl = prompt('Digite a URL da API Evolution:', 'https://apiwhatsapp.nexopdv.com');
+                    const apikey = prompt('Digite a API Key:', '');
+                    const instanceName = prompt('Digite o nome da instância:', '123');
+                    
+                    if (baseUrl && apikey && instanceName) {
+                      const config = { baseUrl, apikey, instanceName };
+                      localStorage.setItem('nexochat_config', JSON.stringify(config));
+                      alert(`Configuração salva manualmente!`);
+                    }
+                  }
+                } catch (error) {
+                  console.error('Erro ao salvar configuração:', error);
+                  alert(`Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+                }
+              }}
+            >
+              <span>Salvar Config no localStorage</span>
+            </button>
+
+            {/* Botão para verificar status da API */}
+            <button 
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm flex items-center gap-2"
+              onClick={onRefresh}
+            >
+              <span>Verificar Status</span>
+            </button>
           </div>
         </div>
-        
-        <h3 className="text-white text-lg font-semibold mb-2">Instância Ativa</h3>
-        <WhatsAppStatus
-          connection={currentConnection}
-          loading={loading}
-          error={error}
-          onRefresh={onRefreshConnection}
-        />
       </div>
       
+      {/* Lista de instâncias WhatsApp */}
       <div className="px-3">
         <div className="flex justify-between items-center mb-3">
-          <h3 className="text-white text-lg font-semibold">Todas as Instâncias</h3>
+          <h3 className="text-white text-lg font-semibold">Instâncias WhatsApp</h3>
           <button 
-            onClick={() => loadingConnections ? null : setLoadingConnections(true)}
+            onClick={() => !loadingAllConnections && loadAllConnections()}
             className="text-gray-400 hover:text-white p-1 rounded-full hover:bg-[#3A3A3A] transition-colors"
           >
-            <RefreshCw size={16} className={loadingConnections ? 'animate-spin' : ''} />
+            <RefreshCw size={16} className={loadingAllConnections ? "animate-spin" : ""} />
           </button>
         </div>
 
-        {loadingConnections ? (
+        {/* Exibição das instâncias com carregamento condicional */}
+        {loading || loadingAllConnections ? (
           <div className="flex justify-center py-4">
-            <RefreshCw size={24} className="animate-spin text-gray-500" />
+            <CircularProgress size={24} className="text-gray-500" />
           </div>
-        ) : connections.length === 0 ? (
+        ) : error ? (
+          <div className="bg-[#2A2A2A] rounded-lg p-4 text-center text-red-400">
+            <p>{error}</p>
+            <button 
+              onClick={onRefresh}
+              className="mt-2 px-3 py-1 text-xs rounded bg-primary text-white hover:bg-primary/80"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        ) : displayConnections.length === 0 ? (
           <div className="bg-[#2A2A2A] rounded-lg p-4 text-center text-gray-400">
-            <Smartphone size={32} className="mx-auto mb-2" />
             <p>Nenhuma instância encontrada</p>
             <p className="text-xs mt-1">Configure uma instância em Configurações</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {connections.map(conn => (
-              <div key={conn.id} className="bg-[#2A2A2A] rounded-lg p-3 flex items-center">
-                {conn.status === 'active' ? (
-                  <CheckCircle size={16} className="text-green-500 mr-3 flex-shrink-0" />
-                ) : (
-                  <XCircle size={16} className="text-red-500 mr-3 flex-shrink-0" />
-                )}
-                <div className="flex-1 overflow-hidden">
-                  <p className="text-white font-medium truncate">{conn.name || conn.instance_name}</p>
-                  <p className="text-gray-400 text-xs truncate">
-                    {conn.phone ? `+${conn.phone}` : conn.instance_name}
-                  </p>
+          <div className="space-y-3">
+            {displayConnections.map(conn => (
+              <div key={conn.id} className="bg-[#2A2A2A] rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 overflow-hidden">
+                    <p className="text-white font-medium truncate">{conn.name || conn.instance_name}</p>
+                    <p className="text-gray-400 text-xs">{conn.phone || ''}</p>
+                    <p className="text-gray-400 text-xs">Instância: {conn.instance_name}</p>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    {/* Status da instância WhatsApp */}
+                    <div className="flex items-center mb-1">
+                      <span 
+                        className={`text-xs ${conn.status === 'active' ? 'text-green-400' : 'text-red-400'}`}
+                      >
+                        {getStatusLabel(conn.status)}
+                      </span>
+                      <div 
+                        className={`ml-2 h-3 w-3 rounded-full ${conn.status === 'active' ? 'bg-green-500' : 'bg-red-500'}`}
+                      />
+                    </div>
+                    
+                    {/* Mostrar apenas o status da API */}
+                  </div>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  conn.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                  conn.status === 'connecting' ? 'bg-yellow-500/20 text-yellow-400' :
-                  'bg-red-500/20 text-red-400'
-                }`}>
-                  {conn.status === 'active' ? 'Ativo' :
-                   conn.status === 'connecting' ? 'Conectando' :
-                   'Inativo'}
-                </span>
+                
+                {conn.id === connection?.id && (
+                  <button 
+                    onClick={onRefresh}
+                    className="mt-3 px-3 py-1 w-full text-xs rounded bg-primary text-white hover:bg-primary/80 flex items-center justify-center gap-1"
+                  >
+                    <RefreshCw size={12} />
+                    Atualizar Status
+                  </button>
+                )}
               </div>
             ))}
           </div>

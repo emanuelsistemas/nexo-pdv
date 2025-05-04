@@ -8,8 +8,9 @@ export interface Message {
 export interface ChatMessage {
   id: string;
   content: string;
-  sender: 'user' | 'contact';
+  sender: 'me' | 'them' | 'user' | 'contact';
   timestamp: Date;
+  instanceName?: string; // Nome da instância que recebeu a mensagem
 }
 
 export type ConversationStatus = 'Aguardando' | 'Atendendo' | 'Pendentes' | 'Finalizados' | 'Contatos' | 'Status' | 'pendente' | 'deletado' | 'suporte' | 'comercial' | 'administrativo' | 'connection-status';
@@ -23,14 +24,20 @@ export interface EnabledSectors {
 
 export interface Conversation {
   id: string;
+  name?: string; // Nome do contato (para novas conversas)
+  phone?: string; // Número de telefone (para novas conversas)
   contactName: string;
-  lastMessage: string;
-  timestamp: Date | string;
+  lastMessage?: string;
+  last_message?: string; // Alternativa para compatibilidade
+  timestamp?: Date | string;
+  last_message_time?: Date | string; // Alternativa para compatibilidade
   status: ConversationStatus;
   messages: ChatMessage[];
   sector: string | null;
-  unreadCount: number;
+  unreadCount?: number;
+  unread_count?: number; // Alternativa para compatibilidade
   avatarUrl?: string;
+  instanceName?: string; // Nome da instância que recebeu esta conversa
 }
 
 export interface StatusTab {
@@ -61,6 +68,15 @@ export interface ChatContextProps {
 
 export interface EvolutionApiConfig {
   baseUrl: string;
+  socketUrl?: string; // URL específica para conexão Socket.io
   apikey: string;
   instanceName: string;
+}
+
+// Interface para instâncias WhatsApp adicionais (usada pelo hook useSocketIO)
+export interface WhatsAppConnection {
+  instance_name: string;
+  id_reseller?: string;
+  token?: string;
+  status?: string;
 }

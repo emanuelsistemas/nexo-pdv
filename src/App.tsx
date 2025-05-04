@@ -38,6 +38,11 @@ const WhatsAppConnection = lazy(() => import('./pages/WhatsAppConnection'));
 // Importações temporárias para testes
 const WhatsConnector = lazy(() => import('../IA/whats_connector'));
 const LoginTest = lazy(() => import('../IA/login'));
+const TestSocketIO = lazy(() => import('./pages/TestSocketIO'));
+const SimpleSocketTest = lazy(() => import('./pages/SimpleSocketTest'));
+const DiagnosticPage = lazy(() => import('./pages/DiagnosticPage'));
+const SimplifiedSocketTest = lazy(() => import('./pages/SimplifiedSocketTest'));
+const UltraSimpleSocketTest = lazy(() => import('./pages/UltraSimpleSocketTest'));
 
 // Criando context para o tema
 type Theme = 'dark' | 'light';
@@ -359,6 +364,11 @@ function App() {
             <Route path="/admin/whatsapp-connection" element={<WhatsAppConnection />} />
             <Route path="/admin/whats-test" element={<WhatsConnector />} />
             <Route path="/admin/whats-login" element={<LoginTest />} />
+            <Route path="/admin/test-socketio" element={<TestSocketIO />} />
+            <Route path="/admin/simple-socket" element={<SimpleSocketTest />} />
+            <Route path="/admin/diagnostic" element={<DiagnosticPage />} />
+            <Route path="/admin/simplified-socket" element={<SimplifiedSocketTest />} />
+            <Route path="/admin/ultra-socket" element={<UltraSimpleSocketTest />} />
 
             {/* Protected routes */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

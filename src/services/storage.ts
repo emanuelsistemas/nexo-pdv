@@ -63,12 +63,9 @@ export const loadStatusFromLocalStorage = (conversationId: string): {
 
 // Salvar configuração da Evolution API
 export const saveEvolutionApiConfig = (
-  baseUrl: string, 
-  apikey: string, 
-  instanceName: string
+  config: { baseUrl: string; apikey: string; instanceName: string; socketUrl?: string }
 ): void => {
   try {
-    const config = { baseUrl, apikey, instanceName };
     localStorage.setItem(EVOLUTION_API_CONFIG, JSON.stringify(config));
     console.log('Configuração da Evolution API salva no localStorage');
   } catch (error) {

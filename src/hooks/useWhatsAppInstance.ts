@@ -14,8 +14,10 @@ export interface WhatsAppConnection {
 }
 
 export interface WhatsAppInstanceHook {
-  connection: WhatsAppConnection | null;
-  apiConfig: EvolutionApiConfig | null;
+  connection: WhatsAppConnection | null; // Instância principal (primeira ativa)
+  connections: WhatsAppConnection[]; // Todas as instâncias ativas
+  apiConfig: EvolutionApiConfig | null; // Configuração para instância principal
+  apiConfigs: EvolutionApiConfig[]; // Configurações para todas as instâncias ativas
   loading: boolean;
   error: string | null;
   refreshConnection: () => Promise<void>;
@@ -26,7 +28,9 @@ export interface WhatsAppInstanceHook {
  */
 export const useWhatsAppInstance = (): WhatsAppInstanceHook => {
   const [connection, setConnection] = useState<WhatsAppConnection | null>(null);
+  const [connections, setConnections] = useState<WhatsAppConnection[]>([]);
   const [apiConfig, setApiConfig] = useState<EvolutionApiConfig | null>(loadEvolutionApiConfig());
+  const [apiConfigs, setApiConfigs] = useState<EvolutionApiConfig[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +39,51 @@ export const useWhatsAppInstance = (): WhatsAppInstanceHook => {
     try {
       setLoading(true);
       setError(null);
+      
+      // Verificar primeiro se temos configuração no localStorage (como faz o ChatNexo)
+      const savedConfig = localStorage.getItem('nexochat_config');
+      if (savedConfig) {
+        try {
+          const config = JSON.parse(savedConfig);
+          console.log('Configuração encontrada no localStorage:', config);
+          
+          if (config.baseUrl && config.apikey && config.instanceName) {
+            // Criar uma conexão simples com os dados do localStorage
+            const connection: WhatsAppConnection = {
+              id: '1',
+              name: 'WhatsApp Instance',
+              phone: '',
+              status: 'active',
+              created_at: new Date().toISOString(),
+              instance_name: config.instanceName,
+              reseller_id: ''
+            };
+            
+            // Atualizar os estados
+            setConnections([connection]);
+            setConnection(connection);
+            
+            // Criar configuração usando exatamente os mesmos valores do ChatNexo
+            const apiConfig: EvolutionApiConfig = {
+              baseUrl: config.baseUrl,
+              apikey: config.apikey,
+              instanceName: config.instanceName
+            };
+            
+            setApiConfigs([apiConfig]);
+            setApiConfig(apiConfig);
+            
+            console.log('Usando configuração do localStorage:', apiConfig);
+            setLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.error('Erro ao processar configuração do localStorage:', e);
+        }
+      }
 
+      // Se não tiver no localStorage, buscar do banco
+      
       // Obter admin_id do usuário logado
       const adminSession = localStorage.getItem('admin_session');
       
@@ -70,49 +118,116 @@ export const useWhatsAppInstance = (): WhatsAppInstanceHook => {
       if (!resellerId) {
         throw new Error('ID da revenda não encontrado para este administrador');
       }
+      
+      // Buscar configuração do nexochat_config, igual ao ChatNexo
+      const { data: configData, error: configError } = await supabase
+        .from('nexochat_config')
+        .select('*')
+        .eq('reseller_id', resellerId)
+        .single();
+        
+      if (!configError && configData) {
+        console.log('Configuração encontrada no banco:', configData);
+        
+        // Usar configurações do banco
+        const baseUrl = typeof configData.evolution_api_url === 'string' ? configData.evolution_api_url : '';
+        const apikey = typeof configData.evolution_api_key === 'string' ? configData.evolution_api_key : '';
+        const instanceName = typeof configData.instance_name === 'string' ? configData.instance_name : '';
+        
+        if (baseUrl && apikey && instanceName) {
+          // Salvar no localStorage para carregamento rápido futuro
+          localStorage.setItem('nexochat_config', JSON.stringify({
+            baseUrl,
+            apikey,
+            instanceName
+          }));
+          
+          // Criar conexão 
+          const connection: WhatsAppConnection = {
+            id: '1',
+            name: `WhatsApp ${instanceName}`,
+            phone: instanceName,
+            status: 'active',
+            created_at: new Date().toISOString(),
+            instance_name: instanceName,
+            reseller_id: String(resellerId)
+          };
+          
+          // Atualizar os estados
+          setConnections([connection]);
+          setConnection(connection);
+          
+          // Criar configuração usando exatamente os mesmos valores do ChatNexo
+          const apiConfig: EvolutionApiConfig = {
+            baseUrl: baseUrl,
+            apikey: apikey,
+            instanceName: instanceName
+          };
+          
+          setApiConfigs([apiConfig]);
+          setApiConfig(apiConfig);
+          
+          console.log('Usando configuração do banco:', apiConfig);
+          setLoading(false);
+          return;
+        }
+      }
 
-      // Buscar conexão WhatsApp ativa para esta revenda
-      const { data: connections, error: connectionsError } = await supabase
+      // Se chegou aqui, tente o método original de buscar conexões WhatsApp
+      const { data: activeConnections, error: connectionsError } = await supabase
         .from('whatsapp_connections')
         .select('*')
         .eq('reseller_id', resellerId)
         .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1);
+        .order('created_at', { ascending: false });
         
       if (connectionsError) {
         throw new Error(`Erro ao buscar conexões WhatsApp: ${connectionsError.message}`);
       }
       
-      if (!connections || connections.length === 0) {
+      if (!activeConnections || activeConnections.length === 0) {
         console.log('Nenhuma conexão WhatsApp ativa encontrada para esta revenda');
         setConnection(null);
+        setConnections([]);
+        setApiConfigs([]);
         // Manter a configuração existente, se houver
         return;
       }
       
-      // Mapear a conexão para o formato esperado
-      const activeConnection: WhatsAppConnection = {
-        id: String(connections[0].id),
-        name: String(connections[0].name || ''),
-        phone: String(connections[0].phone || ''),
-        status: connections[0].status as WhatsAppConnection['status'],
-        created_at: String(connections[0].created_at),
-        instance_name: String(connections[0].instance_name || ''),
-        reseller_id: String(connections[0].reseller_id || '')
-      };
+      // Mapear todas as conexões ativas para o formato esperado
+      const mappedConnections: WhatsAppConnection[] = activeConnections.map(conn => ({
+        id: String(conn.id),
+        name: String(conn.name || ''),
+        phone: String(conn.phone || ''),
+        status: conn.status as WhatsAppConnection['status'],
+        created_at: String(conn.created_at),
+        instance_name: String(conn.instance_name || ''),
+        reseller_id: String(conn.reseller_id || '')
+      }));
       
-      setConnection(activeConnection);
+      // Definir a conexão principal (primeira da lista)
+      const primaryConnection = mappedConnections[0];
       
-      // Atualizar apiConfig com os dados da instância
-      const newConfig: EvolutionApiConfig = {
+      // Atualizar os estados
+      setConnections(mappedConnections);
+      setConnection(primaryConnection);
+      
+      // Criar configurações para todas as instâncias ativas
+      const configs: EvolutionApiConfig[] = mappedConnections.map(conn => ({
+        // URL base para API REST - usar a mesma URL que o ChatNexo usa
         baseUrl: 'https://apiwhatsapp.nexopdv.com',
         apikey: '429683C4C977415CAAFCCE10F7D57E11',
-        instanceName: activeConnection.instance_name
-      };
+        instanceName: conn.instance_name
+      }));
       
-      setApiConfig(newConfig);
-      saveEvolutionApiConfig(newConfig);
+      // Definir as configurações
+      setApiConfigs(configs);
+      
+      // Definir a configuração principal (primeira da lista)
+      if (configs.length > 0) {
+        setApiConfig(configs[0]);
+        saveEvolutionApiConfig(configs[0]);
+      }
       
     } catch (err: any) {
       console.error('Erro ao carregar instância do WhatsApp:', err);
@@ -130,7 +245,9 @@ export const useWhatsAppInstance = (): WhatsAppInstanceHook => {
 
   return {
     connection,
+    connections,
     apiConfig,
+    apiConfigs,
     loading,
     error,
     refreshConnection: loadConnection
