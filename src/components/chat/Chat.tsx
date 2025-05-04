@@ -248,6 +248,12 @@ const Chat: React.FC = () => {
     <div className="flex h-full">
       {/* Painel lateral - Lista de conversas */}
       <div className="w-96 h-full border-r border-gray-800 flex flex-col">
+        <StatusTabs
+          tabs={statusTabs}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
+        
         <div className="p-4">
           <SearchBar
             value={searchQuery}
@@ -255,12 +261,6 @@ const Chat: React.FC = () => {
             placeholder="Buscar conversas..."
           />
         </div>
-        
-        <StatusTabs
-          tabs={statusTabs}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
         
         <div className="flex-1 overflow-hidden">
           <ConversationList
