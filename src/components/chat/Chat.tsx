@@ -85,6 +85,65 @@ const Chat: React.FC = () => {
     setStatusTabs(newStatusTabs);
   }, [conversations]);
 
+  // Efeito para marcar todas as conversas como "fechadas" ao inicializar a aplicação
+  useEffect(() => {
+    // Marcar todas as conversas como fechadas ao inicializar a aplicação
+    console.log('[initEffect] Marcando todas as conversas como fechadas ao inicializar');
+    
+    supabase
+      .from('nexochat_status')
+      .update({ status_msg: 'fechada' })
+      .eq('status_msg', 'aberta')
+      .then(({ error }) => {
+        if (error) {
+          console.error('[initEffect] Erro ao marcar conversas como fechadas ao inicializar:', error);
+        } else {
+          console.log('[initEffect] Conversas marcadas como fechadas com sucesso ao inicializar');
+        }
+      });
+  }, []); // Este efeito roda apenas uma vez na inicialização
+
+  // Monitorar mudanças na seleção de conversas para marcar como fechada quando desselecionada
+  const previousConversationIdRef = useRef<string | null>(selectedConversationId);
+  
+  useEffect(() => {
+    // Se havia uma conversa selecionada anteriormente e agora não há, marcar como fechada
+    if (previousConversationIdRef.current && !selectedConversationId) {
+      console.log(`[useEffect] Conversa ${previousConversationIdRef.current} foi desselecionada, marcando como fechada`);
+      
+      // Atualizar status da conversa anterior para "fechada"
+      supabase
+        .from('nexochat_status')
+        .select('id')
+        .eq('conversation_id', previousConversationIdRef.current)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('[useEffect] Erro ao buscar conversa desselecionada:', error);
+          } else if (data && data.length > 0) {
+            // Atualizar todos os registros encontrados
+            data.forEach((record: any) => {
+              if (record && record.id) {
+                supabase
+                  .from('nexochat_status')
+                  .update({ status_msg: 'fechada' })
+                  .eq('id', record.id)
+                  .then(({ error: updateError }) => {
+                    if (updateError) {
+                      console.error(`[useEffect] Erro ao marcar conversa ${previousConversationIdRef.current} como fechada:`, updateError);
+                    } else {
+                      console.log(`[useEffect] Conversa ${previousConversationIdRef.current} marcada como fechada após desseleção`);
+                    }
+                  });
+              }
+            });
+          }
+        });
+    }
+    
+    // Atualizar a referência para a próxima verificação
+    previousConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
   // Processar mensagens recebidas e atualizar estado
   const processMessages = (messages: any[], instanceName?: string) => {
     if (!messages || !Array.isArray(messages)) {
@@ -155,13 +214,21 @@ const Chat: React.FC = () => {
           
           const updatedMessages = [...conversation.messages, newMessage];
           
-          // Atualizar unread_count apenas se não for a conversa selecionada e não for do usuário
+          // Lógica de atualização do contador de mensagens não lidas
           let unreadCount = conversation.unread_count || 0;
           
-          // Se não for a conversa selecionada e a mensagem NÃO for do usuário, incrementa o contador
-          if (selectedConversationId !== remoteJid && !fromMe) {
+          // Verificar se esta conversa é a selecionada atualmente
+          const isSelectedConversation = selectedConversationId === remoteJid;
+          
+          // Se a conversa NÃO estiver selecionada E a mensagem NÃO for do usuário, incrementa o contador
+          if (!isSelectedConversation && !fromMe) {
             unreadCount += 1;
             console.log(`Incrementando contador para ${remoteJid} de ${conversation.unread_count || 0} para ${unreadCount}`);
+          } else if (isSelectedConversation) {
+            // Se a conversa estiver selecionada, garantir que o contador seja zero
+            // independentemente de quem enviou a mensagem
+            unreadCount = 0;
+            console.log(`Conversa ${remoteJid} está selecionada. Zerando contador.`);
           }
           
           // Formatando a data atual para usar como timestamp
@@ -247,6 +314,25 @@ const Chat: React.FC = () => {
   const handleSelectConversation = useCallback((conversationId: string) => {
     console.log('[handleSelectConversation] Iniciada para conversationId:', conversationId);
 
+    // Primeiro, fechar TODAS as conversas abertas para garantir que só teremos uma aberta
+    console.log('[handleSelectConversation] Fechando todas as conversas abertas primeiro');
+    supabase
+      .from('nexochat_status')
+      .update({ status_msg: 'fechada' })
+      .eq('status_msg', 'aberta')
+      .then(({ error }) => {
+        if (error) {
+          console.error('[handleSelectConversation] Erro ao fechar todas as conversas:', error);
+        } else {
+          console.log('[handleSelectConversation] Todas as conversas foram fechadas com sucesso');
+        }
+      });
+      
+    // Agora continuamos o fluxo normal, mas já garantimos que todas estão fechadas
+    if (selectedConversationId && selectedConversationId !== conversationId) {
+      console.log(`[handleSelectConversation] Antiga conversa selecionada: ${selectedConversationId}`);
+    }
+
     // Resetar posição de rolagem
     setScrollPosition(undefined);
     
@@ -291,13 +377,16 @@ const Chat: React.FC = () => {
                 if (record && record.id) {
                   supabase
                     .from('nexochat_status')
-                    .update({ unread_count: 0 })
+                    .update({ 
+                      unread_count: 0,
+                      status_msg: 'aberta' // Atualizar status para "aberta"
+                    })
                     .eq('id', record.id)
                     .then(({ error: updateError }) => {
                       if (updateError) {
-                        console.error('[handleSelectConversation] Erro ao zerar contador (ID ' + record.id + '):', updateError);
+                        console.error('[handleSelectConversation] Erro ao atualizar contador/status (ID ' + record.id + '):', updateError);
                       } else {
-                        console.log('[handleSelectConversation] Contador zerado com sucesso (ID ' + record.id + ')!');
+                        console.log('[handleSelectConversation] Contador zerado e status definido como "aberta" (ID ' + record.id + ')!');
                       }
                     });
                 }
@@ -327,13 +416,16 @@ const Chat: React.FC = () => {
                   if (record && record.id) {
                     supabase
                       .from('nexochat_status')
-                      .update({ unread_count: 0 })
+                      .update({ 
+                        unread_count: 0,
+                        status_msg: 'aberta' // Atualizar status para "aberta"
+                      })
                       .eq('id', record.id)
                       .then(({ error: updateError }) => {
                         if (updateError) {
-                          console.error('[handleSelectConversation] Erro ao zerar contador (ID ' + record.id + '):', updateError);
+                          console.error('[handleSelectConversation] Erro ao atualizar contador/status (ID ' + record.id + '):', updateError);
                         } else {
-                          console.log('[handleSelectConversation] Contador zerado com sucesso (ID ' + record.id + ')!');
+                          console.log('[handleSelectConversation] Contador zerado e status definido como "aberta" (ID ' + record.id + ')!');
                         }
                       });
                   }

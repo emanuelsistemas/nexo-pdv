@@ -1,5 +1,6 @@
 import React from 'react';
 import { Conversation, ConversationStatus } from '../../types/chat';
+import MessageCounter from './MessageCounter';
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -126,7 +127,6 @@ const ConversationList: React.FC<ConversationListProps> = ({
                       <span className="text-xs text-gray-400">
                         {formatTimestamp(conversation.timestamp)}
                       </span>
-                      {/* Contador movido para a linha da prévia */}
                     </div>
                   </div>
                   
@@ -135,12 +135,12 @@ const ConversationList: React.FC<ConversationListProps> = ({
                       {truncateText(conversation.last_message || conversation.lastMessage || 'Sem mensagens', 30)}
                     </p>
                     
-                    {/* Contador de mensagens não lidas - estilo WhatsApp */}
-                    {/* Priorizar o valor do banco de dados (unread_count) */}
-                    {((conversation.unread_count || 0) > 0) && selectedConversationId !== conversation.id && (
-                      <span className="bg-green-500 text-black text-xs font-medium rounded-full h-5 min-w-[20px] flex items-center justify-center px-1">
-                        {conversation.unread_count}
-                      </span>
+                    {/* Contador de mensagens reposicionado */}
+                    {selectedConversationId !== conversation.id && (
+                      <MessageCounter 
+                        conversationId={conversation.id} 
+                        variant="small" 
+                      />
                     )}
                   </div>
                 </div>
