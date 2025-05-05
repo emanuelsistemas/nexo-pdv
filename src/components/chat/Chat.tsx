@@ -163,11 +163,15 @@ const Chat: React.FC = () => {
             console.log(`Incrementando contador para ${remoteJid} de ${conversation.unread_count || 0} para ${unreadCount}`);
           }
           
+          // Formatando a data atual para usar como timestamp
+          const currentDate = new Date();
+          
           updatedConversations.unshift({
             ...conversation,
             messages: updatedMessages,
             last_message: content,
-            last_message_time: timestamp,
+            last_message_time: currentDate, // Usar data atual
+            timestamp: currentDate, // Importante: atualizar o timestamp também!
             unread_count: unreadCount,
             instanceName: instanceName || conversation.instanceName // Manter ou atualizar a instância
           });
@@ -180,6 +184,9 @@ const Chat: React.FC = () => {
           // Criar a nova conversa com status 'Aguardando'
           const newStatus: ConversationStatus = 'Aguardando';
           
+          // Garantir que o timestamp seja uma data atual
+          const currentDate = new Date();
+          
           const newConversation = {
             id: remoteJid,
             name: displayName,
@@ -188,7 +195,8 @@ const Chat: React.FC = () => {
             messages: [newMessage],
             status: newStatus, // Inicialmente, todas as novas conversas estão pendentes
             last_message: content,
-            last_message_time: timestamp,
+            last_message_time: currentDate,
+            timestamp: currentDate, // Garantir que o timestamp seja o mesmo da last_message_time
             unread_count: 1,
             sector: 'Geral', // Setor padrão
             instanceName: instanceName // Registrar qual instância recebeu esta conversa

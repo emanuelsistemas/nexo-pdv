@@ -32,14 +32,37 @@ const ConversationList: React.FC<ConversationListProps> = ({
   // Formatar timestamp para exibição
   const formatTimestamp = (timestamp?: Date | string): string => {
     if (!timestamp) return '';  // Retornar string vazia se timestamp for undefined
-    const date = new Date(timestamp);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
     
-    if (isToday) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else {
-      return date.toLocaleDateString();
+    try {
+      // Garantir conversão correta para Date
+      const date = new Date(timestamp);
+      
+      // Verificar se a data é válida
+      if (isNaN(date.getTime())) {
+        console.log('Data inválida:', timestamp);
+        return '';
+      }
+      
+      const now = new Date();
+      
+      // Comparar ano, mês e dia para determinar se é hoje
+      const isToday = date.getDate() === now.getDate() && 
+                      date.getMonth() === now.getMonth() && 
+                      date.getFullYear() === now.getFullYear();
+      
+      // Log para debug
+      console.log(`Formatando data: ${date.toISOString()}, É hoje? ${isToday}`);
+      
+      if (isToday) {
+        // Se for hoje, mostrar apenas hora e minuto
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else {
+        // Se for outro dia, mostrar data completa
+        return date.toLocaleDateString();
+      }
+    } catch (error) {
+      console.error('Erro ao formatar timestamp:', timestamp, error);
+      return '';
     }
   };
 
