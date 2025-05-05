@@ -813,15 +813,31 @@ const Chat: React.FC = () => {
         // Decidir qual valor de contador usar
         let finalUnreadCount: number;
         
-        // Se estamos atualizando depois de uma mensagem recebida, usar o valor incrementado
+        // Verificar se esta conversa é a selecionada atualmente
+        const isSelected = conversationId === selectedConversationId;
+        console.log(`Conversa ${conversationId} está selecionada? ${isSelected}`);
+        
+        // Se estamos atualizando depois de uma mensagem recebida
         if (conversationData.unread_count !== undefined) {
           const convCount = Number(conversationData.unread_count || 0);
-          // Garantir que o novo valor é pelo menos 1 a mais que o valor atual no banco
-          // a menos que esteja sendo zerado explicitamente (quando o valor é 0)
-          finalUnreadCount = convCount === 0 ? 0 : Math.max(currentDbCount + 1, convCount);
+          
+          // Se é a conversa selecionada, não incrementar contador
+          if (isSelected) {
+            console.log('Conversa está selecionada, mantendo contador em 0');
+            finalUnreadCount = 0;
+          } else {
+            // Se não é a conversa selecionada e o contador não está sendo zerado explicitamente
+            if (convCount === 0) {
+              finalUnreadCount = 0; // Está sendo zerado explicitamente
+            } else {
+              // Incrementar contador apenas se não for a conversa selecionada
+              finalUnreadCount = Math.max(currentDbCount + 1, convCount);
+              console.log(`Conversa não selecionada, incrementando contador para ${finalUnreadCount}`);
+            }
+          }
         } else {
           // Se não temos valor explicitamente definido, manter o contador atual
-          finalUnreadCount = currentDbCount; 
+          finalUnreadCount = currentDbCount;
         }
         
         console.log(`Atualizando contador para ${finalUnreadCount} (valor final decidido)`);
