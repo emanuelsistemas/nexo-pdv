@@ -132,7 +132,9 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-sm text-gray-400 truncate w-4/5">
-                      {truncateText(conversation.lastMessage || conversation.last_message, 30)}
+                      {truncateText(conversation.lastMessage || conversation.last_message, 30) ? 
+                        truncateText(conversation.lastMessage || conversation.last_message, 30) : 
+                        <span className="italic">Nova conversa</span>}
                     </p>
                     
                     {/* Contador de mensagens não lidas - estilo WhatsApp */}

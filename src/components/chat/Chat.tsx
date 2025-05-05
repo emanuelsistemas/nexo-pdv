@@ -170,6 +170,7 @@ const Chat: React.FC = () => {
             ...conversation,
             messages: updatedMessages,
             last_message: content,
+            lastMessage: content, // IMPORTANTE: campo duplicado para compatibilidade
             last_message_time: currentDate, // Usar data atual
             timestamp: currentDate, // Importante: atualizar o timestamp também!
             unread_count: unreadCount,
@@ -195,6 +196,7 @@ const Chat: React.FC = () => {
             messages: [newMessage],
             status: newStatus, // Inicialmente, todas as novas conversas estão pendentes
             last_message: content,
+            lastMessage: content, // IMPORTANTE: adicionar também este campo duplicado para compatibilidade
             last_message_time: currentDate,
             timestamp: currentDate, // Garantir que o timestamp seja o mesmo da last_message_time
             unread_count: 1,
@@ -613,27 +615,38 @@ const Chat: React.FC = () => {
       try {
         // Iniciar carregamento
         setLoadingConversations(true);
-        console.log('Carregando mensagens iniciais após Socket.io conectado...');
+        console.log('Carregando mensagens iniciais da Evolution API...');
         
-        // PASSO 0: Carregar conversas do localStorage primeiro (carregamento mais rápido)
-        const localStorageConversations = loadConversationsFromLocalStorage();
-        let workingConversations = [...localStorageConversations]; // Criar uma cópia para trabalhar
+        // PASSO 1: PRIORIDADE - Carregar todas as mensagens diretamente da API Evolution
+        console.log('Buscando mensagens e conversas da Evolution API...');
+        const result = await fetchMessages();
         
-        if (localStorageConversations.length > 0) {
-          console.log(`Carregando ${localStorageConversations.length} conversas do localStorage`); 
-          setConversations(localStorageConversations); // Mostrar imediatamente para melhor UX
+        if (result.messages && result.messages.length > 0) {
+          console.log(`Processando ${result.messages.length} mensagens da Evolution API`);
+          // Esta função vai criar todas as conversas a partir das mensagens da API
+          processMessages(result.messages);
+          console.log('Mensagens da API processadas com sucesso! Verificando estado de conversas...');
+        } else {
+          console.log('Nenhuma mensagem encontrada na Evolution API');
+          
+          // Se não encontrar mensagens na API, tentar carregar do localStorage como fallback
+          console.log('Tentando carregar do localStorage como alternativa...');
+          const localStorageConversations = loadConversationsFromLocalStorage();
+          
+          if (localStorageConversations.length > 0) {
+            console.log(`Carregando ${localStorageConversations.length} conversas do localStorage como fallback`); 
+            setConversations(localStorageConversations);
+          } else {
+            console.log('Nenhuma conversa encontrada no localStorage. Verifique a conexão com a API.');
+          }
         }
         
-        // PASSO 1: Buscar conversas salvas no banco de dados Supabase
-        console.log('Carregando conversas salvas da tabela nexochat_status...');
-        
-        // Extrair reseller_id da sessão (se disponível)
-        let resellerId = '';
+        // PASSO 2: Extrair e salvar reseller_id da sessão (para uso futuro em operações de banco)
         try {
           const adminSession = localStorage.getItem('admin_session');
           if (adminSession) {
             const session = JSON.parse(adminSession);
-            resellerId = session.reseller_id || '';
+            const resellerId = session.reseller_id || '';
             // Salvar o reseller_id no localStorage para uso futuro (importante)
             if (resellerId) {
               localStorage.setItem('reseller_id', resellerId);
@@ -644,93 +657,35 @@ const Chat: React.FC = () => {
           console.error('Erro ao obter reseller_id da sessão:', e);
         }
         
-        // Buscar todas as conversas no banco se possível (mesmo sem reseller_id)
-        const { data: savedConversations, error } = await supabase
-          .from('nexochat_status')
-          .select('*');
-        
-        if (error) {
-          console.error('Erro ao buscar conversas do banco:', error);
-        } else if (savedConversations && savedConversations.length > 0) {
-          console.log(`Encontradas ${savedConversations.length} conversas no banco de dados`);
-          
-          // Para cada conversa no banco, verificar se já existe e atualizar/adicionar
-          savedConversations.forEach((savedConvo: any) => {
-            if (!savedConvo.conversation_id) return; // Pular registros inválidos
-            
-            // Verificar se a conversa já existe no nosso conjunto
-            const existingIndex = workingConversations.findIndex(
-              convo => convo.id === savedConvo.conversation_id
-            );
-            
-            if (existingIndex >= 0) {
-              // Atualizar conversa existente com dados do banco
-              const existing = workingConversations[existingIndex];
-              workingConversations[existingIndex] = {
-                ...existing,
-                status: savedConvo.status as ConversationStatus,
-                unread_count: savedConvo.unread_count || 0,
-                // Preservar mensagens e outros dados existentes!
-                messages: existing.messages || []
-              };
-            } else {
-              // Criar nova conversa com os dados do banco
-              const phoneNumber = String(savedConvo.conversation_id).split('@')[0];
-              
-              workingConversations.push({
-                id: String(savedConvo.conversation_id),
-                name: phoneNumber,
-                contactName: phoneNumber,
-                phone: phoneNumber,
-                messages: [], // Mensagens vazias inicialmente
-                status: savedConvo.status as ConversationStatus,
-                unreadCount: 0, // Campo legado mantido por compatibilidade
-                unread_count: Number(savedConvo.unread_count || 0),
-                last_message: savedConvo.last_message || 'Conversa carregada do banco',
-                lastMessage: savedConvo.last_message || 'Conversa carregada do banco', // Campo duplicado por compatibilidade
-                last_message_time: String(savedConvo.updated_at || new Date()),
-                timestamp: String(savedConvo.updated_at || new Date()),
-                sector: 'Geral'
-              });
-            }
-          });
-          
-          // Atualizar o estado com as conversas mescladas do localStorage e banco
-          console.log('Atualizando estado com conversas mescladas do banco e localStorage:', workingConversations);
-          setConversations(workingConversations);
-        }
-        
-        // PASSO 2: Carregar mensagens da Evolution API para enriquecer as conversas
-        console.log('Buscando mensagens da Evolution API...');
-        const result = await fetchMessages();
-        
-        if (result.messages && result.messages.length > 0) {
-          console.log(`Processando ${result.messages.length} mensagens da Evolution API`);
-          // Esta função vai atualizar o estado e adicionar as mensagens às conversas
-          processMessages(result.messages);
-        } else {
-          console.log('Nenhuma mensagem encontrada na Evolution API');
-        }
-        
-        // PASSO 3: Salvar o estado final das conversas no localStorage
-        // Observe que estamos usando conversations (estado atualizado após processMessages)
-        const finalConversations = conversations;
-        console.log('Salvando estado final no localStorage:', finalConversations.length, 'conversas');
-        saveConversationsToLocalStorage(finalConversations);
+        // PASSO 3: Sincronizar status das conversas com o banco
+        // Isso é feito apenas para manter o status (aguardando, atendimento, etc.)
+        // Mas não dependemos mais do banco para o conteúdo das mensagens
+        console.log('Sincronizando status das conversas com banco de dados...');
+        const currentConversations = [...conversations];
         
         // Atualizar contagens nas abas de status
         const counts: Record<string, number> = {};
-        finalConversations.forEach(convo => {
+        currentConversations.forEach(convo => {
           const status = convo.status || 'Pendentes';
           counts[status] = (counts[status] || 0) + 1;
+          
+          // Salvar o status da conversa no banco de dados (apenas para manter o status sincronizado)
+          if (convo.id) {
+            saveConversationStatus(convo.id, convo.status as any, convo)
+              .catch(err => console.error('Erro ao sincronizar status da conversa:', err));
+          }
         });
         
+        // Atualizar os tabs com contagens atualizadas
         const updatedTabs = statusTabs.map(tab => ({
           ...tab,
           count: counts[tab.id] || 0
         }));
         
         setStatusTabs(updatedTabs);
+        
+        // PASSO 4: Salvar backup no localStorage
+        saveConversationsToLocalStorage(currentConversations);
       } catch (error) {
         console.error('Erro ao carregar mensagens e conversas iniciais:', error);
       } finally {
