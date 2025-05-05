@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { EvolutionApiConfig } from '../types/chat';
 import { loadEvolutionApiConfig } from '../services/storage';
 import axios from 'axios';
+import React, { useState, useEffect, useCallback } from 'react';
 
 interface FetchMessagesResult {
   messages: any[];
@@ -297,6 +298,98 @@ const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
     localStorage.setItem('evolution_api_config', JSON.stringify(newConfig));
   }, []);
 
+  // Nova função: Obter contador de mensagens não lidas de uma conversa
+  const getUnreadCount = useCallback(async (chatId: string): Promise<number> => {
+    if (!config) {
+      console.error('Configuração não encontrada para buscar contador');
+      return 0;
+    }
+
+    try {
+      // Buscar informações da conversa usando a API do Evolution
+      const response = await axios.get(
+        `${config.baseUrl}/chat/fetchChats/${config.instanceName}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': config.apikey
+          }
+        }
+      );
+
+      if (response.data?.chats) {
+        // Encontrar a conversa com o ID correspondente
+        const chat = response.data.chats.find((c: any) => c.id === chatId || c.id?.includes(chatId) || chatId.includes(c.id));
+        
+        if (chat && chat.unreadCount !== undefined) {
+          console.log(`[API] Contador de não lidas para ${chatId}: ${chat.unreadCount}`);
+          return Number(chat.unreadCount);
+        } else {
+          console.log(`[API] Conversa ${chatId} não encontrada ou sem contador`);
+        }
+      }
+      
+      return 0;
+    } catch (err) {
+      console.error('Erro ao buscar contador de não lidas:', err);
+      return 0;
+    }
+  }, [config]);
+
+  // Nova função: Marcar conversa como lida
+  const markAsRead = useCallback(async (chatId: string): Promise<boolean> => {
+    if (!config) {
+      console.error('Configuração não encontrada para marcar como lida');
+      return false;
+    }
+
+    try {
+      console.log(`[API] Marcando conversa ${chatId} como lida`);
+      
+      const response = await axios.post(
+        `${config.baseUrl}/chat/markMessageAsRead/${config.instanceName}`,
+        { 
+          chatId: chatId
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': config.apikey
+          }
+        }
+      );
+
+      console.log('[API] Resposta da marcação como lida:', response.data);
+      
+      // Verificar se a operação foi bem-sucedida
+      if (response.data && response.data.success) {
+        return true;
+      }
+      
+      // Alternativa: tentar outro endpoint se o primeiro falhar
+      console.log('[API] Tentando endpoint alternativo para marcar como lida...');
+      
+      const response2 = await axios.post(
+        `${config.baseUrl}/chat/markConversationAsRead/${config.instanceName}`,
+        { 
+          chatId: chatId
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': config.apikey
+          }
+        }
+      );
+      
+      console.log('[API] Resposta da alternativa:', response2.data);
+      return true;
+    } catch (err) {
+      console.error('Erro ao marcar conversa como lida:', err);
+      return false;
+    }
+  }, [config]);
+
   return {
     config,
     loading,
@@ -305,7 +398,9 @@ const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
     checkConnectionStatus,
     fetchMessages,
     sendMessage,
-    updateConfig
+    updateConfig,
+    getUnreadCount,  // Nova função exportada
+    markAsRead,      // Nova função exportada
   };
 };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useChat } from '../../contexts/ChatContext';
 import ConversationList from './ConversationList';
 import ChatContainer from './ChatContainer';
@@ -157,10 +157,49 @@ const Chat: React.FC = () => {
           // Atualizar unread_count apenas se não for a conversa selecionada e não for do usuário
           let unreadCount = conversation.unread_count || 0;
           
-          // Se não for a conversa selecionada e a mensagem NÃO for do usuário, incrementa o contador
-          if (selectedConversationId !== remoteJid && !fromMe) {
+          // DEBUGGING APRIMORADO - Ver os IDs exatos para comparação
+          console.log(`[processMessages] ID da Conversa Recebida: "${remoteJid}" (${typeof remoteJid}) Comprimento: ${remoteJid?.length}`); 
+          console.log(`[processMessages] ID da Conversa Selecionada (REF): "${selectedConversationIdRef.current}" (${typeof selectedConversationIdRef.current}) Comprimento: ${selectedConversationIdRef.current?.length}`);
+          
+          // NOVA LÓGICA: Extrair número do telefone (parte que vem antes do @) para comparações mais robustas
+          let remotePhone = remoteJid.split('@')[0];
+          let selectedPhone = selectedConversationIdRef.current ? String(selectedConversationIdRef.current).split('@')[0] : '';
+          
+          // Limpar qualquer formatoção para comparação justa
+          remotePhone = remotePhone.replace(/[^0-9]/g, '');
+          selectedPhone = selectedPhone.replace(/[^0-9]/g, '');
+          
+          console.log(`[processMessages] Comparando NÚMEROS DE TELEFONE: "${remotePhone}" === "${selectedPhone}"`);
+          
+          // Verificação SIMPLES: Se os números de telefone correspondem - mais confiável para mensagens do WhatsApp
+          const phonesMatch = selectedPhone && remotePhone && selectedPhone === remotePhone;
+          
+          // BACKUP: Verificar também por IDs completos (substring)
+          const remoteJidClean = String(remoteJid).trim();
+          const selectedIdClean = selectedConversationIdRef.current ? String(selectedConversationIdRef.current).trim() : '';
+          
+          const idsTextMatch = 
+            (selectedIdClean === remoteJidClean) || 
+            (selectedIdClean && remoteJidClean.includes(selectedIdClean)) || 
+            (selectedIdClean && selectedIdClean.includes(remoteJidClean));
+          
+          // VERIFICAÇÃO COMBINADA: Considerar correspondência se qualquer método funcionar
+          const isMatchingConversation = phonesMatch || idsTextMatch;
+          
+          console.log(`[processMessages] RESULTADO: Match por telefone=${phonesMatch}, Match por ID=${idsTextMatch}, Match final=${isMatchingConversation}`);
+          // CONDIÇÃO SIMPLIFICADA 
+          if (!isMatchingConversation && !fromMe) {
+            // Só incrementa se não for a conversa selecionada e não for mensagem do usuário
             unreadCount += 1;
-            console.log(`Incrementando contador para ${remoteJid} de ${conversation.unread_count || 0} para ${unreadCount}`);
+            console.log(`[processMessages] INCREMENTANDO contador para ${remoteJid} de ${conversation.unread_count || 0} para ${unreadCount}`);
+          } else {
+            // Importante: Se for a conversa selecionada, forçar contador para zero
+            if (isMatchingConversation) {
+              unreadCount = 0;
+              console.log(`[processMessages] ZERANDO contador para ${remoteJid} pois é a conversa selecionada`);
+            } else {
+              console.log(`[processMessages] NÃO incrementando contador. Motivo: ${isMatchingConversation ? 'Conversa corresponde à selecionada' : 'Mensagem do usuário'}`);
+            }
           }
           
           // Formatando a data atual para usar como timestamp
@@ -243,6 +282,7 @@ const Chat: React.FC = () => {
   }, [selectedConversationId, getCurrentConversation]);
 
   // Quando seleciona uma conversa
+  const selectedConversationIdRef = useRef<string | null>(null); // Adicionar Ref
   const handleSelectConversation = useCallback((conversationId: string) => {
     console.log('[handleSelectConversation] Iniciada para conversationId:', conversationId);
 
@@ -347,6 +387,7 @@ const Chat: React.FC = () => {
     
     // Atualizar conversa selecionada
     setSelectedConversationId(conversationId);
+    selectedConversationIdRef.current = conversationId; // Atualizar Ref
   }, [setSelectedConversationId, setConversations]);
 
   // Função para enviar mensagem
@@ -769,9 +810,20 @@ const Chat: React.FC = () => {
         // Se estamos atualizando depois de uma mensagem recebida, usar o valor incrementado
         if (conversationData.unread_count !== undefined) {
           const convCount = Number(conversationData.unread_count || 0);
-          // Garantir que o novo valor é pelo menos 1 a mais que o valor atual no banco
-          // a menos que esteja sendo zerado explicitamente (quando o valor é 0)
-          finalUnreadCount = convCount === 0 ? 0 : Math.max(currentDbCount + 1, convCount);
+          
+          // NOVA VERIFICAÇÃO: Não incrementar se esta for a conversa selecionada
+          if (selectedConversationIdRef.current === conversationId) {
+            // IMPORTANTE: ZERAR o contador quando a conversa está selecionada
+            console.log(`[saveConversationStatus] Conversa ${conversationId} é a conversa selecionada. ZERANDO o contador no banco`);
+            finalUnreadCount = 0; // SEMPRE ZERAR quando a conversa está selecionada
+          } else if (convCount === 0) {
+            // Se estiver sendo zerado explicitamente
+            finalUnreadCount = 0;
+          } else {
+            // Caso normal: incrementar contador quando recebe mensagem em conversa não selecionada
+            finalUnreadCount = Math.max(currentDbCount + 1, convCount);
+            console.log(`[saveConversationStatus] Incrementando contador no banco de ${currentDbCount} para ${finalUnreadCount}`);
+          }
         } else {
           // Se não temos valor explicitamente definido, manter o contador atual
           finalUnreadCount = currentDbCount; 
