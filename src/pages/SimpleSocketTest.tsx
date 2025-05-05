@@ -354,38 +354,40 @@ export default function SimpleSocketTest() {
           </button>
         </div>
         
-              onClick={async () => {
-                const config = getStoredConfig();
-                if (!config || !config.baseUrl || !config.apikey) {
-                  addLog('Configure a URL e API key antes de testar');
-                  return;
-                }
+        <div className="mt-4">
+          <button 
+            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-sm"
+            onClick={async () => {
+              const config = getStoredConfig();
+              if (!config || !config.baseUrl || !config.apikey) {
+                addLog('Configure a URL e API key antes de testar');
+                return;
+              }
+              
+              try {
+                const url = `${config.baseUrl}/instance/connectionState/${config.instanceName}`;
+                addLog(`Testando API com: ${url}`);
                 
-                try {
-                  const url = `${config.baseUrl}/instance/connectionState/${config.instanceName}`;
-                  addLog(`Testando API com: ${url}`);
-                  
-                  const response = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                      'apikey': config.apikey
-                    }
-                  });
-                  
-                  if (response.ok) {
-                    const data = await response.json();
-                    addLog(`API respondeu com sucesso: ${JSON.stringify(data)}`);
-                  } else {
-                    addLog(`API respondeu com erro: ${response.status} ${response.statusText}`);
+                const response = await fetch(url, {
+                  method: 'GET',
+                  headers: {
+                    'apikey': config.apikey
                   }
-                } catch (error) {
-                  addLog(`Erro ao testar API: ${error instanceof Error ? error.message : String(error)}`);
+                });
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  addLog(`API respondeu com sucesso: ${JSON.stringify(data)}`);
+                } else {
+                  addLog(`API respondeu com erro: ${response.status} ${response.statusText}`);
                 }
-              }}
-            >
-              Testar API (/ping)
-            </button>
-          </div>
+              } catch (error) {
+                addLog(`Erro ao testar API: ${error instanceof Error ? error.message : String(error)}`);
+              }
+            }}
+          >
+            Testar API (/ping)
+          </button>
         </div>
         
         {/* Log de mensagens */}
