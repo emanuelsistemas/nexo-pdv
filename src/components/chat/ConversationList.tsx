@@ -1,7 +1,6 @@
 import React from 'react';
 import { Conversation, ConversationStatus } from '../../types/chat';
 
-
 interface ConversationListProps {
   conversations: Conversation[];
   selectedConversationId: string | null;
@@ -17,7 +16,6 @@ const ConversationList: React.FC<ConversationListProps> = ({
   statusFilter,
   isLoading = false
 }) => {
-  // Filtrar conversas com base no statusFilter
   // Filtrar conversas com base no statusFilter
   const filteredConversations = conversations.filter(
     (conversation) => statusFilter === 'all' || conversation.status === statusFilter
@@ -134,12 +132,11 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-sm text-gray-400 truncate w-4/5">
-                      {truncateText(conversation.lastMessage || conversation.last_message, 30) ? 
-                        truncateText(conversation.lastMessage || conversation.last_message, 30) : 
-                        <span className="italic">Nova conversa</span>}
+                      {truncateText(conversation.last_message || conversation.lastMessage || 'Sem mensagens', 30)}
                     </p>
                     
                     {/* Contador de mensagens não lidas - estilo WhatsApp */}
+                    {/* Priorizar o valor do banco de dados (unread_count) */}
                     {((conversation.unread_count || 0) > 0) && selectedConversationId !== conversation.id && (
                       <span className="bg-green-500 text-black text-xs font-medium rounded-full h-5 min-w-[20px] flex items-center justify-center px-1">
                         {conversation.unread_count}
