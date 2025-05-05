@@ -8,7 +8,13 @@ import ConnectionStatus from './ConnectionStatus';
 import { ConversationStatus, StatusTab, ChatMessage } from '../../types/chat';
 import useEvolutionApi from '../../hooks/useEvolutionApi';
 import useWhatsAppInstance from '../../hooks/useWhatsAppInstance';
-import { loadStatusFromLocalStorage, saveStatusToLocalStorage } from '../../services/storage';
+import { 
+  loadStatusFromLocalStorage, 
+  saveStatusToLocalStorage, 
+  saveConversationsToLocalStorage, 
+  loadConversationsFromLocalStorage,
+  updateUnreadCountInLocalStorage
+} from '../../services/storage';
 import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
 import { supabase } from '../../lib/supabase';
@@ -139,6 +145,7 @@ const Chat: React.FC = () => {
 
         // Criar nova lista de conversas
         const updatedConversations = [...prevConversations];
+        let finalConversations; // Variável para armazenar o resultado final
 
         if (existingConversationIndex !== -1) {
           // Conversa existente: adicionar mensagem e atualizar para o topo da lista
@@ -148,14 +155,12 @@ const Chat: React.FC = () => {
           const updatedMessages = [...conversation.messages, newMessage];
           
           // Atualizar unread_count apenas se não for a conversa selecionada e não for do usuário
-          // Necessita de duas condições:
-          // 1. A mensagem não pode ser do usuário (fromMe deve ser false)
-          // 2. A conversa atual selecionada não deve ser esta (selectedConversationId !== remoteJid)
           let unreadCount = conversation.unread_count || 0;
           
-          // Só incrementa o contador se a mensagem não for do usuário E a conversa não estiver selecionada
-          if (!fromMe && selectedConversationId !== remoteJid) {
+          // Se não for a conversa selecionada e a mensagem NÃO for do usuário, incrementa o contador
+          if (selectedConversationId !== remoteJid && !fromMe) {
             unreadCount += 1;
+            console.log(`Incrementando contador para ${remoteJid} de ${conversation.unread_count || 0} para ${unreadCount}`);
           }
           
           updatedConversations.unshift({
@@ -184,9 +189,7 @@ const Chat: React.FC = () => {
             status: newStatus, // Inicialmente, todas as novas conversas estão pendentes
             last_message: content,
             last_message_time: timestamp,
-            // Para novas conversas, só incrementa o contador se a mensagem não for do usuário
-            // e se a conversa não for a selecionada (como no WhatsApp)
-            unread_count: (!fromMe && selectedConversationId !== remoteJid) ? 1 : 0,
+            unread_count: 1,
             sector: 'Geral', // Setor padrão
             instanceName: instanceName // Registrar qual instância recebeu esta conversa
           };
@@ -201,7 +204,14 @@ const Chat: React.FC = () => {
             .catch(err => console.error('Erro ao salvar conversa no banco:', err));
         }
 
-        return updatedConversations;
+        // Definir as conversas finais
+        finalConversations = updatedConversations;
+        
+        // Salvar as conversas atualizadas no localStorage para acesso rápido na próxima vez
+        saveConversationsToLocalStorage(finalConversations);
+        
+        // Retornar conversas atualizadas
+        return finalConversations;
       });
     });
   };
@@ -224,6 +234,8 @@ const Chat: React.FC = () => {
 
   // Quando seleciona uma conversa
   const handleSelectConversation = useCallback((conversationId: string) => {
+    console.log('[handleSelectConversation] Iniciada para conversationId:', conversationId);
+
     // Resetar posição de rolagem
     setScrollPosition(undefined);
     
@@ -234,13 +246,94 @@ const Chat: React.FC = () => {
     }
     
     // Limpar contador de não lidas (ambos os campos usados na aplicação)
-    setConversations(prevConversations => 
-      prevConversations.map(conv => 
+    setConversations(prevConversations => {
+      const updatedConversations = prevConversations.map(conv => 
         conv.id === conversationId 
           ? { ...conv, unreadCount: 0, unread_count: 0 } 
           : conv
-      )
-    );
+      );
+      
+      // Salvar no localStorage a versão atualizada das conversas
+      saveConversationsToLocalStorage(updatedConversations);
+      
+      // Atualizar também o contador específico no localStorage
+      updateUnreadCountInLocalStorage(conversationId, 0);
+      
+      // Atualizar no banco de dados também
+      console.log('[handleSelectConversation] Buscando registros relacionados à conversa:', conversationId);
+      
+      // Nova abordagem: não dependemos do reseller_id, apenas procuramos pela conversation_id
+      // Primeiro, tentar match exato
+      supabase
+        .from('nexochat_status')
+        .select('*')
+        .eq('conversation_id', conversationId)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('[handleSelectConversation] Erro ao buscar conversa:', error);
+          } else {
+            console.log('[handleSelectConversation] Registros encontrados (match exato):', data);
+            
+            if (data && data.length > 0) {
+              // Atualizar todos os registros encontrados
+              data.forEach((record: any) => {
+                if (record && record.id) {
+                  supabase
+                    .from('nexochat_status')
+                    .update({ unread_count: 0 })
+                    .eq('id', record.id)
+                    .then(({ error: updateError }) => {
+                      if (updateError) {
+                        console.error('[handleSelectConversation] Erro ao zerar contador (ID ' + record.id + '):', updateError);
+                      } else {
+                        console.log('[handleSelectConversation] Contador zerado com sucesso (ID ' + record.id + ')!');
+                      }
+                    });
+                }
+              });
+            }
+          }
+        });
+      
+      // Segunda abordagem: buscar pelo número sem o @s.whatsapp.net
+      if (conversationId.includes('@')) {
+        const numberPart = conversationId.split('@')[0];
+        console.log('[handleSelectConversation] Buscando com parte numérica:', numberPart);
+        
+        supabase
+          .from('nexochat_status')
+          .select('*')
+          .ilike('conversation_id', `%${numberPart}%`)
+          .then(({ data, error }) => {
+            if (error) {
+              console.error('[handleSelectConversation] Erro na busca por número:', error);
+            } else {
+              console.log('[handleSelectConversation] Registros encontrados (por número):', data);
+              
+              if (data && data.length > 0) {
+                // Atualizar todos os registros encontrados
+                data.forEach((record: any) => {
+                  if (record && record.id) {
+                    supabase
+                      .from('nexochat_status')
+                      .update({ unread_count: 0 })
+                      .eq('id', record.id)
+                      .then(({ error: updateError }) => {
+                        if (updateError) {
+                          console.error('[handleSelectConversation] Erro ao zerar contador (ID ' + record.id + '):', updateError);
+                        } else {
+                          console.log('[handleSelectConversation] Contador zerado com sucesso (ID ' + record.id + ')!');
+                        }
+                      });
+                  }
+                });
+              }
+            }
+          });
+      }
+      
+      return updatedConversations;
+    });
     
     // Atualizar conversa selecionada
     setSelectedConversationId(conversationId);
@@ -514,6 +607,13 @@ const Chat: React.FC = () => {
         setLoadingConversations(true);
         console.log('Carregando mensagens iniciais após Socket.io conectado...');
         
+        // PASSO 0: Carregar conversas do localStorage primeiro (carregamento mais rápido)
+        const localStorageConversations = loadConversationsFromLocalStorage();
+        if (localStorageConversations.length > 0) {
+          console.log(`Carregando ${localStorageConversations.length} conversas do localStorage`); 
+          setConversations(localStorageConversations);
+        }
+        
         // PASSO 1: Carregar mensagens da Evolution API
         const result = await fetchMessages();
         if (result.messages.length > 0) {
@@ -660,17 +760,17 @@ const Chat: React.FC = () => {
       
       console.log('Dados extraídos da sessão:', { resellerId, adminId, adminUserId });
       
-      // Verificar se a conversa já existe na tabela
+      // Verificar se a conversa já existe na tabela e obter contador atual
       console.log('Verificando se a conversa já existe no banco de dados...');
       const { data: existingData, error: queryError } = await supabase
         .from('nexochat_status')
-        .select('id')
+        .select('id, unread_count')
         .eq('conversation_id', conversationId)
         .single();
       
       if (queryError) {
         console.log('Erro ao verificar conversa existente:', queryError);
-        // PGJSON:22P02 error often means the conversa já doesn't exist (erro no single())
+        // PGJSON:22P02 error often means the conversa já não existe (erro no single())
         if (queryError.code === 'PGSQL_ERROR_QUERY_EXCEPT') {
           console.log('Conversa não existe no banco, vamos criar uma nova');
         }
@@ -694,16 +794,40 @@ const Chat: React.FC = () => {
         
         console.log(`Convertendo status de "${status}" para "${validStatus}"`);
         
-        // Atualiza o registro existente com o status válido
+        // Obter o contador atual do banco de dados 
+        const currentDbCount = Number(existingData?.unread_count || 0);
+        console.log('Valor atual do contador no banco:', currentDbCount);
+        console.log('Valor do contador no objeto:', conversationData.unread_count || 0);
+        
+        // Decidir qual valor de contador usar
+        let finalUnreadCount: number;
+        
+        // Se estamos atualizando depois de uma mensagem recebida, usar o valor incrementado
+        if (conversationData.unread_count !== undefined) {
+          const convCount = Number(conversationData.unread_count || 0);
+          // Garantir que o novo valor é pelo menos 1 a mais que o valor atual no banco
+          // a menos que esteja sendo zerado explicitamente (quando o valor é 0)
+          finalUnreadCount = convCount === 0 ? 0 : Math.max(currentDbCount + 1, convCount);
+        } else {
+          // Se não temos valor explicitamente definido, manter o contador atual
+          finalUnreadCount = currentDbCount; 
+        }
+        
+        console.log(`Atualizando contador para ${finalUnreadCount} (valor final decidido)`);
+        
+        // Atualiza o registro existente com o status válido e o contador correto
         const { error } = await supabase
           .from('nexochat_status')
           .update({
             status: validStatus, // Usar o status convertido
             updated_at: new Date().toISOString(),
-            unread_count: conversationData.unread_count || 0
+            unread_count: finalUnreadCount
           })
           .eq('conversation_id', conversationId);
           
+        // Log adicional para diagnosticar atualização
+        console.log('Contador unread_count atualizado para:', finalUnreadCount);
+        
         if (error) {
           console.error('Erro ao atualizar status da conversa:', error);
         } else {

@@ -1,9 +1,10 @@
-import { ConversationStatus } from '../types/chat';
+import { ConversationStatus, Conversation } from '../types/chat';
 
 const CHAT_STATUS_PREFIX = 'nexochat_status_';
 const CHAT_SCROLL_PREFIX = 'nexochat_scroll_';
 const CHAT_UNREAD_PREFIX = 'nexochat_unread_';
 const EVOLUTION_API_CONFIG = 'evolution_api_config';
+const CONVERSATIONS_STORAGE_KEY = 'nexochat_conversations';
 
 // Salvar status da conversa no localStorage
 export const saveStatusToLocalStorage = (
@@ -83,5 +84,60 @@ export const loadEvolutionApiConfig = () => {
   } catch (error) {
     console.error('Erro ao carregar configuração da Evolution API:', error);
     return null;
+  }
+};
+
+// Funções para gerenciar conversas completas no localStorage
+
+// Salvar todas as conversas no localStorage
+export const saveConversationsToLocalStorage = (conversations: Conversation[]): void => {
+  try {
+    // Limitar o tamanho dos dados para evitar problemas de armazenamento
+    const conversationsToSave = conversations.map(conv => ({
+      ...conv,
+      // Limitar o número de mensagens por conversa para economizar espaço
+      messages: (conv.messages || []).slice(-20) // Mantém apenas as 20 últimas mensagens
+    }));
+    
+    localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversationsToSave));
+    console.log(`${conversationsToSave.length} conversas salvas no localStorage`);
+  } catch (error) {
+    console.error('Erro ao salvar conversas no localStorage:', error);
+  }
+};
+
+// Carregar todas as conversas do localStorage
+export const loadConversationsFromLocalStorage = (): Conversation[] => {
+  try {
+    const conversationsStr = localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
+    if (!conversationsStr) return [];
+    
+    const conversations = JSON.parse(conversationsStr) as Conversation[];
+    console.log(`${conversations.length} conversas carregadas do localStorage`);
+    return conversations;
+  } catch (error) {
+    console.error('Erro ao carregar conversas do localStorage:', error);
+    return [];
+  }
+};
+
+// Atualizar contador de mensagens não lidas no localStorage (específico para uma conversa)
+export const updateUnreadCountInLocalStorage = (conversationId: string, count: number): void => {
+  try {
+    localStorage.setItem(`${CHAT_UNREAD_PREFIX}${conversationId}`, count.toString());
+    
+    // Também atualiza o contador na versão completa das conversas no localStorage
+    const conversationsStr = localStorage.getItem(CONVERSATIONS_STORAGE_KEY);
+    if (conversationsStr) {
+      const conversations = JSON.parse(conversationsStr) as Conversation[];
+      const updatedConversations = conversations.map(conv => 
+        conv.id === conversationId 
+          ? { ...conv, unread_count: count } 
+          : conv
+      );
+      localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(updatedConversations));
+    }
+  } catch (error) {
+    console.error(`Erro ao atualizar contador de mensagens não lidas para ${conversationId}:`, error);
   }
 };
