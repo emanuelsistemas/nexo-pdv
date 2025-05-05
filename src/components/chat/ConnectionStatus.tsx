@@ -21,6 +21,7 @@ interface ConnectionStatusProps {
   onRefresh: () => void;
   socketConnected?: boolean;
   socketError?: string | null;
+  socketInstance?: string; // Adicionando instância do socket
 }
 
 const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
@@ -30,7 +31,8 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
   error,
   onRefresh,
   socketConnected = false,
-  socketError = null
+  socketError = null,
+  socketInstance = '' // Valor padrão para instância do socket
 }) => {
   // Estado para armazenar todas as conexões da revenda
   const [allConnections, setAllConnections] = useState<WhatsAppConnection[]>([]);
@@ -136,10 +138,15 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
             <div className="flex items-center">
               <span className={socketConnected ? "text-green-400 text-sm" : "text-red-400 text-sm"}>
                 {socketConnected ? "Conectado" : "Desconectado"}
+                {socketConnected && socketInstance && (
+                  <span className="text-xs ml-1 text-gray-400">
+                    (Instância: {socketInstance})
+                  </span>
+                )}
               </span>
               <div 
                 className={`ml-2 h-3 w-3 rounded-full ${socketConnected ? "bg-green-500" : "bg-red-500"}`}
-                title={socketConnected ? "Socket.io conectado" : "Socket.io desconectado"}
+                title={socketConnected ? `Socket.io conectado à instância ${socketInstance}` : "Socket.io desconectado"}
               />
             </div>
           </div>

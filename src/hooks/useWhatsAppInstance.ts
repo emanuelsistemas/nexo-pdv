@@ -40,49 +40,11 @@ export const useWhatsAppInstance = (): WhatsAppInstanceHook => {
       setLoading(true);
       setError(null);
       
-      // Verificar primeiro se temos configuração no localStorage (como faz o ChatNexo)
-      const savedConfig = localStorage.getItem('nexochat_config');
-      if (savedConfig) {
-        try {
-          const config = JSON.parse(savedConfig);
-          console.log('Configuração encontrada no localStorage:', config);
-          
-          if (config.baseUrl && config.apikey && config.instanceName) {
-            // Criar uma conexão simples com os dados do localStorage
-            const connection: WhatsAppConnection = {
-              id: '1',
-              name: 'WhatsApp Instance',
-              phone: '',
-              status: 'active',
-              created_at: new Date().toISOString(),
-              instance_name: config.instanceName,
-              reseller_id: ''
-            };
-            
-            // Atualizar os estados
-            setConnections([connection]);
-            setConnection(connection);
-            
-            // Criar configuração usando exatamente os mesmos valores do ChatNexo
-            const apiConfig: EvolutionApiConfig = {
-              baseUrl: config.baseUrl,
-              apikey: config.apikey,
-              instanceName: config.instanceName
-            };
-            
-            setApiConfigs([apiConfig]);
-            setApiConfig(apiConfig);
-            
-            console.log('Usando configuração do localStorage:', apiConfig);
-            setLoading(false);
-            return;
-          }
-        } catch (e) {
-          console.error('Erro ao processar configuração do localStorage:', e);
-        }
-      }
-
-      // Se não tiver no localStorage, buscar do banco
+      // Remover armazenamento do localStorage para forçar busca do banco
+      console.log('Removendo nexochat_config do localStorage para forçar busca do banco');
+      localStorage.removeItem('nexochat_config');
+      
+      // Buscar configuração do banco
       
       // Obter admin_id do usuário logado
       const adminSession = localStorage.getItem('admin_session');

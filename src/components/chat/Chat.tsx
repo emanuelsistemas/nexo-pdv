@@ -16,7 +16,7 @@ import {
   updateUnreadCountInLocalStorage
 } from '../../services/storage';
 import { io, Socket } from 'socket.io-client';
-import axios from 'axios';
+// axios removido pois não é mais necessário
 import { supabase } from '../../lib/supabase';
 
 const Chat: React.FC = () => {
@@ -55,11 +55,12 @@ const Chat: React.FC = () => {
   // Estado para Socket.io
   const [isConnected, setIsConnected] = useState(false);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [socketError, setSocketError] = useState<string | null>(null);
+  const [socketInstance, setSocketInstance] = useState<string>('');
+  const socketRef = useRef<Socket | null>(null);
   
   // Estado para controlar o carregamento de conversas
   const [loadingConversations, setLoadingConversations] = useState(true);
-  const [socketError, setSocketError] = useState<string | null>(null);
-  const socketRef = useRef<Socket | null>(null);
   
   // Hook personalizado para integração com WhatsApp
   const { connection, apiConfig, loading, error, refreshConnection } = useWhatsAppInstance();
@@ -369,9 +370,10 @@ const Chat: React.FC = () => {
 
   // Função para conectar o Socket.io
   const connectSocket = useCallback(async () => {
-    console.log(`=== CONNECT SOCKET CALLED === [API Config: ${!!apiConfig}, Attempts: ${connectionAttempts}]`);
-    if (!apiConfig) {
-      console.log('API Config ainda não disponível, abortando conexão');
+    console.log(`=== CONNECT SOCKET CALLED === [API Config Ref: ${!!apiConfigRef.current}, Attempts: ${connectionAttempts}]`);
+    // Usar a ref para a verificação inicial
+    if (!apiConfigRef.current) {
+      console.log('API Config Ref ainda não disponível, abortando conexão');
       return;
     }
     
@@ -401,37 +403,26 @@ const Chat: React.FC = () => {
         socketRef.current = null;
       }
       
-      // PASSO 1: Verificar o status da instância primeiro
-      console.log('Verificando status da instância via HTTP');
+      // PASSO 1: Extrair os valores de configuração
+      console.log('Pulando verificação HTTP (que retorna erro 404) e indo direto para Socket.io');
       
-      const { baseUrl, instanceName, apikey } = apiConfig;
+      // Usar a ref para extrair os valores
+      const { baseUrl, instanceName, apikey } = apiConfigRef.current;
       
       if (!baseUrl || !instanceName) {
-        throw new Error('URL da API ou nome da instância não definidos');
+        // Log adicional para debugging
+        console.error('Valores ausentes em apiConfigRef.current:', apiConfigRef.current);
+        throw new Error('URL da API ou nome da instância não definidos na ref');
       }
       
-      // Configurar headers
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      };
+      // Log informações importantes
+      console.log(`Usando configuração para conexão Socket.io:
+        - URL: ${baseUrl}
+        - Instância: ${instanceName}
+        - API Key: ${apikey ? '***' + apikey.substring(apikey.length - 4) : 'não definida'}
+      `);
       
-      if (apikey && apikey.trim() !== '') {
-        headers['apikey'] = apikey;
-      }
-      
-      // Verificar status da instância
-      const statusUrl = `${baseUrl}/instance/connectionState/${instanceName}`;
-      console.log(`Verificando status: ${statusUrl}`);
-      
-      const response = await axios.get(statusUrl, { headers });
-      
-      if (response.status !== 200) {
-        throw new Error(`Erro ao verificar status: ${response.status}`);
-      }
-      
-      console.log('Status da instância:', response.data);
-      
-      // PASSO 2: Conectar Socket.io
+      // PASSO 2: Conectar Socket.io diretamente
       console.log('======= INICIANDO CONEXÃO COM SOCKET.IO =======');
       
       const socket = io(baseUrl, {
@@ -458,6 +449,7 @@ const Chat: React.FC = () => {
         setIsConnected(true);
         setSocketError(null);
         setConnectionAttempts(0); // Resetar contador
+        setSocketInstance(instanceName); // Armazenar instância conectada
         
         // Enviar subscribe de duas formas para garantir
         const subscribeMessage = {
@@ -595,7 +587,7 @@ const Chat: React.FC = () => {
       console.error('Erro ao conectar Socket.io:', error);
       setSocketError(`Erro: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [apiConfig, connectionAttempts]);
+  }, [connectionAttempts]); // Remover apiConfigRef, manter apenas connectionAttempts
   
   // Função para desconectar o Socket.io
   const disconnectSocket = useCallback(() => {
@@ -1049,6 +1041,7 @@ const Chat: React.FC = () => {
               onRefresh={refreshConnection}
               socketConnected={isConnected}
               socketError={socketError}
+              socketInstance={socketInstance}
             />
           )}
         </div>
