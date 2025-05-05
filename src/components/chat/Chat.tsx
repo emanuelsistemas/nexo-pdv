@@ -18,6 +18,7 @@ import {
 import { io, Socket } from 'socket.io-client';
 // axios removido pois não é mais necessário
 import { supabase } from '../../lib/supabase';
+import { publish, EVENTS } from '../../services/eventBus';
 
 const Chat: React.FC = () => {
   // Contexto global do chat
@@ -102,6 +103,57 @@ const Chat: React.FC = () => {
         }
       });
   }, []); // Este efeito roda apenas uma vez na inicialização
+  
+  // Inscrever para atualizações em tempo real na tabela nexochat_status
+  useEffect(() => {
+    console.log('[realtimeEffect] Configurando subscription para nexochat_status');
+    
+    // Criar canal de tempo real com o Supabase
+    const channel = supabase
+      .channel('nexochat_status_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', // Escutar todos os eventos (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'nexochat_status'
+        }, 
+        (payload) => {
+          console.log('[Chat Realtime - UPDATE] Payload recebido:', payload); // LOG ADICIONADO
+            
+          // Se for uma atualização (unread_count alterado)
+          if (payload.eventType === 'UPDATE') {
+            const updatedStatus = payload.new;
+            const conversationId = updatedStatus.conversation_id;
+            
+            // Atualizar a lista de conversas com o novo valor do contador
+            setConversations(prevConversations => {
+              return prevConversations.map(conv => {
+                if (conv.id === conversationId) {
+                  // Encontrou a conversa que foi atualizada
+                  console.log(`[Chat Realtime - UPDATE] Atualizando contador LOCALMENTE para conversa ${conversationId}: ${updatedStatus.unread_count}`); // LOG ADICIONADO
+                  return {
+                    ...conv,
+                    unread_count: updatedStatus.unread_count || 0
+                  };
+                }
+                return conv;
+              });
+            });
+          }
+        }
+      );
+    
+    // Iniciar a subscription
+    channel.subscribe((status) => {
+      console.log('[realtimeEffect] Status da subscription:', status);
+    });
+    
+    // Limpar a subscription quando o componente for desmontado
+    return () => {
+      console.log('[realtimeEffect] Limpando subscription');
+      supabase.removeChannel(channel);
+    };
+  }, [setConversations]); // Dependência adicionada: setConversations
 
   // Monitorar mudanças na seleção de conversas para marcar como fechada quando desselecionada
   const previousConversationIdRef = useRef<string | null>(selectedConversationId);
@@ -198,6 +250,7 @@ const Chat: React.FC = () => {
 
       // Atualizar a lista de conversas
       setConversations(prevConversations => {
+        console.log(`[processMessages] Recebida mensagem para ${remoteJid}. Processando...`); // LOG ADICIONADO
         // Verificar se já existe uma conversa com esse remoteJid
         const existingConversationIndex = prevConversations.findIndex(
           c => c.id === remoteJid
@@ -223,12 +276,28 @@ const Chat: React.FC = () => {
           // Se a conversa NÃO estiver selecionada E a mensagem NÃO for do usuário, incrementa o contador
           if (!isSelectedConversation && !fromMe) {
             unreadCount += 1;
-            console.log(`Incrementando contador para ${remoteJid} de ${conversation.unread_count || 0} para ${unreadCount}`);
+            console.log(`[processMessages] INCREMENTANDO contador para ${remoteJid} de ${conversation.unread_count || 0} para ${unreadCount}`); // LOG ADICIONADO
+            
+            // Publicar evento para atualizar o contador diretamente na interface
+            publish(EVENTS.MESSAGE_COUNTER_UPDATE, {
+              conversationId: remoteJid,
+              count: unreadCount
+            });
           } else if (isSelectedConversation) {
             // Se a conversa estiver selecionada, garantir que o contador seja zero
             // independentemente de quem enviou a mensagem
             unreadCount = 0;
-            console.log(`Conversa ${remoteJid} está selecionada. Zerando contador.`);
+            console.log(`[processMessages] ZERANDO contador para ${remoteJid} (conversa selecionada).`); // LOG ADICIONADO
+            
+            // Publicar evento para zerar o contador na interface
+            publish(EVENTS.MESSAGE_COUNTER_UPDATE, {
+              conversationId: remoteJid,
+              count: 0
+            });
+          } else {
+            // Se a conversa não estiver selecionada e a mensagem for minha, manter o contador
+            console.log(`[processMessages] MANTENDO contador para ${remoteJid} (conversa não selecionada, msg minha).`); // LOG ADICIONADO
+            unreadCount = conversation.unread_count || 0;
           }
           
           // Formatando a data atual para usar como timestamp
@@ -244,8 +313,10 @@ const Chat: React.FC = () => {
             unread_count: unreadCount,
             instanceName: instanceName || conversation.instanceName // Manter ou atualizar a instância
           });
+          console.log(`[processMessages] Conversa ${remoteJid} atualizada e movida para o topo.`); // LOG ADICIONADO
         } else {
           // Nova conversa: criar e adicionar ao topo da lista
+          console.log(`[processMessages] Criando NOVA conversa para ${remoteJid}`); // LOG ADICIONADO
           // Extrair informações do remoteJid (nome, telefone)
           const phoneNumber = remoteJid.split('@')[0];
           const displayName = phoneNumber; // Poderia buscar o nome em uma lista de contatos
@@ -271,6 +342,7 @@ const Chat: React.FC = () => {
             sector: 'Geral', // Setor padrão
             instanceName: instanceName // Registrar qual instância recebeu esta conversa
           };
+          console.log(`[processMessages] Nova conversa criada:`, newConversation); // LOG ADICIONADO
           
           // Adicionar conversa ao array local
           updatedConversations.unshift(newConversation as any);
@@ -284,6 +356,7 @@ const Chat: React.FC = () => {
 
         // Definir as conversas finais
         finalConversations = updatedConversations;
+        console.log(`[processMessages] Estado final das conversas após processar mensagem:`, finalConversations); // LOG ADICIONADO
         
         // Salvar as conversas atualizadas no localStorage para acesso rápido na próxima vez
         saveConversationsToLocalStorage(finalConversations);

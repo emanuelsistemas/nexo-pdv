@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { subscribe, EVENTS } from '../../services/eventBus';
 
 interface MessageCounterProps {
   conversationId: string;
@@ -75,14 +76,48 @@ const MessageCounter: React.FC<MessageCounterProps> = ({
       loadUnreadCount();
     }
   }, [conversationId]);
+  
+  // Escutar eventos de atualização do contador via EventBus
+  useEffect(() => {
+    if (!conversationId) return;
+    
+    console.log(`[MessageCounter] Configurando listener de eventos para ${conversationId}`);
+    
+    // Inscrever-se para receber atualizações diretas do contador
+    const unsubscribe = subscribe(EVENTS.MESSAGE_COUNTER_UPDATE, (data) => {
+      // Verificar se o evento é para esta conversa
+      if (data && data.conversationId === conversationId) {
+        console.log(`[MessageCounter:EventBus] Atualizando contador para ${conversationId}: ${data.count}`);
+        
+        // Atualizar o estado
+        setCount(data.count);
+        
+        // Notificar o componente pai sobre a mudança
+        if (onCountChange) {
+          onCountChange(data.count);
+        }
+      }
+    });
+    
+    // Limpar inscrição quando o componente for desmontado
+    return () => {
+      console.log(`[MessageCounter] Removendo listener de eventos para ${conversationId}`);
+      unsubscribe();
+    };
+  }, [conversationId, onCountChange]);
 
   // Configurar um listener para mudanças na tabela nexochat_status
   useEffect(() => {
     if (!conversationId) return;
+    
+    console.log(`[MessageCounter] Configurando realtime para conversationId ${conversationId}`);
 
+    // Criar um identificador único para o canal baseado no ID da conversa
+    const channelId = `nexochat_status_changes_${conversationId}`;
+    
     // Inscrever-se para receber atualizações da tabela nexochat_status
-    const subscription = supabase
-      .channel('nexochat_status_changes')
+    const channel = supabase
+      .channel(channelId)
       .on(
         'postgres_changes',
         {
@@ -91,17 +126,33 @@ const MessageCounter: React.FC<MessageCounterProps> = ({
           table: 'nexochat_status',
           filter: `conversation_id=eq.${conversationId}`
         },
-        (_payload) => {
-          // Quando houver uma mudança na tabela, recarregar o contador
-          // Usamos _ para indicar que não estamos usando o parâmetro
-          loadUnreadCount();
+        (payload) => {
+          // Quando houver uma mudança na tabela, atualizar diretamente o contador
+          console.log(`[MessageCounter] Evento realtime recebido para ${conversationId}:`, payload);
+          
+          if (payload.eventType === 'UPDATE' && payload.new) {
+            const newCount = payload.new.unread_count || 0;
+            console.log(`[MessageCounter] Atualizando contador para ${conversationId}: ${newCount}`);
+            setCount(newCount);
+            
+            // Notificar o componente pai sobre a mudança
+            if (onCountChange) {
+              onCountChange(newCount);
+            }
+          } else {
+            // Para outros tipos de eventos (INSERT, DELETE), recarregar o contador
+            loadUnreadCount();
+          }
         }
       )
-      .subscribe();
-
-    // Limpar a inscrição quando o componente desmontar
+      .subscribe((status) => {
+        console.log(`[MessageCounter] Status da subscription para ${conversationId}:`, status);
+      });
+    
+    // Limpar a subscription quando o componente for desmontado
     return () => {
-      subscription.unsubscribe();
+      console.log(`[MessageCounter] Removendo canal para ${conversationId}`);
+      supabase.removeChannel(channel);
     };
   }, [conversationId]);
 

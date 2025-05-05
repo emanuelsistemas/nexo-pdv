@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
 import { Conversation, ConversationStatus } from '../../types/chat';
 import MessageCounter from './MessageCounter';
 
@@ -11,12 +12,66 @@ interface ConversationListProps {
 }
 
 const ConversationList: React.FC<ConversationListProps> = ({
-  conversations,
+  conversations: initialConversations,
   selectedConversationId,
   onSelectConversation,
   statusFilter,
   isLoading = false
 }) => {
+  // Estado local para armazenar as conversas (permitindo atualizações em tempo real)
+  const [conversations, setConversations] = useState(initialConversations);
+  
+  // Atualizar o estado local quando as props mudarem
+  useEffect(() => {
+    setConversations(initialConversations);
+  }, [initialConversations]);
+  
+  // Configurar Realtime subscription para todas as conversas
+  useEffect(() => {
+    console.log('[ConversationList] Configurando subscription para nexochat_status');
+    
+    // Criar canal para mudanças na tabela nexochat_status
+    const channel = supabase
+      .channel('conversation_list_updates')
+      .on('postgres_changes', 
+          { 
+            event: 'UPDATE', 
+            schema: 'public',
+            table: 'nexochat_status'
+          }, 
+          (payload) => {
+            console.log('[ConversationList] Atualização detectada:', payload);
+            
+            if (!payload.new || !payload.new.conversation_id) return;
+            
+            const updatedConversationId = payload.new.conversation_id;
+            const updatedUnreadCount = payload.new.unread_count || 0;
+            
+            // Atualizar a conversa específica com o novo contador
+            setConversations(currentConversations => {
+              return currentConversations.map(conv => {
+                if (conv.id === updatedConversationId) {
+                  console.log(`[ConversationList] Atualizando contador para ${updatedConversationId}: ${updatedUnreadCount}`);
+                  return {
+                    ...conv,
+                    unread_count: updatedUnreadCount
+                  };
+                }
+                return conv;
+              });
+            });
+          }
+      )
+      .subscribe((status) => {
+        console.log('[ConversationList] Status da subscription:', status);
+      });
+    
+    // Limpar a subscription quando o componente for desmontado
+    return () => {
+      console.log('[ConversationList] Limpando subscription');
+      supabase.removeChannel(channel);
+    };
+  }, []);
   // Filtrar conversas com base no statusFilter
   const filteredConversations = conversations.filter(
     (conversation) => statusFilter === 'all' || conversation.status === statusFilter
