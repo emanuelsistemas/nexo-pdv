@@ -280,14 +280,15 @@ const Chat: React.FC = () => {
         content = '[Mensagem desconhecida]';
       }
 
-      // Incluir informação sobre a instância nos metadados da mensagem
+      // Incluir informação sobre a instância e setor nos metadados da mensagem
       const newMessage: ChatMessage = {
         id: msg.key.id,
         content,
         sender: fromMe ? 'me' : 'them',
         timestamp,
-        instanceName: instanceName // Adicionando o nome da instância como metadado
-      };
+        instanceName: instanceName, // Adicionando o nome da instância como metadado
+        setor: selectedSector // Adicionando o setor selecionado atualmente
+      } as ChatMessage & { setor: string }; // Type assertion para incluir o campo setor
 
       // Atualizar a lista de conversas
       setConversations(prevConversations => {
@@ -306,6 +307,9 @@ const Chat: React.FC = () => {
           
           const updatedMessages = [...conversation.messages, newMessage];
           
+          // Extrair o número de telefone do remoteJid para uso abaixo
+          const phoneNumber = remoteJid.split('@')[0];
+          
           // Atualizar unread_count apenas se não for a conversa selecionada e não for do usuário
           const unreadCount = 
             selectedConversationId === remoteJid || fromMe ? 
@@ -320,6 +324,21 @@ const Chat: React.FC = () => {
             unread_count: unreadCount,
             instanceName: instanceName || conversation.instanceName // Manter ou atualizar a instância
           });
+          
+          // CORREÇÃO: Salvar a mensagem no banco de dados
+          if (revendaId) {
+            console.log('[Chat] Salvando mensagem no banco de dados - conversa existente');
+            whatsappStorage.saveMessage(
+              newMessage,
+              revendaId,
+              conversation.name || conversation.contactName || phoneNumber,
+              remoteJid
+            ).catch(error => {
+              console.error('[Chat] Erro ao salvar mensagem no banco:', error);
+            });
+          } else {
+            console.error('[Chat] Não é possível salvar a mensagem: revendaId não disponível');
+          }
         } else {
           // Nova conversa: criar e adicionar ao topo da lista
           // Extrair informações do remoteJid (nome, telefone)
@@ -339,6 +358,21 @@ const Chat: React.FC = () => {
             sector: 'Geral', // Setor padrão
             instanceName: instanceName // Registrar qual instância recebeu esta conversa
           });
+          
+          // CORREÇÃO: Salvar a mensagem no banco de dados (nova conversa)
+          if (revendaId) {
+            console.log('[Chat] Salvando mensagem no banco de dados - nova conversa');
+            whatsappStorage.saveMessage(
+              newMessage,
+              revendaId,
+              displayName,
+              remoteJid
+            ).catch(error => {
+              console.error('[Chat] Erro ao salvar mensagem no banco:', error);
+            });
+          } else {
+            console.error('[Chat] Não é possível salvar a mensagem: revendaId não disponível');
+          }
         }
 
         return updatedConversations;
@@ -558,21 +592,47 @@ const Chat: React.FC = () => {
         console.log('RevendaId para processamento:', currentRevendaId);
         
         // Verificar a estrutura correta das mensagens na versão mais recente da API
-        const messages = data.data?.messages || data.messages;
+        // Na nova estrutura da API, o objeto mensagem está diretamente em data.data
+        // Se for uma única mensagem, tratamos diretamente
+
+        // Verificar se temos o formato antigo (array) ou o novo formato (objeto único)
+        let messagesToProcess = [];
         
-        if (messages && Array.isArray(messages) && messages.length > 0) {
-          console.log('Número de mensagens recebidas:', messages.length);
-          console.log('Primeira mensagem estrutura:', JSON.stringify(messages[0], null, 2));
+        // Formato antigo - mensagens em um array
+        if (data.data?.messages && Array.isArray(data.data.messages)) {
+          messagesToProcess = data.data.messages;
+          console.log('Usando formato antigo: data.data.messages (array)');
+        } 
+        // Formato antigo alternativo
+        else if (data.messages && Array.isArray(data.messages)) {
+          messagesToProcess = data.messages;
+          console.log('Usando formato antigo alternativo: data.messages (array)');
+        } 
+        // Novo formato - a mensagem é o próprio objeto data.data
+        else if (data.data && data.data.key && data.data.message) {
+          messagesToProcess = [data.data]; // Colocar em um array para manter compatibilidade
+          console.log('Usando novo formato: data.data (objeto único)');
+        }
+        // Nenhum formato reconhecido
+        else {
+          console.warn('Formato de mensagem não reconhecido:', data);
+          return; // Sair se não reconhecemos o formato
+        }
+        
+        console.log('Número de mensagens a processar:', messagesToProcess.length);
+        
+        if (messagesToProcess.length > 0) {
+          console.log('Estrutura da primeira mensagem:', JSON.stringify(messagesToProcess[0], null, 2));
           // Processar mensagens para atualizar a UI
-          processMessages(messages, instanceName);
+          processMessages(messagesToProcess, data.instance || instanceName);
           
           // Continuar apenas se tivermos um revendaId válido
           if (currentRevendaId) {
             console.log('=== INICIANDO SALVAMENTO NO BANCO DE DADOS ===');
             console.log('RevendaId usado para salvamento:', currentRevendaId);
             try {
-              messages.forEach(async (msg: any, index: number) => {
-                console.log(`Processando mensagem ${index + 1}/${messages.length}`);
+              messagesToProcess.forEach(async (msg: any, index: number) => {
+                console.log(`Processando mensagem ${index + 1}/${messagesToProcess.length}`);
                 if (!msg || !msg.key || !msg.key.remoteJid) {
                   console.log('Mensagem inválida recebida, pulando:', msg);
                   return;
@@ -625,8 +685,9 @@ const Chat: React.FC = () => {
                   content: content,
                   sender: fromMe ? 'me' : 'them',
                   timestamp: timestamp,
-                  instanceName: instanceName || ''
-                };
+                  instanceName: instanceName || '',
+                  setor: selectedSector // Incluir o setor atualmente selecionado
+                } as ChatMessage & { setor: string }; // Type assertion para incluir o campo setor
                 
                 // Extrair nome do contato (usamos o número como fallback)
                 const contactName = remoteJid.split('@')[0];
