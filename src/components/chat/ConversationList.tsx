@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
 import { Conversation, ConversationStatus } from '../../types/chat';
 
 import axios from 'axios';
@@ -13,163 +13,150 @@ interface AvatarProps {
   size?: number;
 }
 
-const Avatar: React.FC<AvatarProps> = ({ imageUrl, name, phone, size = 40 }) => {
-  const [imageError, setImageError] = useState(false);
-  const [directImageUrl, setDirectImageUrl] = useState<string | null>(imageUrl || null);
+// Componente Avatar otimizado para minimizar renderizações e uso de memória
+const Avatar = React.memo(({ imageUrl, name, phone, size = 40 }: AvatarProps) => {
+  // Referência para controlar se o componente está montado para evitar atualizações de estado em componente desmontado
+  const isMounted = useRef(true);
+  // Memoizar o apiConfig para evitar recriações desnecessárias
   const { apiConfig } = useWhatsAppInstance();
   
-  // Removido log de depuração excessivo para evitar loop infinito
+  // Usar useReducer em vez de múltiplos useState para gerenciar estado de forma mais eficiente
+  const [state, dispatch] = useReducer(
+    (prevState: { imageUrl: string | null; imageError: boolean }, action: { type: string; payload?: any }) => {
+      switch (action.type) {
+        case 'SET_IMAGE_URL':
+          return { ...prevState, imageUrl: action.payload };
+        case 'SET_IMAGE_ERROR':
+          return { ...prevState, imageError: true };
+        default:
+          return prevState;
+      }
+    },
+    { imageUrl: imageUrl || null, imageError: false }
+  );
   
-  // Função para salvar avatar no localStorage
-  const saveAvatarToLocalStorage = (phoneNumber: string, url: string) => {
+  // Função para salvar avatar no localStorage com verificação de duplicidade
+  const saveAvatarToLocalStorage = useCallback((phoneNumber: string, url: string) => {
     try {
-      // Obter o cache existente ou criar um novo objeto
       const avatarCache = JSON.parse(localStorage.getItem('whatsapp_avatar_cache') || '{}');
       
-      // Verificar se já existe a mesma URL no cache para evitar operações desnecessárias
-      if (avatarCache[phoneNumber]?.url === url) {
-        return; // Evitar atualização desnecessária se a URL for a mesma
-      }
+      // Evitar operações desnecessárias
+      if (avatarCache[phoneNumber]?.url === url) return;
       
-      // Adicionar/atualizar a entrada para este telefone
       avatarCache[phoneNumber] = {
         url,
         timestamp: new Date().getTime()
       };
       
-      // Salvar o cache atualizado
       localStorage.setItem('whatsapp_avatar_cache', JSON.stringify(avatarCache));
-      // Logs desativados para evitar rerenderizações desnecessárias
-      // console.log(`[Avatar] Salvou avatar no localStorage para ${phoneNumber}`);
     } catch (error) {
-      console.error(`[Avatar] Erro ao salvar no localStorage:`, error);
+      // Manter apenas logs críticos
+      console.error(`[Avatar] Erro ao salvar no localStorage`);
     }
-  };
+  }, []);
   
-  // Função para buscar avatar do localStorage
-  const getAvatarFromLocalStorage = (phoneNumber: string): string | null => {
+  // Função para buscar avatar do localStorage sem causar renderizações
+  const getAvatarFromLocalStorage = useCallback((phoneNumber: string): string | null => {
     try {
       const avatarCache = JSON.parse(localStorage.getItem('whatsapp_avatar_cache') || '{}');
       const cacheEntry = avatarCache[phoneNumber];
       
-      // Se temos um cache e não está expirado (7 dias = 604800000 ms)
-      if (cacheEntry && cacheEntry.url) {
-        const cacheAge = new Date().getTime() - cacheEntry.timestamp;
-        if (cacheAge < 604800000) {
-          // Logs comentados para evitar loops de renderização
-          // console.log(`[Avatar] Usando avatar do localStorage para ${phoneNumber}`);
+      if (cacheEntry?.url) {
+        const cacheAge = new Date().getTime() - (cacheEntry.timestamp || 0);
+        if (cacheAge < 604800000) { // 7 dias
           return cacheEntry.url;
         } else {
-          // Silenciar logs desnecessários
-          // console.log(`[Avatar] Cache expirado para ${phoneNumber}`);
-          // Remover o cache expirado para liberar espaço
+          // Limpar cache expirado silenciosamente
           delete avatarCache[phoneNumber];
           localStorage.setItem('whatsapp_avatar_cache', JSON.stringify(avatarCache));
-          return null;
         }
       }
       return null;
     } catch (error) {
-      // Manter apenas logs de erro crÃ­ticos
-      console.error(`[Avatar] Erro ao ler do localStorage:`, error);
       return null;
     }
-  };
+  }, []);
   
-  // useEffect com dependências controladas para evitar loops
+  // Carregar avatar uma única vez no mount ou quando dependências críticas mudarem
   useEffect(() => {
-    // Criar uma função assíncrona para lidar com o carregamento do avatar
+    // Função para carregar avatar de forma otimizada
     const loadAvatar = async () => {
-      // Se já temos uma URL válida, usar ela
+      // Verificar se o componente ainda está montado
+      if (!isMounted.current) return;
+      
+      // Prioridade 1: Usar URL já fornecida
       if (imageUrl) {
-        setDirectImageUrl(imageUrl);
-        
-        // Salvar no localStorage para uso futuro
-        if (phone) {
-          saveAvatarToLocalStorage(phone, imageUrl);
-        }
+        dispatch({ type: 'SET_IMAGE_URL', payload: imageUrl });
+        if (phone) saveAvatarToLocalStorage(phone, imageUrl);
         return;
       }
       
-      // Tentar buscar do localStorage primeiro
+      // Prioridade 2: Buscar do localStorage
       if (phone) {
         const cachedUrl = getAvatarFromLocalStorage(phone);
         if (cachedUrl) {
-          setDirectImageUrl(cachedUrl);
+          dispatch({ type: 'SET_IMAGE_URL', payload: cachedUrl });
           return;
         }
       }
       
-      // Se não temos uma URL e temos um número de telefone e configuração da API, buscar direto da API
-      if (phone && apiConfig && apiConfig.baseUrl && apiConfig.instanceName) {
-        
-        const formattedPhone = formatPhoneNumber(phone, false);
-        
+      // Prioridade 3: Buscar da API apenas se necessário e possível
+      if (phone && apiConfig?.baseUrl && apiConfig?.instanceName && apiConfig?.apikey) {
         try {
+          const formattedPhone = formatPhoneNumber(phone, false);
           const response = await axios.post(
             `${apiConfig.baseUrl}/chat/fetchProfilePictureUrl/${apiConfig.instanceName}`,
             { number: `${formattedPhone}@s.whatsapp.net` },
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': apiConfig.apikey
-              }
-            }
+            { headers: { 'Content-Type': 'application/json', 'apikey': apiConfig.apikey } }
           );
           
-          if (response.data && response.data.profilePictureUrl) {
+          // Verificar se componente ainda está montado antes de atualizar o estado
+          if (!isMounted.current) return;
+          
+          if (response.data?.profilePictureUrl) {
             const avatarUrl = response.data.profilePictureUrl;
-            
-            // Atualizar o estado e salvar no localStorage
-            setDirectImageUrl(avatarUrl);
-            if (phone) {
-              saveAvatarToLocalStorage(phone, avatarUrl);
-            }
-          } else {
-            setDirectImageUrl(null);
+            dispatch({ type: 'SET_IMAGE_URL', payload: avatarUrl });
+            if (phone) saveAvatarToLocalStorage(phone, avatarUrl);
           }
         } catch (error) {
-          console.error(`[Avatar] Erro ao buscar avatar:`, error);
-          setDirectImageUrl(null);
+          // Silenciar erros para evitar logs excessivos que causam re-renders
         }
       }
     };
     
-    // Executar a função de carregamento
+    // Iniciar carregamento
     loadAvatar();
     
-    // Dependências cuidadosamente controladas para evitar loops
-    // Usamos apenas o phone e imageUrl como dependências principais
-    // Convertemos objetos complexos em strings para evitar rerenderizações desnecessárias
-  }, [phone, imageUrl, apiConfig?.baseUrl, apiConfig?.instanceName, apiConfig?.apikey]);
+    // Cleanup function para evitar memory leaks
+    return () => {
+      isMounted.current = false;
+    };
+  }, [phone, imageUrl, apiConfig?.baseUrl, apiConfig?.instanceName, apiConfig?.apikey, getAvatarFromLocalStorage, saveAvatarToLocalStorage]);
   
+  // Renderização otimizada com mínimas dependências de props
   return (
     <div 
       className="rounded-full flex items-center justify-center bg-[#2A2A2A] text-white overflow-hidden"
       style={{ width: size, height: size }}
-      title={directImageUrl || 'Sem avatar'}
     >
-      {!imageError && directImageUrl ? (
+      {!state.imageError && state.imageUrl ? (
         <img
-          src={directImageUrl}
+          src={state.imageUrl}
           alt={name}
           className="w-full h-full object-cover"
-          onError={() => {
-            // Remover logs do evento de erro para evitar rerenderizações
-            setImageError(true);
-          }}
-          // Remover evento onLoad para evitar rerenderizações desnecessárias
+          onError={() => dispatch({ type: 'SET_IMAGE_ERROR' })}
+          loading="lazy" // Usar lazy loading para melhor performance
         />
       ) : (
         <div className="flex items-center justify-center w-full h-full">
           <svg xmlns="http://www.w3.org/2000/svg" className="w-3/4 h-3/4" viewBox="0 0 24 24" fill="currentColor">
-            <path fillRule="evenodd" d="M12 2.5a5.5 5.5 0 00-3.096 10.047 9.005 9.005 0 00-5.9 8.18.75.75 0 001.5.045 7.5 7.5 0 0114.993 0 .75.75 0 001.499-.044 9.005 9.005 0 00-5.9-8.181A5.5 5.5 0 0012 2.5zM8 8a4 4 0 118 0 4 4 0 01-8 0z" clipRule="evenodd" />
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6.01 3.22z"/>
           </svg>
         </div>
       )}
     </div>
   );
-};
+});
 
 interface ConversationListProps {
   conversations: Conversation[];
@@ -243,32 +230,24 @@ const ConversationList: React.FC<ConversationListProps> = ({
     databasePreview?: string | null;
   }
   
-  // Otimização para evitar rerenderizações usando useMemo para o MessagePreview
-  const MessagePreview: React.FC<MessagePreviewProps> = React.memo(({ conversationId, databasePreview }) => {
-    // Inicializar o estado preview com o valor do banco de dados
-    const [preview, setPreview] = useState<string | null>(databasePreview || null);
+  /**
+   * MessagePreview simplificado e sem atualizações dinâmicas para eliminar piscadas
+   * Usa apenas o valor passado via props sem tentar atualizar do localStorage
+   * Sem hooks, sem estados, sem useEffect - puramente funcional
+   */
+  const MessagePreview: React.FC<MessagePreviewProps> = ({ conversationId, databasePreview }) => {
+    // Buscar a prévia uma única vez ao renderizar, sem atualizações
+    const localPreview = getMessagePreviewFromLocalStorage(conversationId);
     
-    // Usar useEffect apenas uma vez na montagem do componente para evitar loops
-    useEffect(() => {
-      // Tentar obter a prévia mais recente do localStorage
-      const localPreview = getMessagePreviewFromLocalStorage(conversationId);
-      
-      if (localPreview && localPreview.content && localPreview.content !== preview) {
-        // Programa a atualização do estado em um microtask para evitar conflitos com outras renderizações
-        Promise.resolve().then(() => {
-          setPreview(localPreview.content);
-        });
-      }
-      // O array de dependências é apenas o conversationId
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [conversationId]);
+    // Usar a prévia do localStorage ou a do banco de dados, sem atualizações dinâmicas
+    const preview = (localPreview && localPreview.content) || databasePreview || null;
     
     return (
       <p className="text-sm text-gray-400 truncate">
         {truncateText(preview, 30)}
       </p>
     );
-  });
+  };
 
   // A função getStatusColor foi removida pois não está mais sendo usada
 
