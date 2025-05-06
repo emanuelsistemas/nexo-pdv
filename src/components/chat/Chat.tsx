@@ -186,6 +186,47 @@ const Chat: React.FC = () => {
     loadUserEmail();
   }, [revendaId]);
 
+  // Efeito para lidar com o fechamento da página
+  useEffect(() => {
+    // Função para marcar a conversa atual como fechada
+    const markCurrentConversationAsClosed = async () => {
+      if (selectedConversationId && revendaId) {
+        try {
+          console.log('Fechando conversa atual antes de sair da página:', selectedConversationId);
+          const phone = selectedConversationId.split('@')[0];
+          if (phone) {
+            await supabase
+              .from('whatsapp_revenda_status')
+              .update({ 
+                status_msg: 'fechada',
+                updated_at: new Date().toISOString() 
+              })
+              .eq('revenda_id', revendaId)
+              .eq('phone', phone);
+          }
+        } catch (error) {
+          console.error('Erro ao fechar conversa antes de sair:', error);
+        }
+      }
+    };
+
+    // Handler para o evento beforeunload
+    const handleBeforeUnload = () => {
+      markCurrentConversationAsClosed();
+      // Note: não podemos retornar uma Promise aqui, pois beforeunload não espera por Promises
+    };
+
+    // Adicionar o event listener
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Cleanup function
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Também vamos marcar a conversa como fechada quando o componente for desmontado
+      markCurrentConversationAsClosed();
+    };
+  }, [selectedConversationId, revendaId]);
+
   // Calcular contagens para as abas de status
   useEffect(() => {
     const newStatusTabs = statusTabs.map(tab => {
@@ -398,6 +439,38 @@ const Chat: React.FC = () => {
 
   // Quando seleciona uma conversa
   const handleSelectConversation = useCallback((conversationId: string) => {
+    // Se já tínhamos uma conversa selecionada anteriormente, marcá-la como fechada
+    if (selectedConversationId && selectedConversationId !== conversationId && revendaId) {
+      try {
+        console.log('Marcando conversa anterior como FECHADA:', selectedConversationId);
+        // Usar o método adequado no whatsappStorage para fechar a conversa anterior
+        const closeConversation = async () => {
+          try {
+            const phone = selectedConversationId.split('@')[0];
+            if (phone) {
+              await supabase
+                .from('whatsapp_revenda_status')
+                .update({ 
+                  status_msg: 'fechada',
+                  updated_at: new Date().toISOString() 
+                })
+                .eq('revenda_id', revendaId)
+                .eq('phone', phone);
+              
+              console.log('Conversa anterior marcada como fechada com sucesso');
+            }
+          } catch (closeError) {
+            console.error('Erro ao fechar conversa anterior:', closeError);
+          }
+        };
+        
+        // Executar a função assíncrona
+        closeConversation();
+      } catch (error) {
+        console.error('Erro ao tentar fechar conversa anterior:', error);
+      }
+    }
+    
     // Resetar posição de rolagem
     setScrollPosition(undefined);
     
@@ -407,7 +480,7 @@ const Chat: React.FC = () => {
       setScrollPosition(savedData.scrollPosition);
     }
     
-    // Limpar contador de não lidas
+    // Limpar contador de não lidas no estado local
     setConversations(prevConversations => 
       prevConversations.map(conv => 
         conv.id === conversationId 
@@ -416,9 +489,21 @@ const Chat: React.FC = () => {
       )
     );
     
+    // Resetar contador no banco de dados e definir status_msg como 'aberta'
+    if (revendaId) {
+      try {
+        console.log('Resetando contador e atualizando status para ABERTA:', conversationId);
+        whatsappStorage.resetUnreadCount(conversationId, revendaId)
+          .then(() => console.log('Contador zerado e status atualizado com sucesso'))
+          .catch(err => console.error('Erro ao zerar contador:', err));
+      } catch (error) {
+        console.error('Erro ao tentar resetar contador:', error);
+      }
+    }
+    
     // Atualizar conversa selecionada
     setSelectedConversationId(conversationId);
-  }, [setSelectedConversationId, setConversations]);
+  }, [setSelectedConversationId, setConversations, revendaId, selectedConversationId]);
 
   // Função para enviar mensagem
   const handleSendMessage = useCallback(async (content: string) => {
