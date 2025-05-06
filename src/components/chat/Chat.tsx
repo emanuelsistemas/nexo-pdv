@@ -221,6 +221,39 @@ const Chat: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [selectedConversationId, revendaId]);
   
+  // Efeito para FORÇAR o contador a ser zero para a conversa selecionada - independente do que aconteça
+  useEffect(() => {
+    if (!selectedConversationId) return;
+    
+    console.log('[Chat] ***** FORÇANDO contador zero para a conversa selecionada:', selectedConversationId);
+    
+    // Função para garantir que conversas selecionadas sempre tenham contador zero
+    const forceZeroUnreadCount = () => {
+      setConversations(prevConversations => 
+        prevConversations.map(conv => {
+          if (conv.id === selectedConversationId) {
+            // Se for a conversa selecionada, FORÇAR contador para zero
+            if (conv.unread_count !== 0) {
+              console.log(`[Chat] FORÇANDO contador zero para ${conv.id} (era ${conv.unread_count})`);
+              return {
+                ...conv,
+                unread_count: 0
+              };
+            }
+          }
+          return conv;
+        })
+      );
+    };
+    
+    // Executar imediatamente e também configurar um intervalo para executar periodicamente
+    forceZeroUnreadCount();
+    const intervalId = setInterval(forceZeroUnreadCount, 1000); // Verificar a cada segundo
+    
+    // Cleanup: limpar o intervalo quando mudar a seleção ou desmontar o componente
+    return () => clearInterval(intervalId);
+  }, [selectedConversationId, setConversations]);
+
   // Subscription em tempo real para atualizações de status/contadores no banco
   useEffect(() => {
     if (!revendaId) return;
@@ -263,12 +296,26 @@ const Chat: React.FC = () => {
                     status_msg: statusRecord.status_msg
                   });
                   
-                  // Atualizar apenas o contador e status, manter o restante dos dados
-                  return {
+                  // Importante: Se esta for a conversa selecionada, FORÇAR contador para zero
+                  // independente do valor vindo do banco
+                  if (conv.id === selectedConversationId) {
+                    console.log(`[Chat] Esta é a conversa selecionada - FORÇANDO contador para zero`);
+                    const updatedConv = {
+                      ...conv,
+                      unread_count: 0,
+                      status_msg: 'aberta'
+                    };
+                    return updatedConv;
+                  }
+                  
+                  // Caso contrário, usar o valor do banco
+                  const updatedConv = {
                     ...conv,
-                    unread_count: statusRecord.unread_count || 0,
-                    status_msg: statusRecord.status_msg
+                    // Atualizar o contador de não lidas e o status
+                    unread_count: statusRecord.unread_count !== null && statusRecord.unread_count !== undefined ? 
+                      Number(statusRecord.unread_count) : 0
                   };
+                  return updatedConv;
                 }
                 return conv;
               })
@@ -285,7 +332,7 @@ const Chat: React.FC = () => {
       console.log('[Chat] Limpando subscription do banco de dados');
       supabase.removeChannel(channel);
     };
-  }, [revendaId, setConversations]);
+  }, [revendaId, selectedConversationId, setConversations]);
 
   // Efeito para lidar com o fechamento da página
   useEffect(() => {
