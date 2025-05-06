@@ -18,14 +18,18 @@ const Avatar: React.FC<AvatarProps> = ({ imageUrl, name, phone, size = 40 }) => 
   const [directImageUrl, setDirectImageUrl] = useState<string | null>(imageUrl || null);
   const { apiConfig } = useWhatsAppInstance();
   
-  // Log para depuração na renderização
-  console.log(`[Avatar] Renderizando avatar para ${name}. URL do banco: ${imageUrl || 'não definido'}`);
+  // Removido log de depuração excessivo para evitar loop infinito
   
   // Função para salvar avatar no localStorage
   const saveAvatarToLocalStorage = (phoneNumber: string, url: string) => {
     try {
       // Obter o cache existente ou criar um novo objeto
       const avatarCache = JSON.parse(localStorage.getItem('whatsapp_avatar_cache') || '{}');
+      
+      // Verificar se já existe a mesma URL no cache para evitar operações desnecessárias
+      if (avatarCache[phoneNumber]?.url === url) {
+        return; // Evitar atualização desnecessária se a URL for a mesma
+      }
       
       // Adicionar/atualizar a entrada para este telefone
       avatarCache[phoneNumber] = {
@@ -35,7 +39,8 @@ const Avatar: React.FC<AvatarProps> = ({ imageUrl, name, phone, size = 40 }) => 
       
       // Salvar o cache atualizado
       localStorage.setItem('whatsapp_avatar_cache', JSON.stringify(avatarCache));
-      console.log(`[Avatar] Salvou avatar no localStorage para ${phoneNumber}`);
+      // Logs desativados para evitar rerenderizações desnecessárias
+      // console.log(`[Avatar] Salvou avatar no localStorage para ${phoneNumber}`);
     } catch (error) {
       console.error(`[Avatar] Erro ao salvar no localStorage:`, error);
     }
@@ -51,49 +56,55 @@ const Avatar: React.FC<AvatarProps> = ({ imageUrl, name, phone, size = 40 }) => 
       if (cacheEntry && cacheEntry.url) {
         const cacheAge = new Date().getTime() - cacheEntry.timestamp;
         if (cacheAge < 604800000) {
-          console.log(`[Avatar] Usando avatar do localStorage para ${phoneNumber}`);
+          // Logs comentados para evitar loops de renderização
+          // console.log(`[Avatar] Usando avatar do localStorage para ${phoneNumber}`);
           return cacheEntry.url;
         } else {
-          console.log(`[Avatar] Cache expirado para ${phoneNumber}`);
+          // Silenciar logs desnecessários
+          // console.log(`[Avatar] Cache expirado para ${phoneNumber}`);
+          // Remover o cache expirado para liberar espaço
+          delete avatarCache[phoneNumber];
+          localStorage.setItem('whatsapp_avatar_cache', JSON.stringify(avatarCache));
           return null;
         }
       }
       return null;
     } catch (error) {
+      // Manter apenas logs de erro crÃ­ticos
       console.error(`[Avatar] Erro ao ler do localStorage:`, error);
       return null;
     }
   };
   
+  // useEffect com dependências controladas para evitar loops
   useEffect(() => {
-    // Se já temos uma URL válida, usar ela
-    if (imageUrl) {
-      setDirectImageUrl(imageUrl);
-      console.log(`[Avatar] Usando URL do banco para ${name}: ${imageUrl}`);
-      // Salvar no localStorage para uso futuro
-      if (phone) {
-        saveAvatarToLocalStorage(phone, imageUrl);
-      }
-      return;
-    }
-    
-    // Tentar buscar do localStorage primeiro
-    if (phone) {
-      const cachedUrl = getAvatarFromLocalStorage(phone);
-      if (cachedUrl) {
-        setDirectImageUrl(cachedUrl);
+    // Criar uma função assíncrona para lidar com o carregamento do avatar
+    const loadAvatar = async () => {
+      // Se já temos uma URL válida, usar ela
+      if (imageUrl) {
+        setDirectImageUrl(imageUrl);
+        
+        // Salvar no localStorage para uso futuro
+        if (phone) {
+          saveAvatarToLocalStorage(phone, imageUrl);
+        }
         return;
       }
-    }
-    
-    // Se não temos uma URL e temos um número de telefone e configuração da API, buscar direto da API
-    if (phone && apiConfig) {
-      console.log(`[Avatar] Buscando avatar diretamente da API para ${name} (${phone})`);
       
-      const formattedPhone = formatPhoneNumber(phone, false);
+      // Tentar buscar do localStorage primeiro
+      if (phone) {
+        const cachedUrl = getAvatarFromLocalStorage(phone);
+        if (cachedUrl) {
+          setDirectImageUrl(cachedUrl);
+          return;
+        }
+      }
       
-      // Buscar da API Evolution diretamente
-      const fetchAvatarUrl = async () => {
+      // Se não temos uma URL e temos um número de telefone e configuração da API, buscar direto da API
+      if (phone && apiConfig && apiConfig.baseUrl && apiConfig.instanceName) {
+        
+        const formattedPhone = formatPhoneNumber(phone, false);
+        
         try {
           const response = await axios.post(
             `${apiConfig.baseUrl}/chat/fetchProfilePictureUrl/${apiConfig.instanceName}`,
@@ -108,24 +119,29 @@ const Avatar: React.FC<AvatarProps> = ({ imageUrl, name, phone, size = 40 }) => 
           
           if (response.data && response.data.profilePictureUrl) {
             const avatarUrl = response.data.profilePictureUrl;
-            console.log(`[Avatar] Obteve avatar da API para ${name}: ${avatarUrl}`);
-            setDirectImageUrl(avatarUrl);
             
-            // Salvar no localStorage para uso futuro
-            saveAvatarToLocalStorage(phone, avatarUrl);
+            // Atualizar o estado e salvar no localStorage
+            setDirectImageUrl(avatarUrl);
+            if (phone) {
+              saveAvatarToLocalStorage(phone, avatarUrl);
+            }
           } else {
-            console.log(`[Avatar] API não retornou avatar para ${name}`);
+            setDirectImageUrl(null);
           }
         } catch (error) {
-          console.error(`[Avatar] Erro ao buscar avatar da API para ${name}:`, error);
+          console.error(`[Avatar] Erro ao buscar avatar:`, error);
+          setDirectImageUrl(null);
         }
-      };
-      
-      fetchAvatarUrl();
-    } else {
-      console.log(`[Avatar] Sem dados suficientes para buscar avatar para ${name}. Phone: ${phone}, API config: ${apiConfig ? 'sim' : 'não'}`);
-    }
-  }, [imageUrl, name, phone, apiConfig]);
+      }
+    };
+    
+    // Executar a função de carregamento
+    loadAvatar();
+    
+    // Dependências cuidadosamente controladas para evitar loops
+    // Usamos apenas o phone e imageUrl como dependências principais
+    // Convertemos objetos complexos em strings para evitar rerenderizações desnecessárias
+  }, [phone, imageUrl, apiConfig?.baseUrl, apiConfig?.instanceName, apiConfig?.apikey]);
   
   return (
     <div 
@@ -229,21 +245,24 @@ const ConversationList: React.FC<ConversationListProps> = ({
   }
   
   const MessagePreview: React.FC<MessagePreviewProps> = ({ conversationId, databasePreview }) => {
+    // Inicializar o estado preview com o valor do banco de dados
     const [preview, setPreview] = useState<string | null>(databasePreview || null);
     
+    // Usar useEffect apenas uma vez na montagem do componente para evitar loops
     useEffect(() => {
       // Tentar obter a prévia mais recente do localStorage
       const localPreview = getMessagePreviewFromLocalStorage(conversationId);
       
       if (localPreview && localPreview.content) {
-        // Sempre preferir a prévia do localStorage pois ela é em tempo real
-        console.log(`[MessagePreview] Usando prévia do localStorage para ${conversationId}`);
-        setPreview(localPreview.content);
-      } else if (databasePreview) {
-        // Se não temos prévia no localStorage, mas temos no banco, usar a do banco
-        console.log(`[MessagePreview] Usando prévia do banco para ${conversationId}`);
+        // Atualizar apenas se for diferente do estado atual para evitar loops
+        if (localPreview.content !== preview) {
+          // Remover logs excessivos para evitar poluir o console
+          // console.log(`[MessagePreview] Usando prévia do localStorage para ${conversationId}`);
+          setPreview(localPreview.content);
+        }
       }
-    }, [conversationId, databasePreview]);
+      // O array de dependências é apenas o conversationId; não incluímos preview para evitar loops
+    }, [conversationId]);
     
     return (
       <p className="text-sm text-gray-400 truncate">
