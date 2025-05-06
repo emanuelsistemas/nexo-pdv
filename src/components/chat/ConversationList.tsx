@@ -50,24 +50,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
     return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
   };
 
-  // Função para determinar a cor do status
-  const getStatusColor = (status: ConversationStatus): string => {
-    switch (status) {
-      case 'pendente':
-      case 'Pendentes':
-        return 'bg-yellow-500';
-      case 'Atendendo':
-        return 'bg-blue-500';
-      case 'Finalizados':
-        return 'bg-green-500';
-      case 'Aguardando':
-        return 'bg-purple-500';
-      case 'deletado':
-        return 'bg-red-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
+  // A função getStatusColor foi removida pois não está mais sendo usada
 
   return (
     <div className="h-full overflow-y-auto">
@@ -102,12 +85,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
                     )}
                   </div>
                   
-                  {/* Indicador de status */}
-                  <div
-                    className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-[#1e1e1e] ${getStatusColor(
-                      conversation.status
-                    )}`}
-                  />
+                  {/* Indicador de status removido */}
                 </div>
 
                 <div className="flex-1 min-w-0">
