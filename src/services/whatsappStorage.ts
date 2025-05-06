@@ -648,10 +648,19 @@ export const whatsappStorage = {
         last_message_time: timestampNumber,
         // Manter o status e setor se existirem, caso contrário usar padrões
         status: existingData?.status || 'Aguardando',
-        // Se a conversa está selecionada ou a mensagem é nossa, manter o status
-        status_msg: isSelected ? 'aberta' : (isFromMe ? existingData?.status_msg || 'fechada' : 'fechada'),
-        // Se a conversa está selecionada ou a mensagem é nossa, zerar o contador
-        unread_count: isSelected || isFromMe ? 0 : (existingData ? (existingData.unread_count || 0) + 1 : 1),
+        // Tratamento especial para status_msg
+        // 1. Se a conversa está EXPLICITAMENTE marcada como selecionada, manter como 'aberta'
+        // 2. Se já está como 'aberta' no banco, manter como 'aberta' (não mudar o status de uma conversa aberta)
+        // 3. Para os demais casos, seguir a lógica anterior
+        status_msg: isSelected ? 'aberta' : 
+                   (existingData?.status_msg === 'aberta' ? 'aberta' : 
+                   (isFromMe ? existingData?.status_msg || 'fechada' : 'fechada')),
+
+        // Se 'status_msg' for 'aberta' ou conversa selecionada, zerar contador
+        // caso contrário, seguir regra anterior
+        unread_count: isSelected || isFromMe || existingData?.status_msg === 'aberta' ? 
+                      0 : 
+                      (existingData ? (existingData.unread_count || 0) + 1 : 1),
         // Manter o setor existente ou usar o novo
         setor: existingData?.setor || setor,
         // Manter a posição de rolagem se existir

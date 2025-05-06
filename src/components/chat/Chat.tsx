@@ -186,6 +186,41 @@ const Chat: React.FC = () => {
     loadUserEmail();
   }, [revendaId]);
 
+  // Efeito para atualizar diretamente o status da conversa selecionada para 'aberta'
+  useEffect(() => {
+    // Se temos uma conversa selecionada, garantir que está marcada como 'aberta'
+    const ensureConversationIsOpen = async () => {
+      if (selectedConversationId && revendaId) {
+        try {
+          console.log('[Chat IMPORTANTE] Garantindo que a conversa selecionada está marcada como ABERTA:', selectedConversationId);
+          const phone = selectedConversationId.split('@')[0];
+          if (phone) {
+            await supabase
+              .from('whatsapp_revenda_status')
+              .update({ 
+                status_msg: 'aberta',
+                unread_count: 0,
+                updated_at: new Date().toISOString() 
+              })
+              .eq('revenda_id', revendaId)
+              .eq('phone', phone);
+          }
+        } catch (error) {
+          console.error('Erro ao marcar conversa como aberta:', error);
+        }
+      }
+    };
+    
+    // Executar a função sempre que selectedConversationId mudar
+    ensureConversationIsOpen();
+    
+    // Configurar um intervalo para verificar periodicamente (a cada 5 segundos)
+    const intervalId = setInterval(ensureConversationIsOpen, 5000);
+    
+    // Limpar o intervalo quando o componente for desmontado
+    return () => clearInterval(intervalId);
+  }, [selectedConversationId, revendaId]);
+
   // Efeito para lidar com o fechamento da página
   useEffect(() => {
     // Função para marcar a conversa atual como fechada
@@ -369,7 +404,11 @@ const Chat: React.FC = () => {
           // CORREÇÃO: Salvar a mensagem no banco de dados
           if (revendaId) {
             // Verificar se a conversa atual é a selecionada
+            console.log(`[Chat DEBUG] =========== COMPARAÇÃO DE IDs ===========`);
+            console.log(`[Chat DEBUG] selectedConversationId: "${selectedConversationId}"`);
+            console.log(`[Chat DEBUG] remoteJid: "${remoteJid}"`);
             const isCurrentlySelected = selectedConversationId === remoteJid;
+            console.log(`[Chat DEBUG] Resultado da comparação: ${isCurrentlySelected ? 'CONVERSA SELECIONADA' : 'CONVERSA NÃO SELECIONADA'}`);
             
             console.log(`[Chat] Salvando mensagem no banco de dados - conversa ${isCurrentlySelected ? 'SELECIONADA' : 'não selecionada'}`);
             whatsappStorage.saveMessage(
