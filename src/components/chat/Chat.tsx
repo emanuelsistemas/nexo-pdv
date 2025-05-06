@@ -374,44 +374,53 @@ const Chat: React.FC = () => {
       
       console.log('Status da instância:', response.data);
       
-      // PASSO 2: Conectar Socket.io
-      console.log('Conectando Socket.io...');
+      // PASSO 2: Conectar Socket.io - simplificando a inicialização
+      console.log('Conectando Socket.io de forma simplificada...');
       
+      // Criar socket com opções mínimas para evitar sobrecarga inicial
       const socket = io(baseUrl, {
         transports: ['websocket', 'polling'],
-        query: {
-          instance: instanceName
-        },
-        extraHeaders: {
-          'apikey': apikey
-        },
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000
       });
       
-      // Log para todos os eventos
-      socket.onAny((event, ...args) => {
-        console.log(`Socket.io evento: ${event}`, args);
-      });
-      
-      // Eventos principais
+      // Registrar eventos antes de qualquer outra operação
+      // Eventos principais - primeiro o evento de conexão
       socket.on('connect', () => {
         console.log(`Socket.io conectado! ID: ${socket.id}`);
         setIsConnected(true);
         setSocketError(null);
         setConnectionAttempts(0); // Resetar contador após sucesso
         
-        // Enviar subscribe
-        const subscribeMessage = {
-          action: 'subscribe',
-          instance: instanceName
-        };
-        console.log('Enviando subscribe:', subscribeMessage);
-        socket.emit('subscribe', subscribeMessage);
+        // Só configura parâmetros adicionais DEPOIS que a conexão for estabelecida
+        console.log('Configurando parâmetros da instância:', instanceName);
         
-        // Formato alternativo
-        socket.emit('subscribe', instanceName);
+        // Configurar a instância e API key DEPOIS da conexão
+        if (apikey) {
+          socket.io.opts.extraHeaders = { 'apikey': apikey };
+        }
+        
+        socket.io.opts.query = { instance: instanceName };
+        
+        // Agora sim, enviar subscribe após garantir que tudo está configurado
+        setTimeout(() => {
+          // Pequeno delay para garantir que tudo está pronto
+          const subscribeMessage = {
+            action: 'subscribe',
+            instance: instanceName
+          };
+          console.log('Enviando subscribe:', subscribeMessage);
+          socket.emit('subscribe', subscribeMessage);
+          
+          // Formato alternativo
+          socket.emit('subscribe', instanceName);
+        }, 500); // Pequeno delay de segurança
+      });
+      
+      // Log para todos os eventos - registrado DEPOIS do evento principal
+      socket.onAny((event, ...args) => {
+        console.log(`Socket.io evento: ${event}`, args);
       });
       
       socket.on('disconnect', (reason) => {
