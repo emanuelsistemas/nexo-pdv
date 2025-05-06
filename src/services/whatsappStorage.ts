@@ -3,6 +3,24 @@ import { ChatMessage, Conversation, ConversationStatus } from '../types/chat';
 import { loadEvolutionApiConfig } from './storage';
 import { v4 } from 'uuid';
 
+// Interface para os dados da tabela whatsapp_revenda_status
+interface WhatsappRevendaStatus {
+  id: string;
+  revenda_id: string;
+  phone: string;
+  conversation_id?: string;
+  name?: string;
+  last_message?: string;
+  last_message_time: string | number;
+  status?: string;
+  status_msg?: string;
+  unread_count?: number;
+  setor?: string;
+  scroll_position?: number | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 // Função de teste para salvar mensagens diretamente no banco
 export const testSaveMessage = async () => {
   try {
@@ -124,7 +142,7 @@ export const whatsappStorage = {
       throw new Error('revendaId deve ser um UUID válido');
     }
       
-      // Preparar os dados para inserção no banco
+      // Preparar os dados para inserção no banco - apenas dados da mensagem
       const messageData = {
         id: v4(), // Campo id obrigatório na tabela
         revenda_id: revendaId, // Este deve ser um UUID válido
@@ -145,12 +163,11 @@ export const whatsappStorage = {
         message_id: message.id || `${phone}_${new Date().getTime()}`,
         created_at: new Date(), // Adicionar timestamp de criação
         updated_at: new Date(), // Adicionar timestamp de atualização
-        // Campos adicionados da tabela nexochat_status
-        status: 'Aguardando', // Status padrão para novas mensagens
-        status_msg: 'fechada',  // Status da mensagem padrão
-        unread_count: message.sender === 'me' ? 0 : 1, // Se a mensagem é do usuário (me), unread_count = 0, senão = 1
-        setor: (message as any).setor || 'Geral' // Novo campo para armazenar o setor da mensagem
       };
+      
+      // Recebe o setor da mensagem - será usado para atualizar o status da conversa
+      const messageSetor = (message as any).setor || 'Geral';
+      const isFromMe = message.sender === 'me';
       
       console.log('[WhatsappStorage] Dados formatados:', messageData);
 
@@ -274,11 +291,18 @@ export const whatsappStorage = {
             } else {
               console.log('[WhatsappStorage] === MENSAGEM SALVA COM SUCESSO NA TENTATIVA 2 ===');
               console.log('[WhatsappStorage] Resposta do Supabase:', minResult.data);
+              
+              // Mesmo com a tentativa 2 sendo bem-sucedida, continuamos para atualizar o status da conversa
+              await this.updateConversationStatus(phone, revendaId, messageData.content, messageData.timestamp, isFromMe, messageSetor, conversationId);
+              
               return; // Sucesso na tentativa 2
             }
           } else {
             console.log('[WhatsappStorage] === MENSAGEM SALVA COM SUCESSO NA TENTATIVA 1 ===');
             console.log('[WhatsappStorage] Resposta do Supabase:', data);
+            
+            // Depois de salvar a mensagem, atualizar o status da conversa
+            await this.updateConversationStatus(phone, revendaId, messageData.content, messageData.timestamp, isFromMe, messageSetor, conversationId);
           }
         } catch (innerError) {
           console.error('[WhatsappStorage] ERRO INESPERADO DURANTE UPSERT:', innerError);
@@ -424,11 +448,77 @@ export const whatsappStorage = {
    * @param revendaId ID da revenda
    * @param messagesPerConversation Número de mensagens a carregar por conversa
    */
+
   async loadAllConversations(
     revendaId: string,
     messagesPerConversation: number = 20
   ): Promise<Conversation[]> {
     try {
+      console.log('[WhatsappStorage] Carregando todas as conversas para revenda', revendaId);
+      
+      // Em vez de buscar diretamente as mensagens, vamos usar a tabela de status
+      const { data: statusData, error: statusError } = await supabase
+        .from('whatsapp_revenda_status')
+        .select('*')
+        .eq('revenda_id', revendaId)
+        .order('last_message_time', { ascending: false });
+      
+      if (statusError) {
+        console.error('[WhatsappStorage] Erro ao carregar status das conversas:', statusError);
+        // Fallback para o método antigo caso a tabela de status não esteja disponível
+        return this.loadAllConversationsLegacy(revendaId, messagesPerConversation);
+      }
+      
+      if (!statusData || statusData.length === 0) {
+        console.log('[WhatsappStorage] Nenhuma conversa encontrada na tabela de status, tentando método legado');
+        // Tente o método legado se não houver dados de status
+        return this.loadAllConversationsLegacy(revendaId, messagesPerConversation);
+      }
+      
+      console.log('[WhatsappStorage] Encontradas', statusData.length, 'conversas na tabela de status');
+      
+      // Para cada status, carregar as mensagens e construir a conversa
+      const conversations: Conversation[] = [];
+      
+      for (const status of statusData as unknown as WhatsappRevendaStatus[]) {
+        // Converter o ID da conversa para o formato esperado ou usar o padrão
+        const conversationId = status.conversation_id || `${status.phone}@s.whatsapp.net`;
+        
+        // Carregar mensagens para esta conversa
+        const messages = await this.loadMessages(conversationId, revendaId, messagesPerConversation);
+        
+        // Criar objeto de conversa usando dados do status
+        conversations.push({
+          id: conversationId,
+          name: status.name || status.phone,
+          phone: status.phone,
+          contactName: status.name || '',
+          sector: status.setor || '', // Usando o setor da tabela de status
+          lastMessage: status.last_message || '',
+          last_message: status.last_message || '',
+          last_message_time: new Date(status.last_message_time || Date.now()),
+          timestamp: new Date(status.last_message_time || Date.now()),
+          messages: messages,
+          status: (status.status as ConversationStatus) || 'Aguardando',
+          unread_count: status.unread_count || 0,
+          instanceName: messages.length > 0 ? messages[messages.length - 1].instanceName : ''
+        });
+      }
+      
+      return conversations;
+    } catch (error) {
+      console.error('[WhatsappStorage] Erro ao carregar conversas:', error);
+      return [];
+    }
+  },
+  
+  // Método legado para carregar conversas (caso a tabela de status não esteja disponível)
+  async loadAllConversationsLegacy(
+    revendaId: string,
+    messagesPerConversation: number = 20
+  ): Promise<Conversation[]> {
+    try {
+      console.log('[WhatsappStorage] Usando método legado para carregar conversas');
       // Primeiro, buscar todos os números de telefone únicos para esta revenda
       // Obter todos os telefones distintos usando GROUP BY via SQL bruto
       const { data: phones, error: phonesError } = await supabase
@@ -475,14 +565,14 @@ export const whatsappStorage = {
             name: phoneData.name || phoneData.phone,
             phone: phoneData.phone,
             contactName: phoneData.name || '',
-            sector: '', // Campo obrigatório na interface Conversation
+            sector: 'Geral', // Usar setor padrão
             lastMessage: lastMessage.content,
             last_message: lastMessage.content,
             last_message_time: lastMessage.timestamp,
             timestamp: lastMessage.timestamp,
             messages: messages,
-            status: 'open' as ConversationStatus,
-            unread_count: 0, // Inicialmente zero, será atualizado pelo nexochat_status
+            status: 'Aguardando' as ConversationStatus,
+            unread_count: 0,
             instanceName: lastMessage.instanceName
           });
         }
@@ -494,8 +584,349 @@ export const whatsappStorage = {
         return timeB - timeA; // Ordenar do mais recente para o mais antigo
       });
     } catch (error) {
-      console.error('Erro ao carregar conversas do Supabase:', error);
+      console.error('Erro ao carregar conversas do Supabase (legado):', error);
       return [];
+    }
+  },
+  
+  /**
+   * Atualiza o status da conversa na tabela whatsapp_revenda_status
+   * @param phone Número do telefone
+   * @param revendaId ID da revenda
+   * @param lastMessage Última mensagem
+   * @param timestamp Timestamp da mensagem
+   * @param isFromMe Se a mensagem é do usuário
+   * @param setor Setor da conversa
+   * @param conversationId ID completo da conversa (opcional)
+   */
+  async updateConversationStatus(
+    phone: string,
+    revendaId: string,
+    lastMessage: string,
+    timestamp: number | Date,
+    isFromMe: boolean,
+    setor: string = 'Geral',
+    conversationId: string = ''
+  ): Promise<void> {
+    try {
+      console.log('[WhatsappStorage] Atualizando status da conversa para', phone);
+      
+      // Converter timestamp para número se for Date
+      const timestampNumber = timestamp instanceof Date ? timestamp.getTime() : timestamp;
+      
+      // Verificar se a conversa já existe
+      const { data: existingConversation, error: fetchError } = await supabase
+        .from('whatsapp_revenda_status')
+        .select('*')
+        .eq('revenda_id', revendaId)
+        .eq('phone', phone)
+        .maybeSingle();
+        
+      if (fetchError) {
+        console.error('[WhatsappStorage] Erro ao buscar conversa existente:', fetchError);
+        // Se o erro for porque a tabela não existe, é melhor não tentar continuar
+        if (fetchError.message?.includes('does not exist')) {
+          console.error('[WhatsappStorage] A tabela whatsapp_revenda_status não existe. Pulando atualização de status.');
+          return;
+        }
+      }
+      
+      // Tipagem para o existingConversation
+      const existingData = existingConversation as unknown as WhatsappRevendaStatus | null;
+      
+      // Preparar os dados para upsert
+      const statusData: WhatsappRevendaStatus = {
+        // Se não existir, gerar um novo ID, caso contrário manter o existente
+        id: existingData?.id || v4(),
+        revenda_id: revendaId,
+        phone: phone,
+        conversation_id: conversationId || existingData?.conversation_id || `${phone}@s.whatsapp.net`,
+        name: existingData?.name || phone, // Manter o nome existente ou usar o telefone
+        last_message: lastMessage,
+        last_message_time: timestampNumber,
+        // Manter o status e setor se existirem, caso contrário usar padrões
+        status: existingData?.status || 'Aguardando',
+        status_msg: isFromMe ? existingData?.status_msg || 'fechada' : 'fechada',
+        // Se a mensagem é nossa, manter o contador, senão incrementar (ou iniciar com 1)
+        unread_count: isFromMe ? 0 : (existingData ? (existingData.unread_count || 0) + 1 : 1),
+        // Manter o setor existente ou usar o novo
+        setor: existingData?.setor || setor,
+        // Manter a posição de rolagem se existir
+        scroll_position: existingData?.scroll_position || null,
+        // Timestamps
+        updated_at: new Date().toISOString()
+      };
+      
+      // Se não existir, adicionar created_at
+      if (!existingData) {
+        statusData.created_at = new Date().toISOString();
+      }
+      
+      console.log('[WhatsappStorage] Dados do status da conversa:', statusData);
+      
+      // Upsert na tabela de status
+      const { error: upsertError } = await supabase
+        .from('whatsapp_revenda_status')
+        .upsert(statusData as unknown as Record<string, unknown>, {
+          onConflict: 'revenda_id,phone',
+          ignoreDuplicates: false // Queremos atualizar se já existir
+        });
+        
+      if (upsertError) {
+        console.error('[WhatsappStorage] Erro ao atualizar status da conversa:', upsertError);
+      } else {
+        console.log('[WhatsappStorage] Status da conversa atualizado com sucesso');
+      }
+    } catch (error) {
+      console.error('[WhatsappStorage] Erro ao atualizar status da conversa:', error);
+    }
+  },
+  
+  /**
+   * Atualiza o status de uma conversa (Aguardando, Atendendo, Pendentes, Finalizados)
+   * @param conversationId ID da conversa
+   * @param revendaId ID da revenda
+      const { error } = await supabase
+        .from('whatsapp_revenda_status')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('revenda_id', revendaId)
+        .eq('phone', phone);
+        
+      if (error) {
+        console.error('[WhatsappStorage] Erro ao atualizar status:', error);
+        throw error;
+      }
+    } else {
+      // Atualizar o status diretamente
+      const { error } = await supabase
+        .from('whatsapp_revenda_status')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('revenda_id', revendaId)
+        .eq('phone', phone);
+        
+      if (error) {
+        console.error('[WhatsappStorage] Erro ao atualizar status:', error);
+        throw error;
+      }
+    }
+  },
+  
+  /**
+      if (!phone) {
+        throw new Error('ID de conversa inválido');
+      }
+      
+      console.log(`[WhatsappStorage] Atualizando setor da conversa ${phone} para ${newSetor}`);
+      
+      // Verificar se a tabela existe primeiro
+      const { count, error: countError } = await supabase
+        .from('whatsapp_revenda_status')
+        .select('*', { count: 'exact', head: true })
+        .eq('revenda_id', revendaId)
+        .eq('phone', phone);
+      
+      if (countError) {
+        console.error('[WhatsappStorage] Erro ao verificar tabela de status:', countError);
+        // Se o erro for porque a tabela não existe, é melhor não tentar continuar
+        if (countError.message?.includes('does not exist')) {
+          console.error('[WhatsappStorage] A tabela whatsapp_revenda_status não existe. Pulando atualização de setor.');
+          return;
+        }
+        throw countError;
+      }
+      
+      // Se o registro não existir, precisamos criar com o updateConversationStatus
+      if (count === 0) {
+        console.log('[WhatsappStorage] Status não encontrado, criando novo registro');
+        await this.updateConversationStatus(
+          phone,
+          revendaId,
+          '',  // sem mensagem
+          Date.now(),
+          true, // isFromMe
+          newSetor,
+          conversationId
+        );
+      } else {
+        // Atualizar o setor diretamente
+        const { error } = await supabase
+          .from('whatsapp_revenda_status')
+          .update({ setor: newSetor, updated_at: new Date().toISOString() })
+          .eq('revenda_id', revendaId)
+          .eq('phone', phone);
+          
+        if (error) {
+          console.error('[WhatsappStorage] Erro ao atualizar setor:', error);
+          throw error;
+        }
+      }
+      
+      console.log('[WhatsappStorage] Setor atualizado com sucesso');
+    } catch (error) {
+      console.error('[WhatsappStorage] Erro ao atualizar setor:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Zera o contador de mensagens não lidas de uma conversa
+   * @param conversationId ID da conversa
+   * @param revendaId ID da revenda
+   */
+  async resetUnreadCount(
+    conversationId: string,
+    revendaId: string
+  ): Promise<void> {
+    try {
+      // Extrair o telefone do ID da conversa
+      const phone = conversationId.split('@')[0];
+      
+      if (!phone) {
+        throw new Error('ID de conversa inválido');
+      }
+      
+      console.log(`[WhatsappStorage] Zerando contador de mensagens não lidas para ${phone}`);
+      
+      // Verificar se a tabela existe primeiro
+      const { count, error: countError } = await supabase
+        .from('whatsapp_revenda_status')
+        .select('*', { count: 'exact', head: true })
+        .eq('revenda_id', revendaId)
+        .eq('phone', phone);
+      
+      if (countError) {
+        console.error('[WhatsappStorage] Erro ao verificar tabela de status:', countError);
+        // Se o erro for porque a tabela não existe, é melhor não tentar continuar
+        if (countError.message?.includes('does not exist')) {
+          console.error('[WhatsappStorage] A tabela whatsapp_revenda_status não existe. Pulando zerar contador.');
+          return;
+        }
+        throw countError;
+      }
+      
+      // Se o registro não existir, precisamos criar com o updateConversationStatus
+      if (count === 0) {
+        console.log('[WhatsappStorage] Status não encontrado, criando novo registro');
+        await this.updateConversationStatus(
+          phone,
+          revendaId,
+          '',  // sem mensagem
+          Date.now(),
+          true, // isFromMe
+          'Geral',
+          conversationId
+        );
+      } else {
+        // Atualizar o contador diretamente
+        const { error } = await supabase
+          .from('whatsapp_revenda_status')
+          .update({ 
+            unread_count: 0, 
+            status_msg: 'aberta',
+            updated_at: new Date().toISOString() 
+          })
+          .eq('revenda_id', revendaId)
+          .eq('phone', phone);
+          
+        if (error) {
+          console.error('[WhatsappStorage] Erro ao zerar contador:', error);
+          throw error;
+        }
+      }
+      
+      console.log('[WhatsappStorage] Contador zerado com sucesso');
+    } catch (error) {
+      console.error('[WhatsappStorage] Erro ao zerar contador:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Salva a posição de rolagem de uma conversa
+   * @param conversationId ID da conversa
+   * @param revendaId ID da revenda
+   * @param position Posição de rolagem
+   */
+  async saveScrollPosition(
+    conversationId: string,
+    revendaId: string,
+    position: number
+  ): Promise<void> {
+    try {
+      // Extrair o telefone do ID da conversa
+      const phone = conversationId.split('@')[0];
+      
+      if (!phone) {
+        throw new Error('ID de conversa inválido');
+      }
+      
+      console.log(`[WhatsappStorage] Salvando posição de rolagem ${position} para ${phone}`);
+      
+      // Verificar se a tabela existe primeiro
+      const { count, error: countError } = await supabase
+        .from('whatsapp_revenda_status')
+        .select('*', { count: 'exact', head: true })
+        .eq('revenda_id', revendaId)
+        .eq('phone', phone);
+      
+      if (countError) {
+        console.error('[WhatsappStorage] Erro ao verificar tabela de status:', countError);
+        // Se o erro for porque a tabela não existe, é melhor não tentar continuar
+        if (countError.message?.includes('does not exist')) {
+          console.error('[WhatsappStorage] A tabela whatsapp_revenda_status não existe. Pulando salvar posição.');
+          return;
+        }
+        throw countError;
+      }
+      
+      // Se o registro não existir, precisamos criar com o updateConversationStatus
+      if (count === 0) {
+        console.log('[WhatsappStorage] Status não encontrado, criando novo registro');
+        await this.updateConversationStatus(
+          phone,
+          revendaId,
+          '',  // sem mensagem
+          Date.now(),
+          true, // isFromMe
+          'Geral',
+          conversationId
+        );
+        
+        // Agora atualizar a posição de rolagem
+        const { error } = await supabase
+          .from('whatsapp_revenda_status')
+          .update({ 
+            scroll_position: position,
+            updated_at: new Date().toISOString() 
+          })
+          .eq('revenda_id', revendaId)
+          .eq('phone', phone);
+          
+        if (error) {
+          console.error('[WhatsappStorage] Erro ao salvar posição de rolagem:', error);
+          throw error;
+        }
+      } else {
+        // Atualizar a posição diretamente
+        const { error } = await supabase
+          .from('whatsapp_revenda_status')
+          .update({ 
+            scroll_position: position,
+            updated_at: new Date().toISOString() 
+          })
+          .eq('revenda_id', revendaId)
+          .eq('phone', phone);
+          
+        if (error) {
+          console.error('[WhatsappStorage] Erro ao salvar posição de rolagem:', error);
+          throw error;
+        }
+      }
+      
+      console.log('[WhatsappStorage] Posição de rolagem salva com sucesso');
+    } catch (error) {
+      console.error('[WhatsappStorage] Erro ao salvar posição de rolagem:', error);
+      throw error;
     }
   }
 };
