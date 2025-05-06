@@ -13,6 +13,7 @@ import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
 import { supabase } from '../../lib/supabase';
 import { whatsappStorage } from '../../services/whatsappStorage';
+import { refreshAllAvatars, fetchProfilePictureUrl, updateContactAvatar } from '../../services/avatarService';
 
 const Chat: React.FC = () => {
   // Estados para armazenar dados do usuário e revenda
@@ -254,6 +255,88 @@ const Chat: React.FC = () => {
     return () => clearInterval(intervalId);
   }, [selectedConversationId, setConversations]);
 
+  // Efeito para atualização periódica de avatares
+  useEffect(() => {
+    if (!revendaId || !apiConfig) return;
+    
+    console.log('[Chat] Configurando atualização periódica de avatares');
+    console.log('[Chat] DEPURAÇÃO: Forçando atualização imediata de avatares');
+    
+    // Forçar uma atualização imediata de todos os avatares
+    // Isso usará true para forçar a atualização mesmo de avatares existentes
+    refreshAllAvatars(revendaId, apiConfig, true).then(() => {
+      console.log('[Chat] DEPURAÇÃO: Atualização forçada de avatares concluída');
+    });
+    
+    // Função para atualizar os avatares das conversas no estado local
+    const updateAvatarsFromDatabase = async () => {
+      try {
+        // Buscar dados atualizados de todas as conversas, incluindo avatar_url
+        const { data: statusData, error } = await supabase
+          .from('whatsapp_revenda_status')
+          .select('phone, avatar_url')
+          .eq('revenda_id', revendaId);
+          
+        if (error) {
+          console.error('[Chat] Erro ao buscar avatares:', error);
+          return;
+        }
+        
+        if (statusData && statusData.length > 0) {
+          // Atualizar o estado local das conversas com os avatares do banco
+          setConversations(prevConversations => 
+            prevConversations.map(conv => {
+              // Encontrar o registro correspondente no banco
+              const matchingStatus = statusData.find(status => 
+                status.phone === conv.phone || status.phone === conv.id.replace('@s.whatsapp.net', '')
+              );
+              
+              // Se encontrar e tiver avatar_url, atualizar a conversa
+              if (matchingStatus?.avatar_url) {
+                // Garantir que o avatar_url é uma string para compatibilidade com o tipo
+                const avatarUrlString = String(matchingStatus.avatar_url);
+                return {
+                  ...conv,
+                  avatarUrl: avatarUrlString,
+                  avatar_url: avatarUrlString
+                };
+              }
+              
+              return conv;
+            })
+          );
+        }
+      } catch (error) {
+        console.error('[Chat] Erro ao processar atualização de avatares:', error);
+      }
+    };
+    
+    // Função para forçar a atualização de todos os avatares
+    const refreshAllContactAvatars = async () => {
+      try {
+        if (!apiConfig) {
+          console.error('[Chat] Configuração da API não disponível');
+          return;
+        }
+
+        console.log('[Chat] Iniciando atualização completa de avatares...');
+        await refreshAllAvatars(revendaId, apiConfig, false); // false = não forçar atualização de avatares existentes
+        // Atualizar o estado local com os novos avatares
+        await updateAvatarsFromDatabase();
+        console.log('[Chat] Atualização de avatares concluída');
+      } catch (error) {
+        console.error('[Chat] Erro ao atualizar avatares:', error);
+      }
+    };
+    
+    // Executar imediatamente e depois a cada 6 horas
+    updateAvatarsFromDatabase();
+    const refreshInterval = setInterval(refreshAllContactAvatars, 6 * 60 * 60 * 1000); // 6 horas
+    
+    // Cleanup: limpar o intervalo quando desmontar o componente
+    return () => clearInterval(refreshInterval);
+  }, [revendaId, setConversations]);
+  
   // Subscription em tempo real para atualizações de status/contadores no banco
   useEffect(() => {
     if (!revendaId) return;
@@ -426,6 +509,43 @@ const Chat: React.FC = () => {
     }
   }, [revendaId, isLoadingMessages, initialLoadAttempted]);
 
+  // Função para salvar a prévia da mensagem no localStorage
+  const saveMessagePreviewToLocalStorage = (remoteJid: string, content: string, timestamp: Date) => {
+    try {
+      // Obter o cache existente ou criar um novo objeto
+      const messagePreviewCache = JSON.parse(localStorage.getItem('whatsapp_message_preview_cache') || '{}');
+      
+      // Adicionar/atualizar a entrada para este contato
+      messagePreviewCache[remoteJid] = {
+        content,
+        timestamp: timestamp.getTime()
+      };
+      
+      // Salvar o cache atualizado
+      localStorage.setItem('whatsapp_message_preview_cache', JSON.stringify(messagePreviewCache));
+      console.log(`[Chat] Salvou prévia da mensagem no localStorage para ${remoteJid}`);
+    } catch (error) {
+      console.error(`[Chat] Erro ao salvar prévia no localStorage:`, error);
+    }
+  };
+  
+  // Função para buscar a prévia da mensagem do localStorage
+  const getMessagePreviewFromLocalStorage = (remoteJid: string): {content: string, timestamp: number} | null => {
+    try {
+      const messagePreviewCache = JSON.parse(localStorage.getItem('whatsapp_message_preview_cache') || '{}');
+      const cacheEntry = messagePreviewCache[remoteJid];
+      
+      // Se temos um cache e ele contém conteúdo
+      if (cacheEntry && cacheEntry.content) {
+        return cacheEntry;
+      }
+      return null;
+    } catch (error) {
+      console.error(`[Chat] Erro ao ler prévia do localStorage:`, error);
+      return null;
+    }
+  };
+  
   // Processar mensagens recebidas e atualizar estado
   const processMessages = (messages: any[], instanceName?: string) => {
     if (!messages || !Array.isArray(messages)) {
@@ -435,16 +555,23 @@ const Chat: React.FC = () => {
     console.log(`Processando ${messages.length} mensagens ${instanceName ? 'da instância ' + instanceName : ''}`);
 
     // Para cada mensagem recebida
-    messages.forEach((msg) => {
-      if (!msg || !msg.key || !msg.key.remoteJid) {
-        console.log('Mensagem inválida recebida:', msg);
-        return;
-      }
+  messages.forEach(async (msg) => {
+    if (!msg || !msg.key || !msg.key.remoteJid) {
+      console.log('Mensagem inválida recebida:', msg);
+      return;
+    }
 
-      const remoteJid = msg.key.remoteJid;
-      const fromMe = msg.key.fromMe;
-      const timestamp = new Date();
-      let content = '';
+    const remoteJid = msg.key.remoteJid;
+    const fromMe = msg.key.fromMe;
+    const timestamp = new Date();
+    let content = '';
+    
+    // Tentar buscar o avatar do contato se a mensagem for recebida (não enviada)
+    // Removido a busca de avatar durante o processamento de mensagens para evitar problemas
+    // com o revendaId não disponível em determinados momentos do fluxo assíncrono
+    // Avatares serão atualizados de forma confiável pelo processo periódico (refreshAllAvatars)
+    // que roda a cada 6 horas e quando o componente é montado
+    let avatarUrl = null;
       
       // Extrair conteúdo com base no tipo de mensagem
       if (msg.message?.conversation) {
@@ -507,12 +634,17 @@ const Chat: React.FC = () => {
           // Caso contrário, incrementamos o contador atual
           const unreadCount = isCurrentlySelected || fromMe ? 0 : (conversation.unread_count || 0) + 1;
           
+          // Salvar a prévia da mensagem no localStorage para acesso rápido
+          saveMessagePreviewToLocalStorage(remoteJid, content, timestamp);
+          
           updatedConversations.unshift({
             ...conversation,
             messages: updatedMessages,
             last_message: content,
             last_message_time: timestamp,
             unread_count: unreadCount,
+            // Se encontramos um novo avatar, atualizar
+            ...(avatarUrl ? { avatarUrl: avatarUrl, avatar_url: avatarUrl } : {}),
             instanceName: instanceName || conversation.instanceName // Manter ou atualizar a instância
           });
           
@@ -564,6 +696,8 @@ const Chat: React.FC = () => {
             last_message_time: timestamp,
             unread_count: initialUnreadCount,
             sector: 'Geral', // Setor padrão
+            // Adicionar o avatar se encontrado
+            ...(avatarUrl ? { avatarUrl: avatarUrl, avatar_url: avatarUrl } : {}),
             instanceName: instanceName // Registrar qual instância recebeu esta conversa
           });
           
