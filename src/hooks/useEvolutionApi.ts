@@ -60,83 +60,18 @@ const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
     }
   }, [config]);
 
-  // Função para buscar mensagens
+  // Função simplificada para apenas devolver array vazio
+  // Não tentamos mais buscar mensagens da API, apenas usamos o banco de dados
+  // O Socket.io vai notificar sobre novas mensagens em tempo real
   const fetchMessages = useCallback(async (): Promise<FetchMessagesResult> => {
-    if (!config) {
-      return { messages: [], loading: false, error: 'Configuração não encontrada' };
-    }
-
-    try {
-      setLoading(true);
-      // Implementando a mesma estratégia de fallback do ChatNexo
-      // O ChatNexo tenta dois endpoints diferentes em sequência
-      let responseData: any = null;
-      
-      try {
-        // Tentativa 1: /chat/findMessages (como no ChatNexo)
-        console.log(`Tentativa 1: Buscando mensagens com /chat/findMessages/${config.instanceName}`);
-        
-        const response = await axios.post(
-          `${config.baseUrl}/chat/findMessages/${config.instanceName}`,
-          { 
-            where: {},
-            count: 50
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': config.apikey
-            }
-          }
-        );
-        
-        console.log('Resposta da API (/chat/findMessages) Tentativa 1:', response.data);
-        responseData = response.data;
-      } catch (err1) {
-        console.log('Falha na Tentativa 1, tentando alternativa...');
-        
-        // Tentativa 2: /chat/fetchAllChats (como no ChatNexo)
-        try {
-          console.log(`Tentativa 2: Buscando mensagens com /chat/fetchAllChats/${config.instanceName}`);
-          
-          const response2 = await axios.get(
-            `${config.baseUrl}/chat/fetchAllChats/${config.instanceName}`,
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'apikey': config.apikey
-              }
-            }
-          );
-          
-          console.log('Resposta da API (/chat/fetchAllChats) Tentativa 2:', response2.data);
-          responseData = response2.data;
-        } catch (err2) {
-          console.error('Falha na Tentativa 2:', err2);
-          throw new Error(`Todas as tentativas de buscar mensagens para a instância ${config.instanceName} falharam`);
-        }
-      }
-
-      setLoading(false);
-      setError(null);
-      
-      return { 
-        messages: responseData?.messages || [], 
-        loading: false, 
-        error: null 
-      };
-    } catch (err: any) {
-      console.error('Erro ao buscar mensagens:', err);
-      setLoading(false);
-      setError(`Erro ao buscar mensagens: ${err.message}`);
-      
-      return { 
-        messages: [], 
-        loading: false, 
-        error: err.message 
-      };
-    }
-  }, [config]);
+    // Sempre retornamos um array vazio já que carregamos do banco de dados, não da API
+    console.log('Não carregando mensagens da API - usando banco de dados local como fonte da verdade');
+    return { 
+      messages: [], 
+      loading: false, 
+      error: null 
+    };
+  }, []);
 
   // Função para enviar mensagem
   const sendMessage = useCallback(async (
@@ -197,45 +132,6 @@ const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
     localStorage.setItem('evolution_api_config', JSON.stringify(newConfig));
   }, []);
 
-  // Função para obter a URL da foto de perfil de um contato
-  const getProfilePicture = useCallback(async (
-    number: string
-  ): Promise<string | null> => {
-    if (!config) {
-      setError('Configuração não encontrada');
-      return null;
-    }
-
-    try {
-      // Adicionar '@c.us' ao número se não tiver
-      const formattedNumber = number.includes('@c.us') 
-        ? number 
-        : `${number}@c.us`;
-
-      console.log(`Buscando foto de perfil para ${formattedNumber}`);
-      
-      const response = await axios.post(
-        `${config.baseUrl}/chat/fetchProfilePictureUrl/${config.instanceName}`,
-        {
-          number: formattedNumber
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': config.apikey
-          }
-        }
-      );
-
-      console.log('Resposta da API (foto de perfil):', response.data);
-      
-      return response.data?.profilePictureUrl || null;
-    } catch (err: any) {
-      console.error('Erro ao obter foto de perfil:', err);
-      return null;
-    }
-  }, [config]);
-
   return {
     config,
     loading,
@@ -244,8 +140,7 @@ const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
     checkConnectionStatus,
     fetchMessages,
     sendMessage,
-    updateConfig,
-    getProfilePicture
+    updateConfig
   };
 };
 
