@@ -573,19 +573,37 @@ const Chat: React.FC = () => {
     // que roda a cada 6 horas e quando o componente é montado
     let avatarUrl = null;
       
-      // Extrair conteúdo com base no tipo de mensagem
+      // Extrair conteúdo com base no tipo de mensagem e definir metadados adicionais
+      let messageType: 'text' | 'audio' | 'image' | 'video' = 'text';
+      let audioData = null;
+      
       if (msg.message?.conversation) {
         content = msg.message.conversation;
       } else if (msg.message?.extendedTextMessage?.text) {
         content = msg.message.extendedTextMessage.text;
       } else if (msg.message?.imageMessage?.caption) {
         content = '[Imagem] ' + msg.message.imageMessage.caption;
+        messageType = 'image';
       } else if (msg.message?.videoMessage?.caption) {
         content = '[Vídeo] ' + msg.message.videoMessage.caption;
+        messageType = 'video';
       } else if (msg.message?.documentMessage?.fileName) {
         content = '[Documento] ' + msg.message.documentMessage.fileName;
       } else if (msg.message?.audioMessage) {
         content = '[Áudio]';
+        messageType = 'audio';
+        
+        // Extrair dados do áudio
+        const audio = msg.message.audioMessage;
+        audioData = {
+          url: audio.url,
+          mimetype: audio.mimetype,
+          seconds: Number(audio.seconds) || 0,
+          ptt: Boolean(audio.ptt),
+          fileLength: audio.fileLength
+        };
+        
+        console.log('[Chat] Dados de áudio recebidos:', audioData);
       } else if (msg.message?.locationMessage) {
         content = '[Localização]';
       } else if (msg.message?.contactMessage) {
@@ -602,8 +620,10 @@ const Chat: React.FC = () => {
         content,
         sender: fromMe ? 'me' : 'them',
         timestamp,
-        instanceName: instanceName, // Adicionando o nome da instância como metadado
-        setor: selectedSector // Adicionando o setor selecionado atualmente
+        instanceName: instanceName, // Nome da instância
+        setor: selectedSector, // Setor selecionado atualmente
+        type: messageType, // Tipo da mensagem
+        audioData: messageType === 'audio' ? audioData : undefined // Dados de áudio (se aplicável)
       } as ChatMessage & { setor: string }; // Type assertion para incluir o campo setor
 
       // Atualizar a lista de conversas

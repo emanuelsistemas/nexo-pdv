@@ -5,12 +5,22 @@ export interface Message {
   timestamp: Date;
 }
 
+export interface AudioMessageData {
+  url: string;
+  mimetype: string;
+  seconds: number;
+  ptt: boolean; // push-to-talk
+  fileLength?: string;
+}
+
 export interface ChatMessage {
   id: string;
   content: string;
   sender: 'me' | 'them' | 'user' | 'contact';
   timestamp: Date;
   instanceName?: string; // Nome da instância que recebeu a mensagem
+  type?: 'text' | 'audio' | 'image' | 'video'; // Tipo de mensagem
+  audioData?: AudioMessageData; // Dados específicos para mensagens de áudio
 }
 
 export type ConversationStatus = 'Aguardando' | 'Atendendo' | 'Pendentes' | 'Finalizados' | 'Contatos' | 'Status' | 'pendente' | 'deletado' | 'suporte' | 'comercial' | 'administrativo' | 'connection-status';
@@ -37,6 +47,7 @@ export interface Conversation {
   unreadCount?: number;
   unread_count?: number; // Alternativa para compatibilidade
   avatarUrl?: string;
+  avatar_url?: string; // Alternativa para compatibilidade
   instanceName?: string; // Nome da instância que recebeu esta conversa
 }
 
