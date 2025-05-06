@@ -744,11 +744,40 @@ const Chat: React.FC = () => {
 
   // Quando seleciona uma conversa
   const handleSelectConversation = useCallback((conversationId: string) => {
-    // Se já tínhamos uma conversa selecionada anteriormente, marcá-la como fechada
-    if (selectedConversationId && selectedConversationId !== conversationId && revendaId) {
-      try {
-        console.log('Marcando conversa anterior como FECHADA:', selectedConversationId);
-        // Usar o método adequado no whatsappStorage para fechar a conversa anterior
+    // Se a conversa selecionada for a mesma, não faz nada
+    if (conversationId === selectedConversationId) return;
+    
+    // IMPORTANTE: Primeiro atualizamos o ID da conversa selecionada para minimizar rerenderizações
+    // Isso dá feedback visual imediato ao usuário e evita piscadas
+    setSelectedConversationId(conversationId);
+    
+    // Depois, em um único batch, atualizamos a lista de conversas para zerar o contador
+    setConversations(prevConversations => 
+      prevConversations.map(conv => {
+        if (conv.id === conversationId) {
+          return {
+            ...conv,
+            unread_count: 0
+          };
+        }
+        return conv;
+      })
+    );
+    
+    // Resetar posição de rolagem
+    setScrollPosition(undefined);
+    
+    // Carregar posição salva para esta conversa
+    const savedData = loadStatusFromLocalStorage(conversationId);
+    if (savedData.scrollPosition !== undefined) {
+      setScrollPosition(savedData.scrollPosition);
+    }
+    
+    // Todas as operações de banco de dados são executadas em segundo plano
+    // sem causar mais atualizações de estado que gerariam piscadas na UI
+    setTimeout(() => {
+      // 1. Fechar a conversa anterior (se aplicável)
+      if (selectedConversationId && selectedConversationId !== conversationId && revendaId) {
         const closeConversation = async () => {
           try {
             const phone = selectedConversationId.split('@')[0];
@@ -761,142 +790,82 @@ const Chat: React.FC = () => {
                 })
                 .eq('revenda_id', revendaId)
                 .eq('phone', phone);
-              
-              console.log('Conversa anterior marcada como fechada com sucesso');
             }
           } catch (closeError) {
             console.error('Erro ao fechar conversa anterior:', closeError);
           }
         };
         
-        // Executar a função assíncrona
         closeConversation();
-      } catch (error) {
-        console.error('Erro ao tentar fechar conversa anterior:', error);
       }
-    }
-    
-    // Resetar posição de rolagem
-    setScrollPosition(undefined);
-    
-    // Carregar posição salva para esta conversa
-    const savedData = loadStatusFromLocalStorage(conversationId);
-    if (savedData.scrollPosition !== undefined) {
-      setScrollPosition(savedData.scrollPosition);
-    }
-    
-    // Resetar contador no banco de dados e definir status_msg como 'aberta'
-    if (revendaId) {
-      try {
-        console.log('Resetando contador e atualizando status para ABERTA:', conversationId);
-        const phone = conversationId.split('@')[0];
-        
-        // Primeiro, atualizar no banco de dados
-        whatsappStorage.resetUnreadCount(conversationId, revendaId)
-          .then(async () => {
-            console.log('Contador zerado e status atualizado com sucesso no banco');
-            
-            // Após atualizar no banco, consultar o valor atual para garantir sincronização
-            try {
-              const { data, error } = await supabase
-                .from('whatsapp_revenda_status')
-                .select('unread_count, status_msg')
-                .eq('revenda_id', revendaId)
-                .eq('phone', phone)
-                .single();
-              
-              if (error) throw error;
-              
-              if (data) {
-                console.log(`[Chat] Valor atual do contador no banco para ${phone}:`, data.unread_count);
-                
-                // Atualizar o estado local com os valores mais recentes do banco
-                setConversations(prevConversations => 
-                  prevConversations.map(conv => {
-                    if (conv.id === conversationId) {
-                      // Criar uma cópia e garantir que os tipos são mantidos
-                      const updatedConv = {
-                        ...conv,
-                        // Atualizar o contador de não lidas e o status
-                        unread_count: data.unread_count !== null && data.unread_count !== undefined ? 
-                          Number(data.unread_count) : 0
-                      };
-                      return updatedConv;
-                    }
-                    return conv;
-                  })
-                );
-              }
-            } catch (fetchError) {
-              console.error('Erro ao buscar contadores atualizados:', fetchError);
-              
-              // Mesmo com erro, tentar atualizar localmente
-              setConversations(prevConversations => 
-                prevConversations.map(conv => {
-                  if (conv.id === conversationId) {
-                    return {
-                      ...conv,
-                      unread_count: 0
-                    };
-                  }
-                  return conv;
-                })
-              );
-            }
-          })
-          .catch(err => console.error('Erro ao zerar contador:', err));
-      } catch (error) {
-        console.error('Erro ao tentar resetar contador:', error);
-        
-        // Em caso de erro, pelo menos zerar localmente
-        setConversations(prevConversations => 
-          prevConversations.map(conv => {
-            if (conv.id === conversationId) {
-              return {
-                ...conv,
-                unread_count: 0
-              };
-            }
-            return conv;
-          })
-        );
+      
+      // 2. Resetar contador no banco de dados
+      if (revendaId) {
+        try {
+          const phone = conversationId.split('@')[0];
+          
+          // Atualizar no banco de dados sem afetar a UI
+          whatsappStorage.resetUnreadCount(conversationId, revendaId)
+            .catch(err => console.error('Erro ao zerar contador:', err));
+        } catch (error) {
+          console.error('Erro ao tentar resetar contador:', error);
+        }
       }
-    } else {
-      // Se não tiver revendaId, pelo menos zerar localmente
-      setConversations(prevConversations => 
-        prevConversations.map(conv => {
-          if (conv.id === conversationId) {
-            return {
-              ...conv,
-              unread_count: 0
-            };
-          }
-          return conv;
-        })
-      );
-    }
-    
-    // Atualizar conversa selecionada
-    setSelectedConversationId(conversationId);
+    }, 0); // setTimeout com 0ms executa após o próximo ciclo de renderização
   }, [setSelectedConversationId, setConversations, revendaId, selectedConversationId]);
 
   // Função para enviar mensagem
   const handleSendMessage = useCallback(async (content: string) => {
     const currentConversation = getCurrentConversation();
-    if (!currentConversation) return;
+    if (!currentConversation) {
+      console.error('[Chat] Falha ao enviar: nenhuma conversa selecionada');
+      return;
+    }
     
-    // Adicionar mensagem localmente via contexto
+    // Adicionar mensagem localmente via contexto imediatamente para feedback visual
     contextSendMessage(content);
+    
+    // Preparar timestamp da mensagem
+    const timestamp = new Date();
     
     // Enviar mensagem via API Evolution
     try {
-      const phoneNumber = currentConversation.id.split('@')[0];
-      await apiSendMessage(phoneNumber, content);
+      console.log(`[Chat] Enviando mensagem para ${currentConversation.id}`);
+      // Usar o ID completo da conversa, que já contém o formato correto
+      const success = await apiSendMessage(currentConversation.id, content);
+      
+      if (success) {
+        console.log(`[Chat] Mensagem enviada com sucesso para ${currentConversation.id}`);
+        
+        // Salvar mensagem no banco de dados
+        if (revendaId) {
+          try {
+            const phone = currentConversation.id.split('@')[0];
+            await supabase.from('whatsapp_revenda_mensagens').insert({
+              revenda_id: revendaId,
+              phone: phone,
+              mensagem: content,
+              direcao: 'saida',
+              data_hora: timestamp.toISOString(),
+              status: 'enviado'
+            });
+            console.log(`[Chat] Mensagem armazenada no banco de dados`);
+            
+            // Atualizar a prévia da mensagem no localStorage
+            saveMessagePreviewToLocalStorage(currentConversation.id, content, timestamp);
+          } catch (dbError) {
+            console.error('[Chat] Erro ao salvar mensagem no banco:', dbError);
+          }
+        }
+      } else {
+        console.error(`[Chat] Falha no envio da mensagem para ${currentConversation.id}`);
+        // TODO: Mostrar notificação de erro para o usuário
+      }
     } catch (error) {
-      console.error('Erro ao enviar mensagem:', error);
-      // Aqui poderia implementar lógica de retry ou notificar o usuário
+      console.error('[Chat] Erro ao enviar mensagem:', error);
+      // TODO: Implementar lógica de retry ou notificar o usuário visualmente do erro
     }
-  }, [getCurrentConversation, contextSendMessage, apiSendMessage]);
+  }, [getCurrentConversation, contextSendMessage, apiSendMessage, revendaId, saveMessagePreviewToLocalStorage]);
 
   // Função para conectar o Socket.io
   const connectSocket = useCallback(async () => {
