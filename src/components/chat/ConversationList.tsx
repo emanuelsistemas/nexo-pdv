@@ -127,8 +127,9 @@ const ConversationList: React.FC<ConversationListProps> = ({
                       {truncateText(conversation.lastMessage, 30)}
                     </p>
                     
-                    {/* Contador de mensagens não lidas */}
-                    {(conversation.unreadCount || conversation.unread_count || 0) > 0 && (
+                    {/* Contador de mensagens não lidas - só exibir se não for a conversa selecionada */}
+                    {(conversation.unreadCount || conversation.unread_count || 0) > 0 && 
+                     selectedConversationId !== conversation.id && (
                       <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded-full">
                         {conversation.unreadCount || conversation.unread_count || 0}
                       </span>
