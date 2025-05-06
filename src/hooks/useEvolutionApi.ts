@@ -197,6 +197,45 @@ const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
     localStorage.setItem('evolution_api_config', JSON.stringify(newConfig));
   }, []);
 
+  // Função para obter a URL da foto de perfil de um contato
+  const getProfilePicture = useCallback(async (
+    number: string
+  ): Promise<string | null> => {
+    if (!config) {
+      setError('Configuração não encontrada');
+      return null;
+    }
+
+    try {
+      // Adicionar '@c.us' ao número se não tiver
+      const formattedNumber = number.includes('@c.us') 
+        ? number 
+        : `${number}@c.us`;
+
+      console.log(`Buscando foto de perfil para ${formattedNumber}`);
+      
+      const response = await axios.post(
+        `${config.baseUrl}/chat/fetchProfilePictureUrl/${config.instanceName}`,
+        {
+          number: formattedNumber
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': config.apikey
+          }
+        }
+      );
+
+      console.log('Resposta da API (foto de perfil):', response.data);
+      
+      return response.data?.profilePictureUrl || null;
+    } catch (err: any) {
+      console.error('Erro ao obter foto de perfil:', err);
+      return null;
+    }
+  }, [config]);
+
   return {
     config,
     loading,
@@ -205,7 +244,8 @@ const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
     checkConnectionStatus,
     fetchMessages,
     sendMessage,
-    updateConfig
+    updateConfig,
+    getProfilePicture
   };
 };
 
