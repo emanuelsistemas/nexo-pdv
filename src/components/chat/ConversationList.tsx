@@ -154,12 +154,11 @@ const Avatar: React.FC<AvatarProps> = ({ imageUrl, name, phone, size = 40 }) => 
           src={directImageUrl}
           alt={name}
           className="w-full h-full object-cover"
-          onError={(e) => {
-            console.log(`[Avatar] Erro ao carregar avatar para ${name}:`, e);
-            console.log(`[Avatar] URL que falhou: ${directImageUrl}`);
+          onError={() => {
+            // Remover logs do evento de erro para evitar rerenderizações
             setImageError(true);
           }}
-          onLoad={() => console.log(`[Avatar] Avatar carregado com sucesso para ${name}`)}
+          // Remover evento onLoad para evitar rerenderizações desnecessárias
         />
       ) : (
         <div className="flex items-center justify-center w-full h-full">
@@ -244,7 +243,8 @@ const ConversationList: React.FC<ConversationListProps> = ({
     databasePreview?: string | null;
   }
   
-  const MessagePreview: React.FC<MessagePreviewProps> = ({ conversationId, databasePreview }) => {
+  // Otimização para evitar rerenderizações usando useMemo para o MessagePreview
+  const MessagePreview: React.FC<MessagePreviewProps> = React.memo(({ conversationId, databasePreview }) => {
     // Inicializar o estado preview com o valor do banco de dados
     const [preview, setPreview] = useState<string | null>(databasePreview || null);
     
@@ -253,15 +253,14 @@ const ConversationList: React.FC<ConversationListProps> = ({
       // Tentar obter a prévia mais recente do localStorage
       const localPreview = getMessagePreviewFromLocalStorage(conversationId);
       
-      if (localPreview && localPreview.content) {
-        // Atualizar apenas se for diferente do estado atual para evitar loops
-        if (localPreview.content !== preview) {
-          // Remover logs excessivos para evitar poluir o console
-          // console.log(`[MessagePreview] Usando prévia do localStorage para ${conversationId}`);
+      if (localPreview && localPreview.content && localPreview.content !== preview) {
+        // Programa a atualização do estado em um microtask para evitar conflitos com outras renderizações
+        Promise.resolve().then(() => {
           setPreview(localPreview.content);
-        }
+        });
       }
-      // O array de dependências é apenas o conversationId; não incluímos preview para evitar loops
+      // O array de dependências é apenas o conversationId
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [conversationId]);
     
     return (
@@ -269,7 +268,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
         {truncateText(preview, 30)}
       </p>
     );
-  };
+  });
 
   // A função getStatusColor foi removida pois não está mais sendo usada
 
