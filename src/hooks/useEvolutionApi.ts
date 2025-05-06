@@ -80,28 +80,33 @@ const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
   ): Promise<boolean> => {
     if (!config) {
       setError('Configuração não encontrada');
+      console.error('[useEvolutionApi] Falha no envio: configuração não encontrada');
       return false;
     }
 
     try {
       setLoading(true);
       
-      // Adicionar '@c.us' ao número se não tiver
-      const formattedNumber = number.includes('@c.us') 
-        ? number 
-        : `${number}@c.us`;
-
+      // Verificar o formato do número - Suportar os dois formatos padrão do WhatsApp
+      let formattedNumber;
+      if (number.includes('@s.whatsapp.net') || number.includes('@c.us')) {
+        formattedNumber = number;
+      } else {
+        // Formatar para o padrão @s.whatsapp.net que é usado pela Evolution API
+        formattedNumber = `${number}@s.whatsapp.net`;
+      }
+      
+      console.log(`[useEvolutionApi] Enviando mensagem para: ${formattedNumber}`);
+      console.log(`[useEvolutionApi] Conteúdo: "${message}"`);
+      console.log(`[useEvolutionApi] URL: ${config.baseUrl}/message/sendText/${config.instanceName}`);
+      
+      // Tentar enviar via API Evolution
+      // Correção do endpoint para usar sendText em vez de text conforme documentação
       const response = await axios.post(
-        `${config.baseUrl}/message/text/${config.instanceName}`,
+        `${config.baseUrl}/message/sendText/${config.instanceName}`,
         {
           number: formattedNumber,
-          options: {
-            delay: 1200,
-            presence: 'composing'
-          },
-          textMessage: {
-            text: message
-          }
+          text: message
         },
         {
           headers: {
@@ -111,12 +116,18 @@ const useEvolutionApi = (externalConfig?: EvolutionApiConfig | null) => {
         }
       );
 
+      // Verificar se a resposta foi bem sucedida
+      const success = response.data?.status === 'success';
+      console.log(`[useEvolutionApi] Resposta do envio:`, response.data);
+      console.log(`[useEvolutionApi] Mensagem enviada com sucesso: ${success ? 'SIM' : 'NÃO'}`);
+
       setLoading(false);
       setError(null);
       
-      return response.data?.status === 'success';
+      return success;
     } catch (err: any) {
-      console.error('Erro ao enviar mensagem:', err);
+      console.error('[useEvolutionApi] Erro ao enviar mensagem:', err);
+      console.error('[useEvolutionApi] Detalhes do erro:', err.response?.data || err.message);
       setLoading(false);
       setError(`Erro ao enviar mensagem: ${err.message}`);
       return false;
