@@ -220,6 +220,72 @@ const Chat: React.FC = () => {
     // Limpar o intervalo quando o componente for desmontado
     return () => clearInterval(intervalId);
   }, [selectedConversationId, revendaId]);
+  
+  // Subscription em tempo real para atualizações de status/contadores no banco
+  useEffect(() => {
+    if (!revendaId) return;
+    
+    console.log('[Chat] Configurando subscription em tempo real para whatsapp_revenda_status');
+    
+    // Criar canal de subscription
+    const channel = supabase
+      .channel('whatsapp_status_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', // escutar todos os eventos (insert, update, delete)
+          schema: 'public',
+          table: 'whatsapp_revenda_status',
+          filter: `revenda_id=eq.${revendaId}` // filtrar apenas registros desta revenda
+        }, 
+        (payload) => {
+          console.log('[Chat] Recebeu atualização em tempo real:', payload);
+          
+          // Extrai os dados do payload
+          const { new: newRecord } = payload;
+          
+          if (newRecord) {
+            // Converter para tipo apropriado usando interface WhatsappRevendaStatus
+            const statusRecord = newRecord as unknown as {
+              phone: string;
+              revenda_id: string;
+              unread_count: number;
+              status_msg: string;
+            };
+            
+            // Atualizar o estado local com os dados do banco
+            setConversations(prevConversations => 
+              prevConversations.map(conv => {
+                // Verificar se a conversa é a mesma que foi atualizada
+                const conversationPhone = conv.id.split('@')[0];
+                if (conversationPhone === statusRecord.phone && revendaId === statusRecord.revenda_id) {
+                  console.log(`[Chat] Atualizando conversa ${conv.id} de acordo com o banco:`, {
+                    unread_count: statusRecord.unread_count || 0,
+                    status_msg: statusRecord.status_msg
+                  });
+                  
+                  // Atualizar apenas o contador e status, manter o restante dos dados
+                  return {
+                    ...conv,
+                    unread_count: statusRecord.unread_count || 0,
+                    status_msg: statusRecord.status_msg
+                  };
+                }
+                return conv;
+              })
+            );
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Chat] Status da subscription:', status);
+      });
+      
+    // Cleanup: desinscrever quando o componente for desmontado
+    return () => {
+      console.log('[Chat] Limpando subscription do banco de dados');
+      supabase.removeChannel(channel);
+    };
+  }, [revendaId, setConversations]);
 
   // Efeito para lidar com o fechamento da página
   useEffect(() => {
@@ -386,11 +452,13 @@ const Chat: React.FC = () => {
           // Extrair o número de telefone do remoteJid para uso abaixo
           const phoneNumber = remoteJid.split('@')[0];
           
-          // Atualizar unread_count apenas se não for a conversa selecionada e não for do usuário
-          const unreadCount = 
-            selectedConversationId === remoteJid || fromMe ? 
-            (conversation.unread_count || 0) : 
-            (conversation.unread_count || 0) + 1;
+          // Para conversas selecionadas, SEMPRE manter o contador em zero
+          // Para as demais, incrementar apenas se a mensagem não for do usuário
+          const isCurrentlySelected = selectedConversationId === remoteJid;
+          
+          // Se a conversa está selecionada ou a mensagem é do usuário, o contador DEVE ser zero
+          // Caso contrário, incrementamos o contador atual
+          const unreadCount = isCurrentlySelected || fromMe ? 0 : (conversation.unread_count || 0) + 1;
           
           updatedConversations.unshift({
             ...conversation,
@@ -429,6 +497,15 @@ const Chat: React.FC = () => {
           const phoneNumber = remoteJid.split('@')[0];
           const displayName = phoneNumber; // Poderia buscar o nome em uma lista de contatos
           
+          // Verificar se a nova conversa é a selecionada (raro, mas pode acontecer)
+          const isCurrentlySelected = selectedConversationId === remoteJid;
+          
+          // Se a conversa está selecionada, o contador deve ser zero
+          // Caso contrário, começa com 1 para indicar a nova mensagem
+          const initialUnreadCount = isCurrentlySelected || fromMe ? 0 : 1;
+          
+          console.log(`[Chat] Nova conversa ${isCurrentlySelected ? 'SELECIONADA' : 'NÃO selecionada'} - contador inicial: ${initialUnreadCount}`);
+          
           updatedConversations.unshift({
             id: remoteJid,
             name: displayName,
@@ -438,7 +515,7 @@ const Chat: React.FC = () => {
             status: 'Aguardando', // Inicialmente, todas as novas conversas estão pendentes
             last_message: content,
             last_message_time: timestamp,
-            unread_count: 1,
+            unread_count: initialUnreadCount,
             sector: 'Geral', // Setor padrão
             instanceName: instanceName // Registrar qual instância recebeu esta conversa
           });
@@ -527,25 +604,95 @@ const Chat: React.FC = () => {
       setScrollPosition(savedData.scrollPosition);
     }
     
-    // Limpar contador de não lidas no estado local
-    setConversations(prevConversations => 
-      prevConversations.map(conv => 
-        conv.id === conversationId 
-          ? { ...conv, unreadCount: 0 } 
-          : conv
-      )
-    );
-    
     // Resetar contador no banco de dados e definir status_msg como 'aberta'
     if (revendaId) {
       try {
         console.log('Resetando contador e atualizando status para ABERTA:', conversationId);
+        const phone = conversationId.split('@')[0];
+        
+        // Primeiro, atualizar no banco de dados
         whatsappStorage.resetUnreadCount(conversationId, revendaId)
-          .then(() => console.log('Contador zerado e status atualizado com sucesso'))
+          .then(async () => {
+            console.log('Contador zerado e status atualizado com sucesso no banco');
+            
+            // Após atualizar no banco, consultar o valor atual para garantir sincronização
+            try {
+              const { data, error } = await supabase
+                .from('whatsapp_revenda_status')
+                .select('unread_count, status_msg')
+                .eq('revenda_id', revendaId)
+                .eq('phone', phone)
+                .single();
+              
+              if (error) throw error;
+              
+              if (data) {
+                console.log(`[Chat] Valor atual do contador no banco para ${phone}:`, data.unread_count);
+                
+                // Atualizar o estado local com os valores mais recentes do banco
+                setConversations(prevConversations => 
+                  prevConversations.map(conv => {
+                    if (conv.id === conversationId) {
+                      // Criar uma cópia e garantir que os tipos são mantidos
+                      const updatedConv = {
+                        ...conv,
+                        // Atualizar o contador de não lidas e o status
+                        unread_count: data.unread_count !== null && data.unread_count !== undefined ? 
+                          Number(data.unread_count) : 0
+                      };
+                      return updatedConv;
+                    }
+                    return conv;
+                  })
+                );
+              }
+            } catch (fetchError) {
+              console.error('Erro ao buscar contadores atualizados:', fetchError);
+              
+              // Mesmo com erro, tentar atualizar localmente
+              setConversations(prevConversations => 
+                prevConversations.map(conv => {
+                  if (conv.id === conversationId) {
+                    return {
+                      ...conv,
+                      unread_count: 0
+                    };
+                  }
+                  return conv;
+                })
+              );
+            }
+          })
           .catch(err => console.error('Erro ao zerar contador:', err));
       } catch (error) {
         console.error('Erro ao tentar resetar contador:', error);
+        
+        // Em caso de erro, pelo menos zerar localmente
+        setConversations(prevConversations => 
+          prevConversations.map(conv => {
+            if (conv.id === conversationId) {
+              return {
+                ...conv,
+                unread_count: 0
+              };
+            }
+            return conv;
+          })
+        );
       }
+    } else {
+      // Se não tiver revendaId, pelo menos zerar localmente
+      setConversations(prevConversations => 
+        prevConversations.map(conv => {
+          if (conv.id === conversationId) {
+            return {
+              ...conv,
+              unread_count: 0
+            };
+          }
+          return conv;
+        })
+      );
     }
     
     // Atualizar conversa selecionada
