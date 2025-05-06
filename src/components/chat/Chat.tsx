@@ -368,12 +368,16 @@ const Chat: React.FC = () => {
           
           // CORREÇÃO: Salvar a mensagem no banco de dados
           if (revendaId) {
-            console.log('[Chat] Salvando mensagem no banco de dados - conversa existente');
+            // Verificar se a conversa atual é a selecionada
+            const isCurrentlySelected = selectedConversationId === remoteJid;
+            
+            console.log(`[Chat] Salvando mensagem no banco de dados - conversa ${isCurrentlySelected ? 'SELECIONADA' : 'não selecionada'}`);
             whatsappStorage.saveMessage(
               newMessage,
               revendaId,
               conversation.name || conversation.contactName || phoneNumber,
-              remoteJid
+              remoteJid,
+              isCurrentlySelected // Passar o estado de seleção para o método saveMessage
             ).catch(error => {
               console.error('[Chat] Erro ao salvar mensagem no banco:', error);
             });
@@ -402,12 +406,16 @@ const Chat: React.FC = () => {
           
           // CORREÇÃO: Salvar a mensagem no banco de dados (nova conversa)
           if (revendaId) {
-            console.log('[Chat] Salvando mensagem no banco de dados - nova conversa');
+            // Verificar se a nova conversa é a selecionada (raro, mas pode acontecer)
+            const isCurrentlySelected = selectedConversationId === remoteJid;
+            
+            console.log(`[Chat] Salvando mensagem no banco de dados - nova conversa ${isCurrentlySelected ? 'SELECIONADA' : 'não selecionada'}`);
             whatsappStorage.saveMessage(
               newMessage,
               revendaId,
               displayName,
-              remoteJid
+              remoteJid,
+              isCurrentlySelected // Passar o estado de seleção para o método saveMessage
             ).catch(error => {
               console.error('[Chat] Erro ao salvar mensagem no banco:', error);
             });

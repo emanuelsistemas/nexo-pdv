@@ -89,7 +89,8 @@ export const whatsappStorage = {
     message: ChatMessage,
     revendaId: string,
     name: string = '',
-    conversationId: string = ''
+    conversationId: string = '',
+    isSelected: boolean = false // Novo parâmetro indicando se a conversa está selecionada
   ): Promise<void> {
     console.log('[WhatsappStorage] =============================================');
     console.log('[WhatsappStorage] === INICIO saveMessage - DIAGNÓSTICO DETALHADO ===');
@@ -293,7 +294,7 @@ export const whatsappStorage = {
               console.log('[WhatsappStorage] Resposta do Supabase:', minResult.data);
               
               // Mesmo com a tentativa 2 sendo bem-sucedida, continuamos para atualizar o status da conversa
-              await this.updateConversationStatus(phone, revendaId, messageData.content, messageData.timestamp, isFromMe, messageSetor, conversationId);
+              await this.updateConversationStatus(phone, revendaId, messageData.content, messageData.timestamp, isFromMe, messageSetor, conversationId, isSelected);
               
               return; // Sucesso na tentativa 2
             }
@@ -302,7 +303,7 @@ export const whatsappStorage = {
             console.log('[WhatsappStorage] Resposta do Supabase:', data);
             
             // Depois de salvar a mensagem, atualizar o status da conversa
-            await this.updateConversationStatus(phone, revendaId, messageData.content, messageData.timestamp, isFromMe, messageSetor, conversationId);
+            await this.updateConversationStatus(phone, revendaId, messageData.content, messageData.timestamp, isFromMe, messageSetor, conversationId, isSelected);
           }
         } catch (innerError) {
           console.error('[WhatsappStorage] ERRO INESPERADO DURANTE UPSERT:', innerError);
@@ -606,7 +607,8 @@ export const whatsappStorage = {
     timestamp: number | Date,
     isFromMe: boolean,
     setor: string = 'Geral',
-    conversationId: string = ''
+    conversationId: string = '',
+    isSelected: boolean = false // Novo parâmetro para indicar se a conversa está selecionada/aberta
   ): Promise<void> {
     try {
       console.log('[WhatsappStorage] Atualizando status da conversa para', phone);
@@ -646,9 +648,10 @@ export const whatsappStorage = {
         last_message_time: timestampNumber,
         // Manter o status e setor se existirem, caso contrário usar padrões
         status: existingData?.status || 'Aguardando',
-        status_msg: isFromMe ? existingData?.status_msg || 'fechada' : 'fechada',
-        // Se a mensagem é nossa, manter o contador, senão incrementar (ou iniciar com 1)
-        unread_count: isFromMe ? 0 : (existingData ? (existingData.unread_count || 0) + 1 : 1),
+        // Se a conversa está selecionada ou a mensagem é nossa, manter o status
+        status_msg: isSelected ? 'aberta' : (isFromMe ? existingData?.status_msg || 'fechada' : 'fechada'),
+        // Se a conversa está selecionada ou a mensagem é nossa, zerar o contador
+        unread_count: isSelected || isFromMe ? 0 : (existingData ? (existingData.unread_count || 0) + 1 : 1),
         // Manter o setor existente ou usar o novo
         setor: existingData?.setor || setor,
         // Manter a posição de rolagem se existir
