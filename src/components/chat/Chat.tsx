@@ -15,8 +15,9 @@ import { supabase } from '../../lib/supabase';
 import { whatsappStorage } from '../../services/whatsappStorage';
 
 const Chat: React.FC = () => {
-  // Estado para armazenar a ID da revenda atual
+  // Estados para armazenar dados do usuário e revenda
   const [revendaId, setRevendaId] = useState<string>('');
+  const [userEmail, setUserEmail] = useState<string>('');
   // Contexto global do chat
   const {
     conversations,
@@ -61,11 +62,77 @@ const Chat: React.FC = () => {
   // Usar apiConfig do hook useWhatsAppInstance para enviar mensagens
   const { sendMessage: apiSendMessage } = useEvolutionApi(apiConfig);
 
-  // Carregar o ID da revenda da configuração
+  // Carregar o ID da revenda do usuário logado
   useEffect(() => {
     const loadRevendaId = async () => {
+      console.log('=== CARREGANDO ID DA REVENDA DO USUÁRIO LOGADO ===');
       try {
-        // Buscar a configuração do chat na tabela nexochat_config
+        // Primeiro tentamos obter a sessão atual do usuário
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData?.session?.user?.id;
+        
+        console.log('UserID identificado na sessão:', userId);
+        
+        if (!userId) {
+          console.warn('Usuário não logado ou ID de usuário não disponível');
+          // Tenta carregar da configuração como fallback
+          await loadRevendaIdFromConfig();
+          return;
+        }
+        
+        // Tentar buscar na tabela profile_admin primeiro
+        let { data: adminData, error: adminError } = await supabase
+          .from('profile_admin')
+          .select('reseller_id')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        // Se encontramos o ID na tabela profile_admin
+        if (adminData?.reseller_id && typeof adminData.reseller_id === 'string') {
+          console.log('ID da revenda encontrado na tabela profile_admin:', adminData.reseller_id);
+          setRevendaId(adminData.reseller_id);
+          // Salvar no localStorage para uso futuro como fallback
+          localStorage.setItem('revendaId', adminData.reseller_id);
+          return;
+        }
+        
+        // Se não encontrou ou deu erro, tentar na tabela profile_admin_user
+        let { data: userProfileData, error: userProfileError } = await supabase
+          .from('profile_admin_user')
+          .select('reseller_id')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        // Se encontramos o ID na tabela profile_admin_user
+        if (userProfileData?.reseller_id && typeof userProfileData.reseller_id === 'string') {
+          console.log('ID da revenda encontrado na tabela profile_admin_user:', userProfileData.reseller_id);
+          setRevendaId(userProfileData.reseller_id);
+          // Salvar no localStorage para uso futuro como fallback
+          localStorage.setItem('revendaId', userProfileData.reseller_id);
+          return;
+        }
+        
+        // Se chegou aqui, não encontramos em nenhuma das tabelas
+        if (adminError) console.error('Erro ao buscar na tabela profile_admin:', adminError);
+        if (userProfileError) console.error('Erro ao buscar na tabela profile_admin_user:', userProfileError);
+        
+        // Última tentativa: verificar no nexochat_config
+        await loadRevendaIdFromConfig();
+      } catch (error) {
+        console.error('Erro ao carregar ID da revenda:', error);
+        // Tentar carregar do localStorage como último recurso
+        const savedRevendaId = localStorage.getItem('revendaId');
+        if (savedRevendaId) {
+          console.log('Usando ID da revenda salvo no localStorage:', savedRevendaId);
+          setRevendaId(savedRevendaId);
+        }
+      }
+    };
+    
+    // Função auxiliar para carregar da tabela nexochat_config (método anterior)
+    const loadRevendaIdFromConfig = async () => {
+      try {
+        console.log('Tentando buscar ID da revenda na tabela nexochat_config...');
         const { data, error } = await supabase
           .from('nexochat_config')
           .select('reseller_id')
@@ -73,24 +140,51 @@ const Chat: React.FC = () => {
           .limit(1);
         
         if (error) {
-          console.error('Erro ao buscar ID da revenda:', error);
-          return;
+          console.error('Erro ao buscar ID da revenda em nexochat_config:', error);
+          return false;
         }
         
         if (data && data.length > 0 && data[0].reseller_id) {
           const resellerId = data[0].reseller_id as string;
-          console.log('ID da revenda carregado:', resellerId);
+          console.log('ID da revenda carregado de nexochat_config:', resellerId);
           setRevendaId(resellerId);
+          localStorage.setItem('revendaId', resellerId);
+          return true;
         } else {
           console.warn('Nenhuma configuração de chat encontrada com ID de revenda válido');
+          return false;
         }
-      } catch (error) {
-        console.error('Erro ao carregar ID da revenda:', error);
+      } catch (configError) {
+        console.error('Erro ao carregar ID da revenda da configuração:', configError);
+        return false;
       }
     };
     
+    // Carregar o ID da revenda imediatamente ao montar o componente
     loadRevendaId();
   }, []);
+  
+  // Efeito para debug - log quando o revendaId mudar
+  useEffect(() => {
+    console.log('=== REVENDA ID ATUALIZADO ===', revendaId);
+    
+    // Carregar apenas o email do usuário logado
+    const loadUserEmail = async () => {
+      try {
+        // Buscar email do usuário logado
+        const { data: sessionData } = await supabase.auth.getSession();
+        const email = sessionData?.session?.user?.email;
+        if (email) {
+          setUserEmail(email);
+          console.log('Email do usuário logado:', email);
+        }
+      } catch (error) {
+        console.error('Erro ao carregar informações do usuário:', error);
+      }
+    };
+    
+    loadUserEmail();
+  }, [revendaId]);
 
   // Calcular contagens para as abas de status
   useEffect(() => {
@@ -439,17 +533,48 @@ const Chat: React.FC = () => {
       });
       
       socket.on('messages.upsert', (data) => {
-        console.log('Nova mensagem recebida:', data);
-        if (data && data.messages) {
+        console.log('=== NOVA MENSAGEM RECEBIDA VIA SOCKET.IO ===');
+        console.log('Evento recebido:', data.event || 'N/A');
+        console.log('Instance:', data.instance || 'N/A');
+        console.log('Data timestamp:', data.date_time || 'N/A');
+        console.log('Estrutura completa do objeto data:', JSON.stringify(data, null, 2));
+        
+        // Obter o ID da revenda - usar o valor do estado ou o fallback do localStorage
+        let currentRevendaId = revendaId;
+        
+        // Se o ID da revenda não estiver disponível no estado, tentar carregá-lo do localStorage
+        if (!currentRevendaId) {
+          const storedRevendaId = localStorage.getItem('revendaId');
+          if (storedRevendaId) {
+            console.log('Usando ID da revenda do localStorage:', storedRevendaId);
+            currentRevendaId = storedRevendaId;
+            // Atualizar o estado para futuras mensagens
+            setRevendaId(storedRevendaId);
+          } else {
+            console.error('ERRO CRÍTICO: Nenhum ID de revenda disponível no estado ou localStorage');
+          }
+        }
+        
+        console.log('RevendaId para processamento:', currentRevendaId);
+        
+        // Verificar a estrutura correta das mensagens na versão mais recente da API
+        const messages = data.data?.messages || data.messages;
+        
+        if (messages && Array.isArray(messages) && messages.length > 0) {
+          console.log('Número de mensagens recebidas:', messages.length);
+          console.log('Primeira mensagem estrutura:', JSON.stringify(messages[0], null, 2));
           // Processar mensagens para atualizar a UI
-          processMessages(data.messages, instanceName);
+          processMessages(messages, instanceName);
           
-          // Salvar mensagens no banco de dados
-          if (revendaId) {
+          // Continuar apenas se tivermos um revendaId válido
+          if (currentRevendaId) {
+            console.log('=== INICIANDO SALVAMENTO NO BANCO DE DADOS ===');
+            console.log('RevendaId usado para salvamento:', currentRevendaId);
             try {
-              data.messages.forEach(async (msg: any) => {
+              messages.forEach(async (msg: any, index: number) => {
+                console.log(`Processando mensagem ${index + 1}/${messages.length}`);
                 if (!msg || !msg.key || !msg.key.remoteJid) {
-                  console.log('Mensagem inválida recebida:', msg);
+                  console.log('Mensagem inválida recebida, pulando:', msg);
                   return;
                 }
                 
@@ -518,17 +643,36 @@ const Chat: React.FC = () => {
                   // Primeiro definimos corretamente o tipo da mensagem no objeto antes de salvar
                   (chatMessage as any).message_type = messageType;
                   
-                  // Salvar no banco de dados
-                  await whatsappStorage.saveMessage(
-                    chatMessage,
-                    revendaId,
-                    contactName,
-                    remoteJid
-                  );
+                  console.log('=== CHAMANDO saveMessage ===');
+                  console.log('ChatMessage:', JSON.stringify(chatMessage, null, 2));
+                  console.log('CurrentRevendaId:', currentRevendaId);
+                  console.log('ContactName:', contactName);
+                  console.log('RemoteJid:', remoteJid);
                   
-                  console.log(`Mensagem salva com sucesso: ${content.substring(0, 30)}...`);
+                  try {
+                    console.log(`Tentando salvar mensagem com ID ${chatMessage.id} no banco de dados...`);
+                    // Salvar no banco de dados
+                    await whatsappStorage.saveMessage(
+                      chatMessage,
+                      currentRevendaId, // Usar o ID da revenda que obtivemos
+                      contactName,
+                      remoteJid
+                    );
+                    console.log(`SUCESSO! Mensagem ${chatMessage.id} salva no banco de dados`);
+                  } catch (saveError) {
+                    console.error(`FALHA AO SALVAR MENSAGEM ${chatMessage.id}:`, saveError);
+                    // Tentar imprimir mais detalhes sobre o erro se houver
+                    if (saveError instanceof Error) {
+                      console.error('Mensagem de erro:', saveError.message);
+                      console.error('Stack trace:', saveError.stack);
+                    }
+                  }
+                  
+                  console.log(`=== FIM DE CHAMADA saveMessage - Conteúdo: ${content.substring(0, 30)}... ===`);
                 } catch (saveError) {
-                  console.error('Erro ao salvar mensagem específica:', saveError);
+                  console.error('=== ERRO AO SALVAR MENSAGEM ===');
+                  console.error('Erro detalhado:', saveError);
+                  console.error('Stack trace:', (saveError as Error).stack);
                 }
               });
             } catch (error) {
@@ -697,14 +841,26 @@ const Chat: React.FC = () => {
               statusFilter={activeTab}
             />
           ) : (
-            <ConnectionStatus 
-              connection={connection}
-              loading={loading}
-              error={error}
-              onRefresh={refreshConnection}
-              socketConnected={isConnected}
-              socketError={socketError}
-            />
+            <div className="h-full flex flex-col">
+              <ConnectionStatus
+                connection={connection}
+                loading={loading}
+                error={error}
+                onRefresh={refreshConnection}
+                socketConnected={isConnected}
+                socketError={socketError}
+                socketInstance={apiConfig?.instanceName}
+              />
+              
+              {/* Informações do Usuário e Revenda - apenas para debugging */}
+              {(revendaId || userEmail) && (
+                <div className="mt-4 mx-4 bg-gray-800 rounded p-3 text-xs border border-gray-700">
+                  <div className="font-bold text-emerald-500 mb-1">Informações de Conexão:</div>
+                  {revendaId && <div className="py-1"><span className="text-gray-400">ID Revenda:</span> {revendaId}</div>}
+                  {userEmail && <div className="py-1"><span className="text-gray-400">Usuário:</span> {userEmail}</div>}
+                </div>
+              )}
+            </div>
           )}
         </div>
         
